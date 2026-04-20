@@ -19,6 +19,7 @@ import leaveTypeRoutes from './src/routes/leave-type-routes.js';
 import leavePolicyRoutes from './src/routes/leave-policy-routes.js';
 import leaveBalanceRoutes from './src/routes/leave-balance-routes.js';
 import attendanceRoutes from './src/routes/attendance-routes.js';
+import leaveRequestRoutes from './src/routes/leave-request-routes.js';
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use('/api/leave-types', leaveTypeRoutes);
 app.use('/api/leave-policies', leavePolicyRoutes);
 app.use('/api/leave-balances', leaveBalanceRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/leave-requests', leaveRequestRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'server is running' });
