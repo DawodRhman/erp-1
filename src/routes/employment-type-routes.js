@@ -1,16 +1,15 @@
-import { Router } from 'express';
-import { verifyToken } from '../middleware/auth-middleware.js';
-import {
-    createEmploymentType,
-    getEmploymentTypes,
-    updateEmploymentType,
-} from '../controllers/employment-type-controller.js';
+import { Router } from 'express'
+import { verifyToken } from '../middleware/auth-middleware.js'
+import { requirePermission } from '../middleware/permission-middleware.js'
+import { validate } from '../middleware/validate-middleware.js'
+import { createEmploymentTypeSchema, updateEmploymentTypeSchema } from '../schemas/employment-type.schema.js'
+import { createEmploymentType, getEmploymentTypes, updateEmploymentType } from '../controllers/employment-type-controller.js'
 
-const router = Router();
+const router = Router()
 
-router.post('/employment-types', verifyToken, createEmploymentType);
-router.get('/employment-types', verifyToken, getEmploymentTypes);
-router.get('/employment-types/:id', verifyToken, getEmploymentTypes);
-router.put('/employment-types/:id', verifyToken, updateEmploymentType);
+router.get('/employment-types', verifyToken, getEmploymentTypes)
+router.get('/employment-types/:id', verifyToken, getEmploymentTypes)
+router.post('/employment-types', verifyToken, requirePermission('config:manage'), validate(createEmploymentTypeSchema), createEmploymentType)
+router.put('/employment-types/:id', verifyToken, requirePermission('config:manage'), validate(updateEmploymentTypeSchema), updateEmploymentType)
 
-export default router;
+export default router

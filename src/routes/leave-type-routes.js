@@ -1,12 +1,15 @@
-import { Router } from 'express';
-import leaveTypeController from '../controllers/leave-type-controller.js';
-import { verifyToken } from '../middleware/auth-middleware.js';
+import { Router } from 'express'
+import leaveTypeController from '../controllers/leave-type-controller.js'
+import { verifyToken } from '../middleware/auth-middleware.js'
+import { requirePermission } from '../middleware/permission-middleware.js'
+import { validate } from '../middleware/validate-middleware.js'
+import { createLeaveTypeSchema, updateLeaveTypeSchema } from '../schemas/leave-type.schema.js'
 
-const router = Router();
+const router = Router()
 
-router.get('/', verifyToken, leaveTypeController.getAll);
-router.get('/:id', verifyToken, leaveTypeController.getById);
-router.post('/', verifyToken, leaveTypeController.create);
-router.put('/:id', verifyToken, leaveTypeController.update);
+router.get('/', verifyToken, leaveTypeController.getAll)
+router.get('/:id', verifyToken, leaveTypeController.getById)
+router.post('/', verifyToken, requirePermission('config:manage'), validate(createLeaveTypeSchema), leaveTypeController.create)
+router.put('/:id', verifyToken, requirePermission('config:manage'), validate(updateLeaveTypeSchema), leaveTypeController.update)
 
-export default router;
+export default router
