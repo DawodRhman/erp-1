@@ -1,41 +1,47 @@
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-import authTable from '../models/auth-model.js';
-console.log(authTable);
+import bcrypt from 'bcrypt'
+import jwt from 'jsonwebtoken'
+import authTable from '../models/auth-model.js'
 
 const authService = {
-    login: async (username, password) => {
-        // find user in DB
-        const user = await authTable.findByUsername(username);
+    login: async (email, password) => {
+        const user = await authTable.findByEmail(email)
 
-        if (!user) throw new Error('Invalid username or password');
+        if (!user) {
+            const err = new Error('Invalid email or password')
+            err.status = 401
+            throw err
+        }
 
-        // compare password
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) throw new Error('Invalid username or password');
+        const isMatch = await bcrypt.compare(password, user.password)
+        if (!isMatch) {
+            const err = new Error('Invalid email or password')
+            err.status = 401
+            throw err
+        }
 
-        // create token
+        const is_super_admin = user.department_id === null && user.role_name === 'super_admin'
+
         const token = jwt.sign(
             {
-                userId: user.id,
-                username: user.username,
-                role: user.role,
-                employeeId: user.employee_id
+                user_id: user.id,
+                employee_id: user.employee_id,
+                role_id: user.role_id,
+                is_super_admin
             },
             process.env.JWT_SECRET,
             { expiresIn: process.env.JWT_EXPIRES_IN }
-        );
+        )
 
         return {
             token,
             user: {
                 id: user.id,
-                username: user.username,
-                role: user.role,
-                employeeId: user.employee_id
+                email: user.email,
+                role: user.role_name,
+                employee_id: user.employee_id
             }
-        };
+        }
     }
-};
+}
 
-export default authService;
+export default authService

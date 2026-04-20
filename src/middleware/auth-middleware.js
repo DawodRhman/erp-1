@@ -1,93 +1,42 @@
-import jwt from 'jsonwebtoken';
+import jwt from 'jsonwebtoken'
 
-const HTTP_STATUS = {
-    BAD_REQUEST: 400,
-    UNAUTHORIZED: 401,
-    FORBIDDEN: 403,
-    INTERNAL_SERVER_ERROR: 500
-};
-
-const sendError = (res, statusCode, message) => {
-    return res.status(statusCode).json({ message });
-};
+const sendError = (res, statusCode, message) => res.status(statusCode).json({ error: message })
 
 const extractBearerToken = (authorizationHeader) => {
     if (typeof authorizationHeader !== 'string') {
-        return { token: null, statusCode: HTTP_STATUS.UNAUTHORIZED };
+        return { token: null, statusCode: 401 }
     }
-
-    const [scheme, token] = authorizationHeader.split(' ');
-
+    const [scheme, token] = authorizationHeader.split(' ')
     if (scheme?.toLowerCase() !== 'bearer' || !token) {
-        return { token: null, statusCode: HTTP_STATUS.BAD_REQUEST };
+        return { token: null, statusCode: 400 }
     }
-
-    return { token, statusCode: null };
-};
+    return { token, statusCode: null }
+}
 
 export const verifyToken = (req, res, next) => {
-    const { token, statusCode } = extractBearerToken(req.headers.authorization);
+    const { token, statusCode } = extractBearerToken(req.headers.authorization)
 
     if (!token) {
         return sendError(
             res,
             statusCode,
-            statusCode === HTTP_STATUS.BAD_REQUEST
-                ? 'Authorization header must use the Bearer token format.'
+            statusCode === 400
+                ? 'Authorization header must use Bearer token format.'
                 : 'Authentication token is required.'
-        );
+        )
     }
 
     if (!process.env.JWT_SECRET) {
-        return sendError(
-            res,
-            HTTP_STATUS.INTERNAL_SERVER_ERROR,
-            'Authentication service is not configured.'
-        );
+        return sendError(res, 500, 'Authentication service is not configured.')
     }
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded;
-
-        return next();
+        req.user = jwt.verify(token, process.env.JWT_SECRET)
+        return next()
     } catch (error) {
-        if (
-            error.name === 'TokenExpiredError' ||
-            error.name === 'JsonWebTokenError' ||
-            error.name === 'NotBeforeError'
-        ) {
-            return sendError(
-                res,
-                HTTP_STATUS.UNAUTHORIZED,
-                'Invalid or expired authentication token.'
-            );
+        if (['TokenExpiredError', 'JsonWebTokenError', 'NotBeforeError'].includes(error.name)) {
+            return sendError(res, 401, 'Invalid or expired authentication token.')
         }
-
-        return sendError(
-            res,
-            HTTP_STATUS.INTERNAL_SERVER_ERROR,
-            'Unable to authenticate the request.'
-        );
+        return sendError(res, 500, 'Unable to authenticate the request.')
     }
-};
-
-export const superAdminOnly = (req, res, next) => {
-    if (!req.user) {
-        return sendError(
-            res,
-            HTTP_STATUS.UNAUTHORIZED,
-            'Authentication is required.'
-        );
-    }
-
-    if (req.user.role !== 'super_admin') {
-        return sendError(
-            res,
-            HTTP_STATUS.FORBIDDEN,
-            'Access denied. Super admin only.'
-        );
-    }
-
-    return next();
-};
+}
