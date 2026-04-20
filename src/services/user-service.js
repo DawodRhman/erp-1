@@ -14,28 +14,29 @@ const userService = {
     },
 
     create: async (data) => {
-        const { username, password, employee_id } = data;
+        const { email, password, employee_id, role_id } = data;
 
-        if (!username || !password) {
-            throw new Error('Username and password are required');
+        if (!email || !password) {
+            throw new Error('Email and password are required');
         }
 
-        // check username already taken
-        const exists = await userTable.checkUsername(username);
-        if (exists) throw new Error('Username already taken');
+        // check email already taken
+        const exists = await userTable.checkEmail(email);
+        if (exists) throw new Error('Email already taken');
 
         // hash password before saving
         const hashedPassword = await bcrypt.hash(password, 10);
 
         return await userTable.create({
-            username,
+            email,
             password: hashedPassword,
-            employee_id
+            employee_id,
+            role_id
         });
     },
 
-    updateStatus: async (id, is_active) => {
-        const user = await userTable.updateStatus({ id, is_active });
+    updateRole: async (id, role_id) => {
+        const user = await userTable.updateRole({ id, role_id });
         if (!user) throw new Error('User not found');
         return user;
     }
