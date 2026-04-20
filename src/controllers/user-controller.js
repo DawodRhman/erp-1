@@ -50,18 +50,6 @@ const userController = {
         } catch (err) {
             res.status(400).json({ message: err.message });
         }
-    },
-
-    delete: async (req, res) => {
-        try {
-            const user = await userService.delete(req.params.id);
-            res.status(200).json({
-                message: 'HR account deleted successfully',
-                user
-            });
-        } catch (err) {
-            res.status(400).json({ message: err.message });
-        }
     }
 };
 

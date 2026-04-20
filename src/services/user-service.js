@@ -38,12 +38,6 @@ const userService = {
         const user = await userTable.updateStatus({ id, is_active });
         if (!user) throw new Error('User not found');
         return user;
-    },
-
-    delete: async (id) => {
-        const user = await userTable.delete(id);
-        if (!user) throw new Error('User not found or cannot delete super admin');
-        return user;
     }
 };
 

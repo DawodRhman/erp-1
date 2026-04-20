@@ -58,22 +58,6 @@ const leavePolicyController = {
             const status = err.status || 500;
             res.status(status).json({ message: err.message });
         }
-    },
-
-    delete: async (req, res) => {
-        try {
-            const policy = await leavePolicyService.delete(req.params.id);
-            if (!policy) {
-                return res.status(404).json({ message: 'Leave policy not found' });
-            }
-            res.status(200).json({
-                message: 'Leave policy deleted successfully',
-                policy
-            });
-        } catch (err) {
-            const status = err.status || 500;
-            res.status(status).json({ message: err.message });
-        }
     }
 };
 

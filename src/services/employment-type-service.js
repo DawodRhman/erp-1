@@ -4,7 +4,6 @@ const employmentTypeService = {
     create: (data) => employmentTypeTable.create(data),
     read: (id) => employmentTypeTable.read(id),
     update: (data) => employmentTypeTable.update(data),
-    delete: (id) => employmentTypeTable.delete(id),
 };
 
 export default employmentTypeService;

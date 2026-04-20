@@ -20,17 +20,6 @@ const shiftService = {
         return shiftTable.update(data);
     },
 
-    delete: async (id) => {
-        // Prevent delete if shift is assigned to employees
-        const usage = await pool.query(
-            'SELECT COUNT(*) FROM job_info WHERE shift_id = $1',
-            [id]
-        );
-        if (parseInt(usage.rows[0].count) > 0) {
-            throw { status: 400, message: 'Cannot delete shift assigned to employees' };
-        }
-        return shiftTable.delete(id);
-    },
 };
 
 export default shiftService;

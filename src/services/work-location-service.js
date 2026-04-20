@@ -4,7 +4,6 @@ const workLocationService = {
     create: (data) => workLocationTable.create(data),
     read: (id) => workLocationTable.read(id),
     update: (data) => workLocationTable.update(data),
-    delete: (id) => workLocationTable.delete(id),
 };
 
 export default workLocationService;

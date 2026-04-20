@@ -25,11 +25,6 @@ const workLocationTable = {
         return resp.rows[0];
     },
 
-    delete: async (id) => {
-        const query = 'DELETE FROM work_locations WHERE id = $1 RETURNING *';
-        const resp = await pool.query(query, [id]);
-        return resp.rows[0];
-    },
 };
 
 export default workLocationTable;

@@ -38,18 +38,3 @@ export const updateJobStatus = async (req, res, next) => {
         return next(err);
     }
 };
-
-export const deleteJobStatus = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const jobStatus = await jobStatusService.delete(id);
-
-        if (!jobStatus) {
-            return res.status(404).json({ error: 'Job status not found' });
-        }
-
-        return res.status(200).json(jobStatus);
-    } catch (err) {
-        return next(err);
-    }
-};

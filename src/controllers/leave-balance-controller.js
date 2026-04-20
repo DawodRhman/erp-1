@@ -88,22 +88,6 @@ const leaveBalanceController = {
         }
     },
 
-    delete: async (req, res) => {
-        try {
-            const balance = await leaveBalanceService.delete(req.params.id);
-            if (!balance) {
-                return res.status(404).json({ message: 'Leave balance not found' });
-            }
-            res.status(200).json({
-                message: 'Leave balance deleted successfully',
-                balance
-            });
-        } catch (err) {
-            const status = err.status || 500;
-            res.status(status).json({ message: err.message });
-        }
-    },
-
     initializeForEmployee: async (req, res) => {
         try {
             const { employeeId } = req.params;

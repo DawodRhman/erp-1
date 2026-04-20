@@ -48,18 +48,6 @@ const designationService = {
         return designationTable.update(data);
     },
 
-    delete: async (id) => {
-        // Check if designation is used in job_info
-        const usage = await pool.query(
-            'SELECT COUNT(*) FROM job_info WHERE designation_id = $1',
-            [id]
-        );
-        if (parseInt(usage.rows[0].count) > 0) {
-            throw { status: 400, message: 'Cannot delete designation assigned to employees' };
-        }
-
-        return designationTable.delete(id);
-    },
 };
 
 export default designationService;

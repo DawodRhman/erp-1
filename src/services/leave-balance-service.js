@@ -67,26 +67,6 @@ const leaveBalanceService = {
         return leaveBalanceTable.adjustUsed(id, adjustment);
     },
 
-    delete: async (id) => {
-        // Check if any leave requests reference this balance's employee+type+year
-        const balance = await leaveBalanceTable.read(id);
-        if (!balance) {
-            throw { status: 404, message: 'Leave balance not found' };
-        }
-
-        const usage = await pool.query(
-            `SELECT COUNT(*) FROM leave_requests
-             WHERE employee_id = $1 AND leave_type_id = $2
-             AND EXTRACT(YEAR FROM start_date) = $3`,
-            [balance.employee_id, balance.leave_type_id, balance.year]
-        );
-        if (parseInt(usage.rows[0].count) > 0) {
-            throw { status: 400, message: 'Cannot delete balance with existing leave requests' };
-        }
-
-        return leaveBalanceTable.delete(id);
-    },
-
     // Initialize balances for employee based on leave policies for a year
     initializeForEmployee: async (employeeId, year) => {
         // Get all active policies for the year

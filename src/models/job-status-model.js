@@ -25,11 +25,6 @@ const jobStatusTable = {
         return resp.rows[0];
     },
 
-    delete: async (id) => {
-        const query = 'DELETE FROM job_statuses WHERE id = $1 RETURNING *';
-        const resp = await pool.query(query, [id]);
-        return resp.rows[0];
-    },
 };
 
 export default jobStatusTable;

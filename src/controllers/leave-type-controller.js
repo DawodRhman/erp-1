@@ -49,22 +49,6 @@ const leaveTypeController = {
             const status = err.status || 500;
             res.status(status).json({ message: err.message });
         }
-    },
-
-    delete: async (req, res) => {
-        try {
-            const leaveType = await leaveTypeService.delete(req.params.id);
-            if (!leaveType) {
-                return res.status(404).json({ message: 'Leave type not found' });
-            }
-            res.status(200).json({
-                message: 'Leave type deleted successfully',
-                leaveType
-            });
-        } catch (err) {
-            const status = err.status || 500;
-            res.status(status).json({ message: err.message });
-        }
     }
 };
 

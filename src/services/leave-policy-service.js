@@ -46,22 +46,6 @@ const leavePolicyService = {
         }
 
         return leavePolicyTable.update(data);
-    },
-
-    delete: async (id) => {
-        // Check if policy is referenced in leave_balances
-        const balanceUsage = await pool.query(
-            `SELECT COUNT(*) FROM leave_balances lb
-             JOIN leave_policies lp ON lb.leave_type_id = lp.leave_type_id AND lb.year = lp.year
-             WHERE lp.id = $1`,
-            [id]
-        );
-        if (parseInt(balanceUsage.rows[0].count) > 0) {
-            throw { status: 400, message: 'Cannot delete policy with existing employee balances' };
-        }
-
-        return leavePolicyTable.delete(id);
-    },
 };
 
 export default leavePolicyService;

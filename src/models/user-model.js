@@ -50,16 +50,6 @@ const userTable = {
         return res.rows[0];
     },
 
-    delete: async (id) => {
-        const query = `
-            DELETE FROM users 
-            WHERE id = $1 AND role != 'super_admin' 
-            RETURNING id, username
-        `;
-        const res = await pool.query(query, [id]);
-        return res.rows[0];
-    },
-
     checkUsername: async (username) => {
         const res = await pool.query(
             `SELECT id FROM users WHERE username = $1`,

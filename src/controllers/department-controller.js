@@ -39,17 +39,3 @@ export const updateDepartment = async (req, res, next) => {
     }
 };
 
-export const deleteDepartment = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const department = await departmentService.delete(id);
-
-        if (!department) {
-            return res.status(404).json({ error: 'Department not found' });
-        }
-
-        return res.status(200).json(department);
-    } catch (err) {
-        return next(err);
-    }
-};

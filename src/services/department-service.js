@@ -4,7 +4,6 @@ const departmentService = {
     create: (data) => departmentTable.create(data),
     read: (id) => departmentTable.read(id),
     update: (data) => departmentTable.update(data),
-    delete: (id) => departmentTable.delete(id),
 };
 
 export default departmentService;

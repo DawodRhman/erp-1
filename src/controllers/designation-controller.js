@@ -60,21 +60,6 @@ const designationController = {
         }
     },
 
-    delete: async (req, res) => {
-        try {
-            const designation = await designationService.delete(req.params.id);
-            if (!designation) {
-                return res.status(404).json({ message: 'Designation not found' });
-            }
-            res.status(200).json({
-                message: 'Designation deleted successfully',
-                designation
-            });
-        } catch (err) {
-            const status = err.status || 500;
-            res.status(status).json({ message: err.message });
-        }
-    },
 };
 
 export default designationController;

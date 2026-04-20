@@ -35,12 +35,6 @@ const leaveTypeTable = {
         return resp.rows[0];
     },
 
-    delete: async (id) => {
-        const query = 'DELETE FROM leave_types WHERE id = $1 RETURNING *';
-        const resp = await pool.query(query, [id]);
-        return resp.rows[0];
-    },
-
     findByName: async (name, excludeId = null) => {
         const query = excludeId
             ? 'SELECT * FROM leave_types WHERE name = $1 AND id != $2'

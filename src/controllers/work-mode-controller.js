@@ -38,18 +38,3 @@ export const updateWorkMode = async (req, res, next) => {
         return next(err);
     }
 };
-
-export const deleteWorkMode = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const workMode = await workModeService.delete(id);
-
-        if (!workMode) {
-            return res.status(404).json({ error: 'Work mode not found' });
-        }
-
-        return res.status(200).json(workMode);
-    } catch (err) {
-        return next(err);
-    }
-};

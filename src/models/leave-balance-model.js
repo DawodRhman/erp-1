@@ -95,12 +95,6 @@ const leaveBalanceTable = {
         return resp.rows[0];
     },
 
-    delete: async (id) => {
-        const query = 'DELETE FROM leave_balances WHERE id = $1 RETURNING *';
-        const resp = await pool.query(query, [id]);
-        return resp.rows[0];
-    },
-
     findByEmployeeTypeYear: async (employeeId, leaveTypeId, year) => {
         const query = `
             SELECT * FROM leave_balances

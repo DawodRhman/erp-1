@@ -38,18 +38,3 @@ export const updateEmploymentType = async (req, res, next) => {
         return next(err);
     }
 };
-
-export const deleteEmploymentType = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const employmentType = await employmentTypeService.delete(id);
-
-        if (!employmentType) {
-            return res.status(404).json({ error: 'Employment type not found' });
-        }
-
-        return res.status(200).json(employmentType);
-    } catch (err) {
-        return next(err);
-    }
-};

@@ -62,12 +62,6 @@ const leavePolicyTable = {
         return resp.rows[0];
     },
 
-    delete: async (id) => {
-        const query = 'DELETE FROM leave_policies WHERE id = $1 RETURNING *';
-        const resp = await pool.query(query, [id]);
-        return resp.rows[0];
-    },
-
     // Check if policy exists for leave_type + year combo (for unique constraint)
     findByTypeAndYear: async (leave_type_id, year, excludeId = null) => {
         const query = excludeId

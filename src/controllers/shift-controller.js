@@ -49,22 +49,6 @@ const shiftController = {
             const status = err.status || 500;
             res.status(status).json({ message: err.message });
         }
-    },
-
-    delete: async (req, res) => {
-        try {
-            const shift = await shiftService.delete(req.params.id);
-            if (!shift) {
-                return res.status(404).json({ message: 'Shift not found' });
-            }
-            res.status(200).json({
-                message: 'Shift deleted successfully',
-                shift
-            });
-        } catch (err) {
-            const status = err.status || 500;
-            res.status(status).json({ message: err.message });
-        }
     }
 };
 

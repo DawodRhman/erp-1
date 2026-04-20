@@ -38,18 +38,3 @@ export const updateWorkLocation = async (req, res, next) => {
         return next(err);
     }
 };
-
-export const deleteWorkLocation = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const workLocation = await workLocationService.delete(id);
-
-        if (!workLocation) {
-            return res.status(404).json({ error: 'Work location not found' });
-        }
-
-        return res.status(200).json(workLocation);
-    } catch (err) {
-        return next(err);
-    }
-};
