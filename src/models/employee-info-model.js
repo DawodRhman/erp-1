@@ -29,10 +29,5 @@ const employeeTable = {
         const resp = await pool.query(query, [id, employee_id, name, father_name, cnic, date_of_birth]);
         return resp.rows[0];
     },
-    delete: async (id) => {
-        const query = "DELETE FROM employee_info WHERE id = $1 RETURNING * ";
-        const resp = await pool.query(query, [id]);
-        return resp.rows[0]
-    },
 };
 export default employeeTable;

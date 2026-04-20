@@ -9,6 +9,5 @@ router.get('/year/:year', verifyToken, leavePolicyController.getByYear);
 router.get('/:id', verifyToken, leavePolicyController.getById);
 router.post('/', verifyToken, leavePolicyController.create);
 router.put('/:id', verifyToken, leavePolicyController.update);
-router.delete('/:id', verifyToken, leavePolicyController.delete);
 
 export default router;

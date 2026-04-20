@@ -9,6 +9,5 @@ router.get('/department/:departmentId', verifyToken, designationController.getBy
 router.get('/:id', verifyToken, designationController.getById);
 router.post('/', verifyToken, designationController.create);
 router.put('/:id', verifyToken, designationController.update);
-router.delete('/:id', verifyToken, designationController.delete);
 
 export default router;

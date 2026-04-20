@@ -5,7 +5,6 @@ const employeeService = {
     read: (id) => employeeTable.read(id),
     readIds: () => employeeTable.readIds(),
     update: (data) => employeeTable.update(data),
-    delete: (id) => employeeTable.delete(id),
 };
 
 export default employeeService;

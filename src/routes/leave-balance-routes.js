@@ -12,6 +12,5 @@ router.post('/', verifyToken, leaveBalanceController.create);
 router.post('/employee/:employeeId/initialize', verifyToken, leaveBalanceController.initializeForEmployee);
 router.put('/:id', verifyToken, leaveBalanceController.update);
 router.patch('/:id/adjust', verifyToken, leaveBalanceController.adjustUsed);
-router.delete('/:id', verifyToken, leaveBalanceController.delete);
 
 export default router;

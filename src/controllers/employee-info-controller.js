@@ -36,13 +36,3 @@ export const updateEmployee = async (req, res, next) => {
         return next(err);
     }
 };
-
-export const deleteEmployee = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const employee = await employeeService.delete(id);
-        return res.status(200).json(employee);
-    } catch (err) {
-        return next(err);
-    }
-};

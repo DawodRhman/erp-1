@@ -6,7 +6,6 @@ import {
     createEmployee,
     getEmployees,
     updateEmployee,
-    deleteEmployee,
     getEmployeesId,
 } from '../controllers/employee-info-controller.js';
 
@@ -17,7 +16,6 @@ router.get('/employees', verifyToken, getEmployees);
 router.get('/employees/ids', verifyToken, getEmployeesId);
 router.get('/employees/:id', verifyToken, getEmployees);
 router.put('/employees/:id', verifyToken, updateEmployee);
-router.delete('/employees/:id', verifyToken, deleteEmployee);
 
 
 export default router;

@@ -8,6 +8,5 @@ router.get('/', verifyToken, shiftController.getAll);
 router.get('/:id', verifyToken, shiftController.getById);
 router.post('/', verifyToken, shiftController.create);
 router.put('/:id', verifyToken, shiftController.update);
-router.delete('/:id', verifyToken, shiftController.delete);
 
 export default router;
