@@ -202,6 +202,13 @@ async function seed() {
         );
 
         // --- Roles ---
+        // Super Admin - global role with NULL department_id
+        const superAdminRoleRes = await client.query(
+            "INSERT INTO roles (department_id, role_name, description) VALUES ($1, $2, $3) RETURNING id",
+            [null, "super_admin", "Global super administrator with full system access"]
+        );
+        const superAdminRoleId = superAdminRoleRes.rows[0].id;
+
         const adminRoleRes = await client.query(
             "INSERT INTO roles (department_id, role_name, description) VALUES ($1, $2, $3) RETURNING id",
             [deptId, "Admin", "System Administrator with full access"]
@@ -239,6 +246,22 @@ async function seed() {
                 "jane.smith@company.com",
                 hashedPassword,
                 empRoleId,
+            ]
+        );
+
+        // --- Super Admin User for testing ---
+        await client.query(
+            "INSERT INTO employee_info (employee_id, name, father_name, cnic, date_of_birth) VALUES ($1, $2, $3, $4, $5)",
+            ["EMP000", "Super Admin", "Admin", "00000-0000000-0", "1990-01-01"]
+        );
+
+        await client.query(
+            "INSERT INTO users (employee_id, email, password, role_id) VALUES ($1, $2, $3, $4)",
+            [
+                "EMP000",
+                "admin@ems.com",
+                hashedPassword,
+                superAdminRoleId,
             ]
         );
 
