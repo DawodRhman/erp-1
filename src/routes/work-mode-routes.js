@@ -7,8 +7,8 @@ import { createWorkMode, getWorkModes, updateWorkMode } from '../controllers/wor
 
 const router = Router()
 
-router.get('/work-modes', verifyToken, getWorkModes)
-router.get('/work-modes/:id', verifyToken, getWorkModes)
+router.get('/work-modes', verifyToken, requirePermission('config:manage'), getWorkModes)
+router.get('/work-modes/:id', verifyToken, requirePermission('config:manage'), getWorkModes)
 router.post('/work-modes', verifyToken, requirePermission('config:manage'), validate(createWorkModeSchema), createWorkMode)
 router.put('/work-modes/:id', verifyToken, requirePermission('config:manage'), validate(updateWorkModeSchema), updateWorkMode)
 

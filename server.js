@@ -1,8 +1,12 @@
+// EMS Backend Server - Employee Management System API
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-dotenv.config(); // ← first thing before everything
 
+// Load environment variables first before any other imports
+dotenv.config();
+
+// Import route handlers
 import employeeRoutes from './src/routes/employee-info-routes.js';
 import extraEmployeeRoutes from './src/routes/extra-employee-info-routes.js';
 import departmentRoutes from './src/routes/department-routes.js';
@@ -21,15 +25,20 @@ import leaveBalanceRoutes from './src/routes/leave-balance-routes.js';
 import attendanceRoutes from './src/routes/attendance-routes.js';
 import leaveRequestRoutes from './src/routes/leave-request-routes.js';
 
+// Initialize Express application
 const app = express();
 
+// Configure CORS for frontend communication
 app.use(cors({
     origin: 'http://localhost:5173',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     credentials: true
 }));
+
+// Parse JSON request bodies
 app.use(express.json());
 
+// Mount API routes
 app.use('/api', employeeRoutes);
 app.use('/api', extraEmployeeRoutes);
 app.use('/api', departmentRoutes);
@@ -48,16 +57,19 @@ app.use('/api/leave-balances', leaveBalanceRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/leave-requests', leaveRequestRoutes);
 
+// Health check endpoint
 app.get('/', (req, res) => {
     res.json({ message: 'server is running' });
 });
 
+// Global error handler middleware
 app.use((err, req, res, next) => {
     const status = err.status || 500;
     const message = err.message || 'Internal Server Error';
     res.status(status).json({ error: message });
 });
 
+// Start server on configured port
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

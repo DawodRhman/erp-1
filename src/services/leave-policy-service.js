@@ -46,6 +46,6 @@ const leavePolicyService = {
         }
 
         return leavePolicyTable.update(data);
-};
+}}
 
 export default leavePolicyService;

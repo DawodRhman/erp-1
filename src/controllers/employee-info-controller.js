@@ -1,5 +1,7 @@
+// Employee information controller - handles CRUD operations for employee data
 import employeeService from '../services/employee-info-service.js'
 
+// Create new employee record in employee_info table
 export const createEmployee = async (req, res, next) => {
     try {
         const employee = await employeeService.create(req.body)
@@ -9,8 +11,19 @@ export const createEmployee = async (req, res, next) => {
     }
 }
 
+// Get employees list - returns all for HR, only self for employees
 export const getEmployees = async (req, res, next) => {
     try {
+        // Check if employee role - only return self
+        if (!req.user.is_super_admin &&
+            req.user.role !== 'hr_manager' &&
+            req.user.role !== 'hr_executive') {
+            // Employee role - return only their own data
+            const data = await employeeService.readById(req.user.employee_id)
+            return res.status(200).json(data ? [data] : [])
+        }
+
+        // HR or Admin - return all
         const { search } = req.query
         const data = search
             ? await employeeService.search(search)
@@ -21,8 +34,20 @@ export const getEmployees = async (req, res, next) => {
     }
 }
 
+// Get single employee by ID - enforces self-service for employee role
 export const getEmployeeById = async (req, res, next) => {
     try {
+        // Check self-service for employee role
+        if (!req.user.is_super_admin &&
+            req.user.role !== 'hr_manager' &&
+            req.user.role !== 'hr_executive') {
+            if (req.params.id !== req.user.employee_id) {
+                return res.status(403).json({
+                    error: 'Access denied. You can only access your own data.'
+                })
+            }
+        }
+
         const employee = await employeeService.readById(req.params.id)
         if (!employee) return res.status(404).json({ error: 'Employee not found.' })
         return res.status(200).json(employee)
@@ -31,6 +56,7 @@ export const getEmployeeById = async (req, res, next) => {
     }
 }
 
+// Get all employee IDs only - for dropdowns and lookups
 export const getEmployeesId = async (req, res, next) => {
     try {
         const data = await employeeService.readIds()
@@ -40,6 +66,7 @@ export const getEmployeesId = async (req, res, next) => {
     }
 }
 
+// Update employee record - HR and Admin only
 export const updateEmployee = async (req, res, next) => {
     try {
         const employee = await employeeService.update({ id: req.params.id, ...req.body })

@@ -1,7 +1,8 @@
-// src/models/user-model.js
+// User data access layer - handles all user-related database operations
 import pool from '../config/db.js';
 
 const userTable = {
+    // Create new user account with hashed password
     create: async (data) => {
         const { email, password, employee_id, role_id } = data;
         const query = `
@@ -13,6 +14,7 @@ const userTable = {
         return res.rows[0];
     },
 
+    // Get user(s) by ID or list all users with role and employee info
     read: async (id) => {
         if (id) {
             const res = await pool.query(
@@ -42,6 +44,7 @@ const userTable = {
         return res.rows;
     },
 
+    // Update user's role assignment
     updateRole: async (data) => {
         const { id, role_id } = data;
         const query = `
@@ -54,6 +57,7 @@ const userTable = {
         return res.rows[0];
     },
 
+    // Check if email already exists in database
     checkEmail: async (email) => {
         const res = await pool.query(
             `SELECT id FROM users WHERE email = $1`,

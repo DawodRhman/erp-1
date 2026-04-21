@@ -7,8 +7,8 @@ import { createLeaveTypeSchema, updateLeaveTypeSchema } from '../schemas/leave-t
 
 const router = Router()
 
-router.get('/', verifyToken, leaveTypeController.getAll)
-router.get('/:id', verifyToken, leaveTypeController.getById)
+router.get('/', verifyToken, requirePermission('config:manage'), leaveTypeController.getAll)
+router.get('/:id', verifyToken, requirePermission('config:manage'), leaveTypeController.getById)
 router.post('/', verifyToken, requirePermission('config:manage'), validate(createLeaveTypeSchema), leaveTypeController.create)
 router.put('/:id', verifyToken, requirePermission('config:manage'), validate(updateLeaveTypeSchema), leaveTypeController.update)
 

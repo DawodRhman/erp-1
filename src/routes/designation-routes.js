@@ -7,9 +7,9 @@ import { createDesignationSchema, updateDesignationSchema } from '../schemas/des
 
 const router = Router()
 
-router.get('/', verifyToken, designationController.getAll)
-router.get('/department/:departmentId', verifyToken, designationController.getByDepartment)
-router.get('/:id', verifyToken, designationController.getById)
+router.get('/', verifyToken, requirePermission('config:manage'), designationController.getAll)
+router.get('/department/:departmentId', verifyToken, requirePermission('config:manage'), designationController.getByDepartment)
+router.get('/:id', verifyToken, requirePermission('config:manage'), designationController.getById)
 router.post('/', verifyToken, requirePermission('config:manage'), validate(createDesignationSchema), designationController.create)
 router.put('/:id', verifyToken, requirePermission('config:manage'), validate(updateDesignationSchema), designationController.update)
 

@@ -1,7 +1,10 @@
+// JWT authentication middleware - verifies Bearer tokens
 import jwt from 'jsonwebtoken'
 
+// Helper to send standardized error responses
 const sendError = (res, statusCode, message) => res.status(statusCode).json({ error: message })
 
+// Extract and validate Bearer token from Authorization header
 const extractBearerToken = (authorizationHeader) => {
     if (typeof authorizationHeader !== 'string') {
         return { token: null, statusCode: 401 }
@@ -13,6 +16,7 @@ const extractBearerToken = (authorizationHeader) => {
     return { token, statusCode: null }
 }
 
+// Verify JWT token and attach user data to request
 export const verifyToken = (req, res, next) => {
     const { token, statusCode } = extractBearerToken(req.headers.authorization)
 

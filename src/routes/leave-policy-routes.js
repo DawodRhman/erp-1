@@ -7,9 +7,9 @@ import { createLeavePolicySchema, updateLeavePolicySchema } from '../schemas/lea
 
 const router = Router()
 
-router.get('/', verifyToken, leavePolicyController.getAll)
-router.get('/year/:year', verifyToken, leavePolicyController.getByYear)
-router.get('/:id', verifyToken, leavePolicyController.getById)
+router.get('/', verifyToken, requirePermission('config:manage'), leavePolicyController.getAll)
+router.get('/year/:year', verifyToken, requirePermission('config:manage'), leavePolicyController.getByYear)
+router.get('/:id', verifyToken, requirePermission('config:manage'), leavePolicyController.getById)
 router.post('/', verifyToken, requirePermission('config:manage'), validate(createLeavePolicySchema), leavePolicyController.create)
 router.put('/:id', verifyToken, requirePermission('config:manage'), validate(updateLeavePolicySchema), leavePolicyController.update)
 

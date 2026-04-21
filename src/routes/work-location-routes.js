@@ -7,8 +7,8 @@ import { createWorkLocation, getWorkLocations, updateWorkLocation } from '../con
 
 const router = Router()
 
-router.get('/work-locations', verifyToken, getWorkLocations)
-router.get('/work-locations/:id', verifyToken, getWorkLocations)
+router.get('/work-locations', verifyToken, requirePermission('config:manage'), getWorkLocations)
+router.get('/work-locations/:id', verifyToken, requirePermission('config:manage'), getWorkLocations)
 router.post('/work-locations', verifyToken, requirePermission('config:manage'), validate(createWorkLocationSchema), createWorkLocation)
 router.put('/work-locations/:id', verifyToken, requirePermission('config:manage'), validate(updateWorkLocationSchema), updateWorkLocation)
 

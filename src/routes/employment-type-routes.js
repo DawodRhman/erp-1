@@ -7,8 +7,8 @@ import { createEmploymentType, getEmploymentTypes, updateEmploymentType } from '
 
 const router = Router()
 
-router.get('/employment-types', verifyToken, getEmploymentTypes)
-router.get('/employment-types/:id', verifyToken, getEmploymentTypes)
+router.get('/employment-types', verifyToken, requirePermission('config:manage'), getEmploymentTypes)
+router.get('/employment-types/:id', verifyToken, requirePermission('config:manage'), getEmploymentTypes)
 router.post('/employment-types', verifyToken, requirePermission('config:manage'), validate(createEmploymentTypeSchema), createEmploymentType)
 router.put('/employment-types/:id', verifyToken, requirePermission('config:manage'), validate(updateEmploymentTypeSchema), updateEmploymentType)
 

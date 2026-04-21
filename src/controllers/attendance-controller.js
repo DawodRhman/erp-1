@@ -1,11 +1,23 @@
+// Attendance controller - manages daily attendance tracking and reports
 import attendanceService from '../services/attendance-service.js'
 
+// Get daily attendance sheet - filtered by role (HR sees all, employee sees own)
 export const getDailySheet = async (req, res, next) => {
     try {
-        const { date, department, location, shift, employee } = req.query
+        let { date, department, location, shift, employee } = req.query
 
         if (!date) {
             return res.status(400).json({ error: 'date query param is required (YYYY-MM-DD).' })
+        }
+
+        // Employee role - force employee filter to self
+        if (!req.user.is_super_admin &&
+            req.user.role !== 'hr_manager' &&
+            req.user.role !== 'hr_executive') {
+            employee = req.user.employee_id
+            department = null
+            location = null
+            shift = null
         }
 
         const data = await attendanceService.getDailySheet({
@@ -22,6 +34,7 @@ export const getDailySheet = async (req, res, next) => {
     }
 }
 
+// Batch save attendance - HR marks multiple employees at once
 export const batchSaveAttendance = async (req, res, next) => {
     try {
         const { date, rows } = req.body
@@ -34,12 +47,22 @@ export const batchSaveAttendance = async (req, res, next) => {
     }
 }
 
+// Get monthly attendance report - statistics per employee
 export const getMonthlyReport = async (req, res, next) => {
     try {
-        const { month, year, department } = req.query
+        let { month, year, department } = req.query
 
         if (!month || !year) {
             return res.status(400).json({ error: 'month and year query params are required.' })
+        }
+
+        // Employee role - force department to null (will filter by employee_id in service if needed)
+        if (!req.user.is_super_admin &&
+            req.user.role !== 'hr_manager' &&
+            req.user.role !== 'hr_executive') {
+            department = null
+            // Add employee filter
+            req.query.employee = req.user.employee_id
         }
 
         const data = await attendanceService.getMonthlyReport({

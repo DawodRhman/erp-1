@@ -7,8 +7,8 @@ import { createDepartment, getDepartments, updateDepartment } from '../controlle
 
 const router = Router()
 
-router.get('/departments', verifyToken, getDepartments)
-router.get('/departments/:id', verifyToken, getDepartments)
+router.get('/departments', verifyToken, requirePermission('config:manage'), getDepartments)
+router.get('/departments/:id', verifyToken, requirePermission('config:manage'), getDepartments)
 router.post('/departments', verifyToken, requirePermission('config:manage'), validate(createDepartmentSchema), createDepartment)
 router.put('/departments/:id', verifyToken, requirePermission('config:manage'), validate(updateDepartmentSchema), updateDepartment)
 

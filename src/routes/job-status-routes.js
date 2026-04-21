@@ -7,8 +7,8 @@ import { createJobStatus, getJobStatuses, updateJobStatus } from '../controllers
 
 const router = Router()
 
-router.get('/job-statuses', verifyToken, getJobStatuses)
-router.get('/job-statuses/:id', verifyToken, getJobStatuses)
+router.get('/job-statuses', verifyToken, requirePermission('config:manage'), getJobStatuses)
+router.get('/job-statuses/:id', verifyToken, requirePermission('config:manage'), getJobStatuses)
 router.post('/job-statuses', verifyToken, requirePermission('config:manage'), validate(createJobStatusSchema), createJobStatus)
 router.put('/job-statuses/:id', verifyToken, requirePermission('config:manage'), validate(updateJobStatusSchema), updateJobStatus)
 
