@@ -16,7 +16,7 @@ const baseSelect = `
     j.created_at,
     j.updated_at,
     e.name AS employee_name,
-    d.name AS department_name,
+    d.department_name,
     ds.title AS designation_title,
     et.type_name AS employment_type_name,
     js.status_name AS job_status_name,
