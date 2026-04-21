@@ -1,37 +1,37 @@
 import leavePolicyService from '../services/leave-policy-service.js';
 
 const leavePolicyController = {
-    getAll: async (req, res) => {
+    getAll: async (req, res, next) => {
         try {
             const policies = await leavePolicyService.read();
             res.status(200).json(policies);
         } catch (err) {
-            res.status(500).json({ message: err.message });
+            next(err);
         }
     },
 
-    getById: async (req, res) => {
+    getById: async (req, res, next) => {
         try {
             const policy = await leavePolicyService.read(req.params.id);
             if (!policy) {
-                return res.status(404).json({ message: 'Leave policy not found' });
+                return res.status(404).json({ error: 'Leave policy not found' });
             }
             res.status(200).json(policy);
         } catch (err) {
-            res.status(500).json({ message: err.message });
+            next(err);
         }
     },
 
-    getByYear: async (req, res) => {
+    getByYear: async (req, res, next) => {
         try {
             const policies = await leavePolicyService.readByYear(req.params.year);
             res.status(200).json(policies);
         } catch (err) {
-            res.status(500).json({ message: err.message });
+            next(err);
         }
     },
 
-    create: async (req, res) => {
+    create: async (req, res, next) => {
         try {
             const policy = await leavePolicyService.create(req.body);
             res.status(201).json({
@@ -39,24 +39,22 @@ const leavePolicyController = {
                 policy
             });
         } catch (err) {
-            const status = err.status || 500;
-            res.status(status).json({ message: err.message });
+            next(err);
         }
     },
 
-    update: async (req, res) => {
+    update: async (req, res, next) => {
         try {
             const policy = await leavePolicyService.update({ id: req.params.id, ...req.body });
             if (!policy) {
-                return res.status(404).json({ message: 'Leave policy not found' });
+                return res.status(404).json({ error: 'Leave policy not found' });
             }
             res.status(200).json({
                 message: 'Leave policy updated successfully',
                 policy
             });
         } catch (err) {
-            const status = err.status || 500;
-            res.status(status).json({ message: err.message });
+            next(err);
         }
     }
 };

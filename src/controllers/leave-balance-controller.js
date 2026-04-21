@@ -1,48 +1,48 @@
 import leaveBalanceService from '../services/leave-balance-service.js';
 
 const leaveBalanceController = {
-    getAll: async (req, res) => {
+    getAll: async (req, res, next) => {
         try {
             const balances = await leaveBalanceService.read();
             res.status(200).json(balances);
         } catch (err) {
-            res.status(500).json({ message: err.message });
+            next(err);
         }
     },
 
-    getById: async (req, res) => {
+    getById: async (req, res, next) => {
         try {
             const balance = await leaveBalanceService.read(req.params.id);
             if (!balance) {
-                return res.status(404).json({ message: 'Leave balance not found' });
+                return res.status(404).json({ error: 'Leave balance not found' });
             }
             res.status(200).json(balance);
         } catch (err) {
-            res.status(500).json({ message: err.message });
+            next(err);
         }
     },
 
-    getByEmployee: async (req, res) => {
+    getByEmployee: async (req, res, next) => {
         try {
             const { employeeId } = req.params;
             const { year } = req.query;
             const balances = await leaveBalanceService.readByEmployee(employeeId, year);
             res.status(200).json(balances);
         } catch (err) {
-            res.status(500).json({ message: err.message });
+            next(err);
         }
     },
 
-    getByYear: async (req, res) => {
+    getByYear: async (req, res, next) => {
         try {
             const balances = await leaveBalanceService.readByYear(req.params.year);
             res.status(200).json(balances);
         } catch (err) {
-            res.status(500).json({ message: err.message });
+            next(err);
         }
     },
 
-    create: async (req, res) => {
+    create: async (req, res, next) => {
         try {
             const balance = await leaveBalanceService.create(req.body);
             res.status(201).json({
@@ -50,32 +50,30 @@ const leaveBalanceController = {
                 balance
             });
         } catch (err) {
-            const status = err.status || 500;
-            res.status(status).json({ message: err.message });
+            next(err);
         }
     },
 
-    update: async (req, res) => {
+    update: async (req, res, next) => {
         try {
             const balance = await leaveBalanceService.update({ id: req.params.id, ...req.body });
             if (!balance) {
-                return res.status(404).json({ message: 'Leave balance not found' });
+                return res.status(404).json({ error: 'Leave balance not found' });
             }
             res.status(200).json({
                 message: 'Leave balance updated successfully',
                 balance
             });
         } catch (err) {
-            const status = err.status || 500;
-            res.status(status).json({ message: err.message });
+            next(err);
         }
     },
 
-    adjustUsed: async (req, res) => {
+    adjustUsed: async (req, res, next) => {
         try {
             const { adjustment } = req.body;
             if (adjustment === undefined) {
-                return res.status(400).json({ message: 'Adjustment value is required' });
+                return res.status(400).json({ error: 'Adjustment value is required' });
             }
             const balance = await leaveBalanceService.adjustUsed(req.params.id, adjustment);
             res.status(200).json({
@@ -83,17 +81,16 @@ const leaveBalanceController = {
                 balance
             });
         } catch (err) {
-            const status = err.status || 500;
-            res.status(status).json({ message: err.message });
+            next(err);
         }
     },
 
-    initializeForEmployee: async (req, res) => {
+    initializeForEmployee: async (req, res, next) => {
         try {
             const { employeeId } = req.params;
             const { year } = req.body;
             if (!year) {
-                return res.status(400).json({ message: 'Year is required' });
+                return res.status(400).json({ error: 'Year is required' });
             }
             const balances = await leaveBalanceService.initializeForEmployee(employeeId, year);
             res.status(201).json({
@@ -101,8 +98,7 @@ const leaveBalanceController = {
                 balances
             });
         } catch (err) {
-            const status = err.status || 500;
-            res.status(status).json({ message: err.message });
+            next(err);
         }
     },
 };

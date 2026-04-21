@@ -1,37 +1,37 @@
 import designationService from '../services/designation-service.js';
 
 const designationController = {
-    getAll: async (req, res) => {
+    getAll: async (req, res, next) => {
         try {
             const designations = await designationService.read();
             res.status(200).json(designations);
         } catch (err) {
-            res.status(500).json({ message: err.message });
+            next(err);
         }
     },
 
-    getById: async (req, res) => {
+    getById: async (req, res, next) => {
         try {
             const designation = await designationService.read(req.params.id);
             if (!designation) {
-                return res.status(404).json({ message: 'Designation not found' });
+                return res.status(404).json({ error: 'Designation not found' });
             }
             res.status(200).json(designation);
         } catch (err) {
-            res.status(500).json({ message: err.message });
+            next(err);
         }
     },
 
-    getByDepartment: async (req, res) => {
+    getByDepartment: async (req, res, next) => {
         try {
             const designations = await designationService.readByDepartment(req.params.departmentId);
             res.status(200).json(designations);
         } catch (err) {
-            res.status(500).json({ message: err.message });
+            next(err);
         }
     },
 
-    create: async (req, res) => {
+    create: async (req, res, next) => {
         try {
             const designation = await designationService.create(req.body);
             res.status(201).json({
@@ -39,27 +39,24 @@ const designationController = {
                 designation
             });
         } catch (err) {
-            const status = err.status || 500;
-            res.status(status).json({ message: err.message });
+            next(err);
         }
     },
 
-    update: async (req, res) => {
+    update: async (req, res, next) => {
         try {
             const designation = await designationService.update({ id: req.params.id, ...req.body });
             if (!designation) {
-                return res.status(404).json({ message: 'Designation not found' });
+                return res.status(404).json({ error: 'Designation not found' });
             }
             res.status(200).json({
                 message: 'Designation updated successfully',
                 designation
             });
         } catch (err) {
-            const status = err.status || 500;
-            res.status(status).json({ message: err.message });
+            next(err);
         }
-    },
-
+    }
 };
 
 export default designationController;
