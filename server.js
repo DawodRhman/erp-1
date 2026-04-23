@@ -62,10 +62,21 @@ app.get('/', (req, res) => {
     res.json({ message: 'server is running' });
 });
 
-// Global error handler middleware
+// Global error handler middleware - handles all application errors
 app.use((err, req, res, next) => {
     const status = err.status || 500;
-    const message = err.message || 'Internal Server Error';
+
+    // Security: Only expose specific error messages for non-500 errors
+    // Generic message for 500 Internal Server Errors to avoid leaking sensitive info
+    const message = status === 500
+        ? 'Internal Server Error'
+        : (err.message || 'An unexpected error occurred');
+
+    // Log the actual error for server-side debugging
+    if (status === 500) {
+        console.error('[Error]:', err.stack || err.message || err);
+    }
+
     res.status(status).json({ error: message });
 });
 
