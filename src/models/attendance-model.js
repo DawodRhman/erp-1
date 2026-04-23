@@ -117,8 +117,17 @@ const attendanceModel = {
     },
 
     getMonthlyReport: async ({ month, year, department_id }) => {
+        // Optimization: Use date range instead of EXTRACT for SARGability.
+        // This allows the database to use an index on the date column.
+        const m = parseInt(month)
+        const y = parseInt(year)
+        const startDate = `${y}-${String(m).padStart(2, '0')}-01`
+        const nextMonth = m === 12 ? 1 : m + 1
+        const nextYear = m === 12 ? y + 1 : y
+        const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`
+
         const conditions = []
-        const params = [parseInt(month), parseInt(year)]
+        const params = [startDate, endDate]
         let idx = 3
 
         if (department_id) {
@@ -149,8 +158,7 @@ const attendanceModel = {
             JOIN job_info ji USING (employee_id)
             JOIN departments d ON ji.department_id = d.id
             JOIN attendance a USING (employee_id)
-            WHERE EXTRACT(MONTH FROM a.date) = $1
-              AND EXTRACT(YEAR  FROM a.date) = $2
+            WHERE a.date >= $1 AND a.date < $2
               ${whereClause}
             GROUP BY ei.employee_id, ei.name, d.department_name
             ORDER BY ei.employee_id ASC
