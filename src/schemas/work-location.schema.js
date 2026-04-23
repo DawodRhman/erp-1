@@ -5,4 +5,7 @@ export const createWorkLocationSchema = z.object({
     is_active: z.boolean().optional().default(true),
 })
 
-export const updateWorkLocationSchema = createWorkLocationSchema.partial()
+export const updateWorkLocationSchema = z.object({
+    location_name: z.string().min(1).max(100).optional(),
+    is_active: z.boolean().optional(),
+})

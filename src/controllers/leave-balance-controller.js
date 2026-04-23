@@ -3,8 +3,16 @@ import leaveBalanceService from '../services/leave-balance-service.js';
 const leaveBalanceController = {
     getAll: async (req, res, next) => {
         try {
+            // Self-service: employees only see their own balances
+            if (!req.user.is_super_admin &&
+                req.user.role !== 'hr_manager' &&
+                req.user.role !== 'hr_executive') {
+                const balances = await leaveBalanceService.readByEmployee(req.user.employee_id, req.query.year);
+                return res.status(200).json(balances);
+            }
+
             const balances = await leaveBalanceService.read();
-            res.status(200).json(balances);
+            return res.status(200).json(balances);
         } catch (err) {
             next(err);
         }
@@ -16,6 +24,14 @@ const leaveBalanceController = {
             if (!balance) {
                 return res.status(404).json({ error: 'Leave balance not found' });
             }
+            // Self-service: employees can only access their own balance row
+            if (!req.user.is_super_admin &&
+                req.user.role !== 'hr_manager' &&
+                req.user.role !== 'hr_executive') {
+                if (balance.employee_id !== req.user.employee_id) {
+                    return res.status(403).json({ error: 'Access denied. You can only access your own data.' });
+                }
+            }
             res.status(200).json(balance);
         } catch (err) {
             next(err);
@@ -24,8 +40,16 @@ const leaveBalanceController = {
 
     getByEmployee: async (req, res, next) => {
         try {
-            const { employeeId } = req.params;
+            let { employeeId } = req.params;
             const { year } = req.query;
+
+            // Self-service: force employeeId to self
+            if (!req.user.is_super_admin &&
+                req.user.role !== 'hr_manager' &&
+                req.user.role !== 'hr_executive') {
+                employeeId = req.user.employee_id;
+            }
+
             const balances = await leaveBalanceService.readByEmployee(employeeId, year);
             res.status(200).json(balances);
         } catch (err) {
@@ -35,6 +59,12 @@ const leaveBalanceController = {
 
     getByYear: async (req, res, next) => {
         try {
+            // Self-service: employees cannot enumerate other balances by year
+            if (!req.user.is_super_admin &&
+                req.user.role !== 'hr_manager' &&
+                req.user.role !== 'hr_executive') {
+                return res.status(403).json({ error: 'Access denied.' });
+            }
             const balances = await leaveBalanceService.readByYear(req.params.year);
             res.status(200).json(balances);
         } catch (err) {

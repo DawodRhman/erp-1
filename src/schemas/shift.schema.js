@@ -10,4 +10,10 @@ export const createShiftSchema = z.object({
     is_active: z.boolean().optional().default(true),
 })
 
-export const updateShiftSchema = createShiftSchema.partial()
+export const updateShiftSchema = z.object({
+    name: z.string().min(1).max(100).optional(),
+    start_time: z.string().regex(timeRegex, 'Must be HH:MM or HH:MM:SS').optional(),
+    end_time: z.string().regex(timeRegex, 'Must be HH:MM or HH:MM:SS').optional(),
+    late_after_minutes: z.number().int().min(0).optional(),
+    is_active: z.boolean().optional(),
+})

@@ -19,7 +19,7 @@ export const getEmployees = async (req, res, next) => {
             req.user.role !== 'hr_manager' &&
             req.user.role !== 'hr_executive') {
             // Employee role - return only their own data
-            const data = await employeeService.readById(req.user.employee_id)
+            const data = await employeeService.readByEmployeeId(req.user.employee_id)
             return res.status(200).json(data ? [data] : [])
         }
 
@@ -37,19 +37,21 @@ export const getEmployees = async (req, res, next) => {
 // Get single employee by ID - enforces self-service for employee role
 export const getEmployeeById = async (req, res, next) => {
     try {
-        // Check self-service for employee role
+        // :id is employee_info.id (UUID)
+        const employee = await employeeService.readById(req.params.id)
+        if (!employee) return res.status(404).json({ error: 'Employee not found.' })
+
+        // Self-service enforcement for employee role
         if (!req.user.is_super_admin &&
             req.user.role !== 'hr_manager' &&
             req.user.role !== 'hr_executive') {
-            if (req.params.id !== req.user.employee_id) {
+            if (employee.employee_id !== req.user.employee_id) {
                 return res.status(403).json({
                     error: 'Access denied. You can only access your own data.'
                 })
             }
         }
 
-        const employee = await employeeService.readById(req.params.id)
-        if (!employee) return res.status(404).json({ error: 'Employee not found.' })
         return res.status(200).json(employee)
     } catch (err) {
         return next(err)
@@ -59,6 +61,13 @@ export const getEmployeeById = async (req, res, next) => {
 // Get all employee IDs only - for dropdowns and lookups
 export const getEmployeesId = async (req, res, next) => {
     try {
+        // Employees must not see the full company employee_id list (privacy + enumeration risk)
+        if (!req.user.is_super_admin &&
+            req.user.role !== 'hr_manager' &&
+            req.user.role !== 'hr_executive') {
+            return res.status(403).json({ error: 'Access denied.' })
+        }
+
         const data = await employeeService.readIds()
         return res.status(200).json(data)
     } catch (err) {

@@ -34,6 +34,38 @@ export const getDailySheet = async (req, res, next) => {
     }
 }
 
+// Employee acknowledges an attendance record (digital signature)
+export const acknowledgeAttendance = async (req, res, next) => {
+    try {
+        const { attendanceId } = req.params
+
+        // Super admin can ack any record (admin override)
+        if (!req.user.is_super_admin) {
+            // HR roles cannot acknowledge (employee-only verification per SRS Track#60)
+            if (req.user.role === 'hr_manager' || req.user.role === 'hr_executive') {
+                return res.status(403).json({ error: 'Access denied. Employees only.' })
+            }
+        }
+
+        // Load current record (also supports idempotency if already acked)
+        const record = await attendanceService.acknowledge({ attendanceId })
+        if (!record) {
+            return res.status(404).json({ error: 'Attendance record not found.' })
+        }
+
+        // Self-service enforcement for employee role
+        if (!req.user.is_super_admin) {
+            if (record.employee_id !== req.user.employee_id) {
+                return res.status(403).json({ error: 'Access denied. You can only acknowledge your own attendance.' })
+            }
+        }
+
+        return res.status(200).json(record)
+    } catch (err) {
+        return next(err)
+    }
+}
+
 // Batch save attendance - HR marks multiple employees at once
 export const batchSaveAttendance = async (req, res, next) => {
     try {

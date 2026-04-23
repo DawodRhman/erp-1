@@ -5,4 +5,7 @@ export const createEmploymentTypeSchema = z.object({
     is_active: z.boolean().optional().default(true),
 })
 
-export const updateEmploymentTypeSchema = createEmploymentTypeSchema.partial()
+export const updateEmploymentTypeSchema = z.object({
+    type_name: z.string().min(1).max(50).optional(),
+    is_active: z.boolean().optional(),
+})

@@ -9,7 +9,6 @@ const attendanceRowSchema = z.object({
     check_out: z.string().regex(timeRegex, 'Must be HH:MM or HH:MM:SS').optional().nullable(),
     status: z.enum(['present', 'absent', 'late', 'half_day', 'on_leave']),
     notes: z.string().optional().nullable(),
-    ack: z.boolean().optional().default(false),
 })
 
 export const batchAttendanceSchema = z.object({

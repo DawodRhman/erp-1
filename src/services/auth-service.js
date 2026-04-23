@@ -32,6 +32,7 @@ const authService = {
                 user_id: user.id,
                 employee_id: user.employee_id,
                 role_id: user.role_id,
+                role: user.role_name,
                 is_super_admin
             },
             process.env.JWT_SECRET,

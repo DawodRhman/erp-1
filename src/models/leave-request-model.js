@@ -159,7 +159,7 @@ const leaveRequestModel = {
         }
     },
 
-    getBalances: async ({ department_id, work_location_id, shift_id }) => {
+    getBalances: async ({ department_id, work_location_id, shift_id, employee_id }) => {
         const conditions = ['1=1']
         const params = []
         let idx = 1
@@ -167,6 +167,7 @@ const leaveRequestModel = {
         if (department_id) { conditions.push(`ji.department_id = $${idx++}`); params.push(department_id) }
         if (work_location_id) { conditions.push(`ji.work_location_id = $${idx++}`); params.push(work_location_id) }
         if (shift_id) { conditions.push(`ji.shift_id = $${idx++}`); params.push(shift_id) }
+        if (employee_id) { conditions.push(`ei.employee_id = $${idx++}`); params.push(employee_id) }
 
         const res = await pool.query(`
             SELECT
@@ -193,7 +194,7 @@ const leaveRequestModel = {
         return res.rows
     },
 
-    getCalendar: async ({ department_id, month, year }) => {
+    getCalendar: async ({ department_id, month, year, employee_id }) => {
         const conditions = [`lr.status = 'approved'`]
         const params = []
         let idx = 1
@@ -201,6 +202,10 @@ const leaveRequestModel = {
         if (department_id) {
             conditions.push(`ji.department_id = $${idx++}`)
             params.push(department_id)
+        }
+        if (employee_id) {
+            conditions.push(`lr.employee_id = $${idx++}`)
+            params.push(employee_id)
         }
         if (month) {
             conditions.push(`EXTRACT(MONTH FROM lr.start_date) = $${idx++}`)

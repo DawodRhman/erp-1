@@ -41,9 +41,11 @@ const leaveBalanceService = {
     readByYear: (year) => leaveBalanceTable.readByYear(year),
 
     update: async (data) => {
-        // Validate used does not exceed total
-        if (data.used > data.total) {
-            throw { status: 400, message: 'Used days cannot exceed total days' };
+        if (data.balance !== undefined && data.balance < 0) {
+            throw { status: 400, message: 'Balance cannot be negative' };
+        }
+        if (data.used !== undefined && data.used < 0) {
+            throw { status: 400, message: 'Used days cannot be negative' };
         }
         return leaveBalanceTable.update(data);
     },
@@ -57,10 +59,11 @@ const leaveBalanceService = {
 
         // Validate adjustment
         const newUsed = balance.used + adjustment;
+        const newBalance = balance.balance - adjustment;
         if (newUsed < 0) {
             throw { status: 400, message: 'Used days cannot be negative' };
         }
-        if (newUsed > balance.total) {
+        if (newBalance < 0) {
             throw { status: 400, message: 'Insufficient leave balance' };
         }
 
@@ -90,8 +93,8 @@ const leaveBalanceService = {
                     employee_id: employeeId,
                     leave_type_id: policy.leave_type_id,
                     year: year,
-                    total: policy.days_allowed,
-                    used: 0
+                    balance: policy.days_allowed,
+                    used: 0,
                 });
                 created.push(balance);
             }

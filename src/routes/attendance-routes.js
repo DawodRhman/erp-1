@@ -7,6 +7,7 @@ import {
     getDailySheet,
     batchSaveAttendance,
     getMonthlyReport,
+    acknowledgeAttendance,
 } from '../controllers/attendance-controller.js'
 
 const router = Router()
@@ -14,5 +15,6 @@ const router = Router()
 router.get('/daily', verifyToken, requirePermission('attendance:read'), getDailySheet)
 router.post('/batch', verifyToken, requirePermission('attendance:write'), validate(batchAttendanceSchema), batchSaveAttendance)
 router.get('/report', verifyToken, requirePermission('attendance:read'), getMonthlyReport)
+router.patch('/:attendanceId/ack', verifyToken, requirePermission('attendance:read'), acknowledgeAttendance)
 
 export default router

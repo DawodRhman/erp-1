@@ -4,7 +4,7 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "nodemon start",
+    "start": "nodemon server.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:create": "node-pg-migrate create",

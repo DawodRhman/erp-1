@@ -85,6 +85,7 @@ export const earlyReturnLeaveRequest = async (req, res, next) => {
 export const getLeaveBalances = async (req, res, next) => {
     try {
         let { department, location, shift } = req.query
+        let employee_id = null
 
         // Employee role - force filter to self
         if (!req.user.is_super_admin &&
@@ -93,14 +94,14 @@ export const getLeaveBalances = async (req, res, next) => {
             department = null
             location = null
             shift = null
-            // Service should filter by current user's employee_id
-            req.query.employee = req.user.employee_id
+            employee_id = req.user.employee_id
         }
 
         const data = await leaveRequestService.getBalances({
             department_id: department || null,
             work_location_id: location || null,
             shift_id: shift || null,
+            employee_id,
         })
         return res.status(200).json(data)
     } catch (err) {
@@ -112,18 +113,21 @@ export const getLeaveBalances = async (req, res, next) => {
 export const getLeaveCalendar = async (req, res, next) => {
     try {
         let { department, month, year } = req.query
+        let employee_id = null
 
-        // Employee role - can only see calendar (no department filter)
+        // Employee role - own leaves only (self-service)
         if (!req.user.is_super_admin &&
             req.user.role !== 'hr_manager' &&
             req.user.role !== 'hr_executive') {
             department = null // Employee can't filter by department
+            employee_id = req.user.employee_id
         }
 
         const data = await leaveRequestService.getCalendar({
             department_id: department || null,
             month: month || null,
             year: year || null,
+            employee_id,
         })
         return res.status(200).json(data)
     } catch (err) {

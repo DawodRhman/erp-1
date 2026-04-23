@@ -1,6 +1,14 @@
 import pool from '../config/db.js'
 
 const attendanceModel = {
+    findById: async (attendanceId) => {
+        const res = await pool.query(
+            `SELECT * FROM attendance WHERE id = $1`,
+            [attendanceId]
+        )
+        return res.rows[0] ?? null
+    },
+
     getDailySheet: async ({ date, department_id, work_location_id, shift_id, employee_id }) => {
         const conditions = []
         const params = [date]
@@ -70,6 +78,17 @@ const attendanceModel = {
         `, params)
 
         return res.rows
+    },
+
+    acknowledge: async (attendanceId) => {
+        const res = await pool.query(
+            `UPDATE attendance
+             SET ack = true, updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1
+             RETURNING *`,
+            [attendanceId]
+        )
+        return res.rows[0] ?? null
     },
 
     batchSave: async ({ date, rows, marked_by }) => {

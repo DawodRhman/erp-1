@@ -5,4 +5,8 @@ export const createLeaveTypeSchema = z.object({
     is_active: z.boolean().optional().default(true),
 })
 
-export const updateLeaveTypeSchema = createLeaveTypeSchema.partial()
+// No defaults on update (avoid `{}` -> `{ is_active: true }`).
+export const updateLeaveTypeSchema = z.object({
+    name: z.string().min(1).max(50).optional(),
+    is_active: z.boolean().optional(),
+})

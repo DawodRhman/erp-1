@@ -41,6 +41,7 @@ async function seed() {
         // ==================== PERMISSIONS ====================
         const permissions = [
             // Config management
+            { key: "config:read", desc: "Read system configuration (dropdowns, lookups)" },
             { key: "config:manage", desc: "Manage system configuration" },
             // Employee management
             { key: "employees:read", desc: "View employee data" },
@@ -264,7 +265,7 @@ async function seed() {
 
         // HR Manager permissions
         const hrManagerPerms = [
-            "config:manage",
+            "config:read",
             "employees:read",
             "employees:write",
             "leave:read",
@@ -282,6 +283,7 @@ async function seed() {
 
         // HR Executive permissions (read-only)
         const hrExecPerms = [
+            "config:read",
             "employees:read",
             "leave:read",
             "attendance:read",

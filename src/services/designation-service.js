@@ -9,17 +9,6 @@ const designationService = {
             throw { status: 400, message: 'Designation title already exists' };
         }
 
-        // Validate department_id if provided
-        if (data.department_id) {
-            const deptCheck = await pool.query(
-                'SELECT id FROM departments WHERE id = $1',
-                [data.department_id]
-            );
-            if (deptCheck.rows.length === 0) {
-                throw { status: 404, message: 'Department not found' };
-            }
-        }
-
         return designationTable.create(data);
     },
 
@@ -28,20 +17,15 @@ const designationService = {
     readByDepartment: (departmentId) => designationTable.readByDepartment(departmentId),
 
     update: async (data) => {
-        // Check for duplicate title excluding current
-        const existing = await designationTable.findByTitle(data.title, data.id);
-        if (existing) {
-            throw { status: 400, message: 'Designation title already exists' };
+        if (data.title === undefined && data.is_active === undefined) {
+            throw { status: 400, message: 'No fields provided to update.' };
         }
 
-        // Validate department_id if provided
-        if (data.department_id) {
-            const deptCheck = await pool.query(
-                'SELECT id FROM departments WHERE id = $1',
-                [data.department_id]
-            );
-            if (deptCheck.rows.length === 0) {
-                throw { status: 404, message: 'Department not found' };
+        // Check for duplicate title excluding current
+        if (data.title !== undefined) {
+            const existing = await designationTable.findByTitle(data.title, data.id);
+            if (existing) {
+                throw { status: 400, message: 'Designation title already exists' };
             }
         }
 

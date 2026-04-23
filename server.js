@@ -38,6 +38,23 @@ app.use(cors({
 // Parse JSON request bodies
 app.use(express.json());
 
+// // Optional request logger for debugging noisy startup/API issues.
+// // Enable with: DEBUG_HTTP=1 npm start
+// if (process.env.DEBUG_HTTP === '1') {
+//     app.use((req, res, next) => {
+//         const start = Date.now()
+//         res.on('finish', () => {
+//             const ms = Date.now() - start
+//             // Log only non-2xx/3xx to keep noise low in dev.
+//             if (res.statusCode >= 400) {
+//                 const hasAuth = typeof req.headers.authorization === 'string'
+//                 console.log(`[HTTP ${res.statusCode}] ${req.method} ${req.originalUrl} (${ms}ms) auth=${hasAuth ? 'yes' : 'no'}`)
+//             }
+//         })
+//         next()
+//     })
+// }
+
 // Mount API routes
 app.use('/api', employeeRoutes);
 app.use('/api', extraEmployeeRoutes);
@@ -64,6 +81,12 @@ app.get('/', (req, res) => {
 
 // Global error handler middleware - handles all application errors
 app.use((err, req, res, next) => {
+    // Map common Postgres errors to stable HTTP codes when controllers/services didn't.
+    // This keeps behavior deterministic and prevents "duplicate" noise as 500s.
+    if (err?.code === '23505' && !err.status) {
+        err.status = 409
+    }
+
     const status = err.status || 500;
 
     // Security: Only expose specific error messages for non-500 errors

@@ -2,9 +2,13 @@ import pool from '../config/db.js';
 
 const departmentTable = {
     create: async (data) => {
-        const { department_code, department_name } = data;
-        const query = 'INSERT INTO departments (department_code, department_name) VALUES ($1, $2) RETURNING *';
-        const resp = await pool.query(query, [department_code, department_name]);
+        const { department_code, department_name, parent_department_id = null } = data;
+        const query = `
+            INSERT INTO departments (department_code, department_name, parent_department_id)
+            VALUES ($1, $2, $3)
+            RETURNING *
+        `;
+        const resp = await pool.query(query, [department_code, department_name, parent_department_id]);
         return resp.rows[0];
     },
 
@@ -19,10 +23,30 @@ const departmentTable = {
     },
 
     update: async (data) => {
-        const { id, department_code, department_name } = data;
-        const query = 'UPDATE departments SET department_code = $2, department_name = $3 WHERE id = $1 RETURNING *';
-        const resp = await pool.query(query, [id, department_code, department_name]);
-        return resp.rows[0];
+        const { id, department_code, department_name, parent_department_id } = data;
+
+        const fields = [];
+        const values = [id];
+        let idx = 2;
+
+        if (department_code !== undefined) { fields.push(`department_code = $${idx++}`); values.push(department_code); }
+        if (department_name !== undefined) { fields.push(`department_name = $${idx++}`); values.push(department_name); }
+        if (parent_department_id !== undefined) { fields.push(`parent_department_id = $${idx++}`); values.push(parent_department_id); }
+
+        if (fields.length === 0) {
+            const err = new Error('No fields provided to update.');
+            err.status = 400;
+            throw err;
+        }
+
+        const query = `
+            UPDATE departments
+            SET ${fields.join(', ')}
+            WHERE id = $1
+            RETURNING *
+        `;
+        const resp = await pool.query(query, values);
+        return resp.rows[0] ?? null;
     },
 
 };

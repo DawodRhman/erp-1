@@ -2,13 +2,13 @@ import pool from '../config/db.js';
 
 const leaveTypeTable = {
     create: async (data) => {
-        const { name, code, is_active = true } = data;
+        const { name, is_active = true } = data;
         const query = `
-            INSERT INTO leave_types (name, code, is_active)
-            VALUES ($1, $2, $3)
+            INSERT INTO leave_types (name, is_active)
+            VALUES ($1, $2)
             RETURNING *
         `;
-        const resp = await pool.query(query, [name, code.toLowerCase(), is_active]);
+        const resp = await pool.query(query, [name, is_active]);
         return resp.rows[0];
     },
 
@@ -22,17 +22,29 @@ const leaveTypeTable = {
     },
 
     update: async (data) => {
-        const { id, name, code, is_active } = data;
+        const { id, name, is_active } = data;
+
+        const fields = [];
+        const values = [id];
+        let idx = 2;
+
+        if (name !== undefined) { fields.push(`name = $${idx++}`); values.push(name); }
+        if (is_active !== undefined) { fields.push(`is_active = $${idx++}`); values.push(is_active); }
+
+        if (fields.length === 0) {
+            const err = new Error('No fields provided to update.');
+            err.status = 400;
+            throw err;
+        }
+
         const query = `
             UPDATE leave_types
-            SET name = $2,
-                code = $3,
-                is_active = $4
+            SET ${fields.join(', ')}
             WHERE id = $1
             RETURNING *
         `;
-        const resp = await pool.query(query, [id, name, code.toLowerCase(), is_active]);
-        return resp.rows[0];
+        const resp = await pool.query(query, values);
+        return resp.rows[0] ?? null;
     },
 
     findByName: async (name, excludeId = null) => {
@@ -40,15 +52,6 @@ const leaveTypeTable = {
             ? 'SELECT * FROM leave_types WHERE name = $1 AND id != $2'
             : 'SELECT * FROM leave_types WHERE name = $1';
         const params = excludeId ? [name, excludeId] : [name];
-        const res = await pool.query(query, params);
-        return res.rows[0];
-    },
-
-    findByCode: async (code, excludeId = null) => {
-        const query = excludeId
-            ? 'SELECT * FROM leave_types WHERE code = $1 AND id != $2'
-            : 'SELECT * FROM leave_types WHERE code = $1';
-        const params = excludeId ? [code.toLowerCase(), excludeId] : [code.toLowerCase()];
         const res = await pool.query(query, params);
         return res.rows[0];
     },

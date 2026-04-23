@@ -1,4 +1,5 @@
-import pool from '../config/db.js';
+import pool from '../config/db.js'
+
 const baseSelect = `
   SELECT
     j.id,
@@ -9,8 +10,7 @@ const baseSelect = `
     j.job_status_id,
     j.work_mode_id,
     j.work_location_id,
-    j.reporting_manager_id,
-    j.shift_timing,
+    j.shift_id,
     j.date_of_joining,
     j.date_of_exit,
     j.created_at,
@@ -22,7 +22,10 @@ const baseSelect = `
     js.status_name AS job_status_name,
     wm.mode_name AS work_mode_name,
     wl.location_name AS work_location_name,
-    rm.manager_name AS reporting_manager_name
+    s.name AS shift_name,
+    s.start_time AS shift_start_time,
+    s.end_time AS shift_end_time,
+    s.late_after_minutes
   FROM job_info j
   INNER JOIN employee_info e ON e.employee_id = j.employee_id
   INNER JOIN departments d ON d.id = j.department_id
@@ -31,119 +34,121 @@ const baseSelect = `
   INNER JOIN job_statuses js ON js.id = j.job_status_id
   INNER JOIN work_modes wm ON wm.id = j.work_mode_id
   INNER JOIN work_locations wl ON wl.id = j.work_location_id
-  INNER JOIN reporting_managers rm ON rm.id = j.reporting_manager_id
-`;
+  INNER JOIN shifts s ON s.id = j.shift_id
+`
 
 const jobInfoTable = {
-    create: async (data) => {
-        const {
-            employee_id,
-            department_id,
-            designation_id,
-            employment_type_id,
-            job_status_id,
-            work_mode_id,
-            work_location_id,
-            reporting_manager_id,
-            shift_timing = null,
-            date_of_joining,
-            date_of_exit = null,
-        } = data;
+  create: async (data) => {
+    const {
+      employee_id,
+      department_id,
+      designation_id,
+      employment_type_id,
+      job_status_id,
+      work_mode_id,
+      work_location_id,
+      shift_id,
+      date_of_joining,
+      date_of_exit = null,
+    } = data
 
-        const query = `
-            INSERT INTO job_info
-            (
-                employee_id,
-                department_id,
-                designation_id,
-                employment_type_id,
-                job_status_id,
-                work_mode_id,
-                work_location_id,
-                reporting_manager_id,
-                 shift_timing,
-                date_of_joining,
-                date_of_exit
-            )
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-            RETURNING *
-        `;
-        const resp = await pool.query(query, [
-            employee_id,
-            department_id,
-            designation_id,
-            employment_type_id,
-            job_status_id,
-            work_mode_id,
-            work_location_id,
-            reporting_manager_id,
-            shift_timing,
-            date_of_joining,
-            date_of_exit,
-        ]);
-        return resp.rows[0];
-    },
+    const resp = await pool.query(
+      `
+      INSERT INTO job_info
+      (
+        employee_id,
+        department_id,
+        designation_id,
+        employment_type_id,
+        job_status_id,
+        work_mode_id,
+        work_location_id,
+        shift_id,
+        date_of_joining,
+        date_of_exit
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      RETURNING *
+      `,
+      [
+        employee_id,
+        department_id,
+        designation_id,
+        employment_type_id,
+        job_status_id,
+        work_mode_id,
+        work_location_id,
+        shift_id,
+        date_of_joining,
+        date_of_exit,
+      ]
+    )
+    return resp.rows[0] ?? null
+  },
 
-    read: async (id) => {
-        if (id) {
-            const res = await pool.query(`${baseSelect} WHERE j.id = $1 ORDER BY j.id ASC`, [id]);
-            return res.rows[0];
-        }
+  read: async (id) => {
+    if (id) {
+      const res = await pool.query(`${baseSelect} WHERE j.id = $1 ORDER BY j.id ASC`, [id])
+      return res.rows[0] ?? null
+    }
 
-        const res = await pool.query(`${baseSelect} ORDER BY j.employee_id ASC`);
-        return res.rows;
-    },
+    const res = await pool.query(`${baseSelect} ORDER BY j.employee_id ASC`)
+    return res.rows
+  },
 
-    update: async (data) => {
-        const {
-            id,
-            employee_id,
-            department_id,
-            designation_id,
-            employment_type_id,
-            job_status_id,
-            work_mode_id,
-            work_location_id,
-            reporting_manager_id,
-            shift_timing = null,
-            date_of_joining,
-            date_of_exit = null,
-        } = data;
+  readByEmployeeId: async (employee_id) => {
+    const res = await pool.query(`${baseSelect} WHERE j.employee_id = $1 ORDER BY j.employee_id ASC`, [employee_id])
+    return res.rows
+  },
 
-        const query = `
-            UPDATE job_info
-            SET employee_id = $2,
-                department_id = $3,
-                designation_id = $4,
-                employment_type_id = $5,
-                job_status_id = $6,
-                work_mode_id = $7,
-                work_location_id = $8,
-                reporting_manager_id = $9,
-                shift_timing = $10,
-                date_of_joining = $11,
-                date_of_exit = $12,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = $1
-            RETURNING *
-        `;
-        const resp = await pool.query(query, [
-            id,
-            employee_id,
-            department_id,
-            designation_id,
-            employment_type_id,
-            job_status_id,
-            work_mode_id,
-            work_location_id,
-            reporting_manager_id,
-            shift_timing,
-            date_of_joining,
-            date_of_exit,
-        ]);
-        return resp.rows[0];
-    },
+  update: async (data) => {
+    const {
+      id,
+      employee_id,
+      department_id,
+      designation_id,
+      employment_type_id,
+      job_status_id,
+      work_mode_id,
+      work_location_id,
+      shift_id,
+      date_of_joining,
+      date_of_exit = null,
+    } = data
 
-};
+    const resp = await pool.query(
+      `
+      UPDATE job_info
+      SET employee_id = $2,
+          department_id = $3,
+          designation_id = $4,
+          employment_type_id = $5,
+          job_status_id = $6,
+          work_mode_id = $7,
+          work_location_id = $8,
+          shift_id = $9,
+          date_of_joining = $10,
+          date_of_exit = $11,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      RETURNING *
+      `,
+      [
+        id,
+        employee_id,
+        department_id,
+        designation_id,
+        employment_type_id,
+        job_status_id,
+        work_mode_id,
+        work_location_id,
+        shift_id,
+        date_of_joining,
+        date_of_exit,
+      ]
+    )
+    return resp.rows[0] ?? null
+  },
+}
 
-export default jobInfoTable;
+export default jobInfoTable

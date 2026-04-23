@@ -4,6 +4,7 @@ const employeeService = {
     create: (data) => employeeTable.create(data),
     readAll: () => employeeTable.readAll(),
     readById: (id) => employeeTable.readById(id),
+    readByEmployeeId: (employee_id) => employeeTable.readByEmployeeId(employee_id),
     readIds: () => employeeTable.readIds(),
     search: (term) => employeeTable.search(term),
     update: (data) => employeeTable.update(data),

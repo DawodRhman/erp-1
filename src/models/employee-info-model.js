@@ -21,6 +21,11 @@ const employeeTable = {
         return res.rows[0]
     },
 
+    readByEmployeeId: async (employee_id) => {
+        const res = await pool.query('SELECT * FROM employee_info WHERE employee_id = $1', [employee_id])
+        return res.rows[0]
+    },
+
     readIds: async () => {
         const res = await pool.query('SELECT employee_id FROM employee_info ORDER BY employee_id ASC')
         return res.rows
@@ -38,12 +43,31 @@ const employeeTable = {
 
     update: async (data) => {
         const { id, employee_id, name, father_name, cnic, date_of_birth } = data
+
+        const fields = []
+        const values = [id]
+        let idx = 2
+
+        if (employee_id !== undefined) { fields.push(`employee_id = $${idx++}`); values.push(employee_id) }
+        if (name !== undefined) { fields.push(`name = $${idx++}`); values.push(name) }
+        if (father_name !== undefined) { fields.push(`father_name = $${idx++}`); values.push(father_name) }
+        if (cnic !== undefined) { fields.push(`cnic = $${idx++}`); values.push(cnic) }
+        if (date_of_birth !== undefined) { fields.push(`date_of_birth = $${idx++}`); values.push(date_of_birth) }
+
+        if (fields.length === 0) {
+            const err = new Error('No fields provided to update.')
+            err.status = 400
+            throw err
+        }
+
+        fields.push(`updated_at = CURRENT_TIMESTAMP`)
+
         const res = await pool.query(
             `UPDATE employee_info
-             SET employee_id = $2, name = $3, father_name = $4, cnic = $5,
-                 date_of_birth = $6, updated_at = CURRENT_TIMESTAMP
-             WHERE id = $1 RETURNING *`,
-            [id, employee_id, name, father_name, cnic, date_of_birth]
+             SET ${fields.join(', ')}
+             WHERE id = $1
+             RETURNING *`,
+            values
         )
         return res.rows[0]
     },
