@@ -210,14 +210,14 @@ async function loadMountedRouters() {
   // Map variable name -> import specifier path
   const imports = new Map()
   const importRe = /import\s+(\w+)\s+from\s+['"](.+?)['"]\s*;/g
-  for (let m; (m = importRe.exec(text)); ) {
+  for (let m; (m = importRe.exec(text));) {
     imports.set(m[1], m[2])
   }
 
   // Extract app.use('/prefix', varName)
   const mounts = []
   const useRe = /app\.use\(\s*['"]([^'"]+)['"]\s*,\s*(\w+)\s*\)/g
-  for (let m; (m = useRe.exec(text)); ) {
+  for (let m; (m = useRe.exec(text));) {
     const prefix = m[1]
     const varName = m[2]
     const spec = imports.get(varName)
@@ -525,6 +525,124 @@ async function deepChecks({ tokens, discovered }) {
   }
 }
 
+async function authBypassChecks({ allRoutes, ctx }) {
+  section('5) Auth Bypass Checks (No Token / Bad Token)')
+
+  const scenarios = [
+    { label: 'no_token', token: null },
+    { label: 'bad_token', token: 'not-a-jwt' },
+  ]
+
+  for (const rt of allRoutes) {
+    if (rt.templateRelPath === '/auth/login' || rt.templateRelPath === '/auth' || rt.templateRelPath === '/auth/') continue
+
+    const reqPath = fillParams(rt.templateRelPath, ctx)
+    sub(`${rt.method} ${rt.templateRelPath}`)
+
+    for (const s of scenarios) {
+      checks++
+
+      const shouldSendBody = ['POST', 'PUT', 'PATCH'].includes(rt.method)
+        && !(rt.templateRelPath === '/auth/login')
+
+      const res = await http(rt.method, reqPath, {
+        token: s.token,
+        body: shouldSendBody ? {} : undefined,
+      })
+
+      // With no/invalid auth, we should never reach validate() or controllers.
+      if (res.ok && (res.status >= 200 && res.status < 400)) {
+        vulns++
+        vuln(`[${s.label}] ${rt.method} ${reqPath} -> ${res.status} (auth bypass)`)
+        continue
+      }
+
+      if (res.status === 401) {
+        ok(`[${s.label}] ${rt.method} ${reqPath} -> 401 (blocked)`)
+        continue
+      }
+
+      // Some stacks return 403 instead of 401 for missing/invalid auth. Still blocked, but flag for cleanup.
+      if (res.status === 403) {
+        warnings++
+        warn(`[${s.label}] ${rt.method} ${reqPath} -> 403 (blocked; prefer 401)`)
+        continue
+      }
+
+      // Anything else means the request likely passed auth middleware and reached deeper layers.
+      vulns++
+      vuln(`[${s.label}] ${rt.method} ${reqPath} -> ${res.status} (expected 401/403). body=${JSON.stringify(res.data)?.slice(0, 200)}`)
+    }
+  }
+}
+
+async function injectionProbeChecks({ allRoutes, ctx, superAdminToken }) {
+  section('6) Input/Injection Probes (super_admin)')
+  info('This is not a full pentest; it’s a quick “do we crash / do we validate” smoke check.')
+
+  if (!superAdminToken) {
+    warnings++
+    warn('super_admin token missing; skipping injection probes.')
+    return
+  }
+
+  const INJ = `' OR 1=1--`
+  const ctxInj = {
+    ...ctx,
+    anyUuid: INJ,
+    attendanceId: INJ,
+    departmentId: INJ,
+    employeeId: INJ,
+  }
+
+  for (const rt of allRoutes) {
+    if (rt.templateRelPath === '/auth/login' || rt.templateRelPath === '/auth' || rt.templateRelPath === '/auth/') continue
+
+    // Probe 1: inject into path params
+    const probePath = fillParams(rt.templateRelPath, ctxInj)
+
+    // Probe 2: inject into known query-param routes (date/month/year)
+    let probeQueryPath = null
+    if (probePath.startsWith('/attendance/daily?date=')) {
+      probeQueryPath = `/attendance/daily?date=${encodeURIComponent(`2026-01-15${INJ}`)}`
+    } else if (probePath.startsWith('/attendance/report?month=')) {
+      probeQueryPath = `/attendance/report?month=${encodeURIComponent(`1${INJ}`)}&year=${encodeURIComponent(`2026${INJ}`)}`
+    } else if (probePath.startsWith('/leave-requests/calendar?month=')) {
+      probeQueryPath = `/leave-requests/calendar?month=${encodeURIComponent(`1${INJ}`)}&year=${encodeURIComponent(`2026${INJ}`)}`
+    }
+
+    const pathsToTry = [probePath, probeQueryPath].filter(Boolean)
+    sub(`${rt.method} ${rt.templateRelPath}`)
+
+    for (const p of pathsToTry) {
+      checks++
+
+      const shouldSendBody = ['POST', 'PUT', 'PATCH'].includes(rt.method)
+        && !(rt.templateRelPath === '/auth/login')
+
+      const res = await http(rt.method, p, {
+        token: superAdminToken,
+        body: shouldSendBody ? {} : undefined,
+      })
+
+      if (!res.ok) {
+        warnings++
+        warn(`[probe] ${rt.method} ${p} -> network error: ${res.error}`)
+        continue
+      }
+
+      // We mainly care that we do NOT 500 on malformed inputs.
+      if (res.status >= 500) {
+        warnings++
+        warn(`[probe] ${rt.method} ${p} -> ${res.status} (server error; should validate/return 4xx)`)
+        continue
+      }
+
+      ok(`[probe] ${rt.method} ${p} -> ${res.status}`)
+    }
+  }
+}
+
 async function main() {
   section('EMS API Security Matrix Runner')
   info(`time=${now()}`)
@@ -627,6 +745,8 @@ async function main() {
   }
 
   await deepChecks({ tokens, discovered })
+  await authBypassChecks({ allRoutes, ctx })
+  await injectionProbeChecks({ allRoutes, ctx, superAdminToken: tokens.super_admin })
 
   section('Summary (Warnings Only; Exit 0)')
   console.log(`  discovered routes: ${discoveredRoutes}`)

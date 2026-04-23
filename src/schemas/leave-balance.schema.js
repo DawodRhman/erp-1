@@ -9,3 +9,13 @@ export const createLeaveBalanceSchema = z.object({
 })
 
 export const updateLeaveBalanceSchema = createLeaveBalanceSchema.partial()
+
+// Used by: POST /leave-balances/employee/:employeeId/initialize
+export const initializeLeaveBalancesSchema = z.object({
+    year: z.number().int().min(2020).max(2100),
+})
+
+// Used by: PATCH /leave-balances/:id/adjust
+export const adjustLeaveBalanceSchema = z.object({
+    adjustment: z.number().int(),
+})

@@ -56,13 +56,13 @@ async function loadMountedRouters() {
 
   const imports = new Map()
   const importRe = /import\s+(\w+)\s+from\s+['"](.+?)['"]\s*;/g
-  for (let m; (m = importRe.exec(text)); ) {
+  for (let m; (m = importRe.exec(text));) {
     imports.set(m[1], m[2])
   }
 
   const mounts = []
   const useRe = /app\.use\(\s*['"]([^'"]+)['"]\s*,\s*(\w+)\s*\)/g
-  for (let m; (m = useRe.exec(text)); ) {
+  for (let m; (m = useRe.exec(text));) {
     const prefix = m[1]
     const varName = m[2]
     const spec = imports.get(varName)
