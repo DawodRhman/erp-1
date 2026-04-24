@@ -18,6 +18,15 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+// When piping output (e.g. to Select-String), the consumer may close early.
+// Avoid crashing the audit with an unhandled EPIPE.
+process.stdout.on('error', (e) => {
+  if (e?.code === 'EPIPE') process.exit(0)
+})
+process.stderr.on('error', (e) => {
+  if (e?.code === 'EPIPE') process.exit(0)
+})
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const ROOT = path.resolve(__dirname, '..')
@@ -121,9 +130,19 @@ function isPublicRoute({ method, templateRelPath }) {
 function auditRoute(rt) {
   const stack = rt.middlewareStack
 
-  const verifyIdx = stack.findIndex((l) => l?.handle?.name === 'verifyToken')
-  const permIdx = stack.findIndex((l) => Boolean(l?.handle?.__perm))
-  const validateIdx = stack.findIndex((l) => Boolean(l?.handle?.__validate))
+  // Use metadata flags rather than fragile function names (handles can be anonymous/renamed).
+  let verifyIdx = stack.findIndex((l) => Boolean(l?.handle?.__auth))
+  if (verifyIdx === -1) verifyIdx = stack.findIndex((l) => l?.handle?.name === 'verifyToken') // fallback
+
+  const permIdxs = stack
+    .map((l, i) => (Boolean(l?.handle?.__perm) ? i : -1))
+    .filter((i) => i !== -1)
+  const validateIdxs = stack
+    .map((l, i) => (Boolean(l?.handle?.__validate) ? i : -1))
+    .filter((i) => i !== -1)
+
+  const permIdx = permIdxs.length ? permIdxs[0] : -1
+  const validateIdx = validateIdxs.length ? validateIdxs[0] : -1
 
   const failures = []
 
@@ -132,7 +151,10 @@ function auditRoute(rt) {
     if (permIdx === -1) failures.push('missing permission middleware')
     if (verifyIdx !== -1 && verifyIdx !== 0) failures.push('verifyToken is not first middleware')
     if (verifyIdx !== -1 && permIdx !== -1 && permIdx < verifyIdx) failures.push('permission middleware is before verifyToken')
-    if (validateIdx !== -1 && permIdx !== -1 && validateIdx < permIdx) failures.push('validate() runs before permission middleware')
+
+    // Any validate() present must run after the first permission middleware.
+    const validateBeforePerm = validateIdxs.some((i) => permIdx !== -1 && i < permIdx)
+    if (validateBeforePerm) failures.push('validate() runs before permission middleware')
   } else {
     // Public routes should not accidentally include verifyToken/permission.
     if (verifyIdx !== -1) failures.push('public route unexpectedly includes verifyToken')

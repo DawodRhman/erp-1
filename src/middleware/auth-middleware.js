@@ -44,3 +44,6 @@ export const verifyToken = (req, res, next) => {
         return sendError(res, 500, 'Unable to authenticate the request.')
     }
 }
+
+// Expose metadata so security/audit scripts can verify middleware order.
+verifyToken.__auth = true

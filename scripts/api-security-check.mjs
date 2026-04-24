@@ -46,6 +46,49 @@ let vulns = 0
 let checks = 0
 let discoveredRoutes = 0
 
+// A valid RFC4122 UUID (v4-ish) that should not exist in the DB.
+const NON_EXISTENT_UUID = process.env.NON_EXISTENT_UUID ?? '11111111-1111-4111-8111-111111111111'
+const SAFE_WRITE = process.env.SAFE_WRITE !== '0' // default true
+const ALLOW_MUTATION_PROBES = process.env.ALLOW_MUTATION_PROBES === '1'
+
+const INJECTION_PAYLOADS = [
+  { label: 'sqli', value: `' OR 1=1--` },
+  { label: 'xss_img', value: `<img src=x onerror=alert(1)>` },
+  { label: 'xss_script', value: `<script>alert(1)</script>` },
+]
+
+const MASS_ASSIGNMENT_FIELDS = {
+  role: 'super_admin',
+  role_id: NON_EXISTENT_UUID,
+  isAdmin: true,
+  is_admin: true,
+  is_super_admin: true,
+  salary: 999999,
+  marked_by: NON_EXISTENT_UUID,
+  ack: true,
+}
+
+// When piping output (e.g. to Select-String), the consumer may close early.
+// Avoid crashing the runner with an unhandled EPIPE.
+process.stdout.on('error', (e) => {
+  if (e?.code === 'EPIPE') process.exit(0)
+})
+process.stderr.on('error', (e) => {
+  if (e?.code === 'EPIPE') process.exit(0)
+})
+
+function decodeJwtPayload(token) {
+  try {
+    if (!token || typeof token !== 'string') return null
+    const parts = token.split('.')
+    if (parts.length < 2) return null
+    const json = Buffer.from(parts[1], 'base64url').toString('utf8')
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
 async function http(method, path, { token, body } = {}) {
   const headers = { 'Content-Type': 'application/json' }
   if (token) headers.Authorization = `Bearer ${token}`
@@ -199,6 +242,147 @@ function classify({ role, method, path, res, expectation }) {
   warn(`${tag} (unknown expectation)`)
 }
 
+function isZodSchema(schema) {
+  return Boolean(schema && typeof schema.safeParse === 'function' && schema?._def?.typeName)
+}
+
+function unwrapZod(schema) {
+  let s = schema
+  for (let i = 0; i < 10; i++) {
+    const t = s?._def?.typeName
+    if (!t) break
+    if (t === 'ZodOptional' || t === 'ZodNullable') {
+      s = s._def.innerType
+      continue
+    }
+    if (t === 'ZodDefault') {
+      s = s._def.innerType
+      continue
+    }
+    if (t === 'ZodEffects') {
+      s = s._def.schema
+      continue
+    }
+    break
+  }
+  return s
+}
+
+function zodStringExample(schema) {
+  const checks = schema?._def?.checks ?? []
+
+  const has = (kind) => checks.some((c) => c.kind === kind)
+  const get = (kind) => checks.find((c) => c.kind === kind)
+
+  if (has('uuid')) return NON_EXISTENT_UUID
+  if (has('email')) return 'test@example.com'
+  if (has('date')) return '2026-01-15'
+
+  const rx = get('regex')?.regex
+  if (rx) {
+    const src = rx.source
+    // Common EMS patterns
+    if (src === '^\\d{2}:\\d{2}(:\\d{2})?$') return '09:00:00'
+    if (src === '^\\d{4}$') return '2026'
+  }
+
+  const min = get('min')?.value ?? 1
+  const max = get('max')?.value ?? Math.max(min, 8)
+  const n = Math.min(Math.max(min, 1), max)
+  return 'A'.repeat(n)
+}
+
+function zodNumberExample(schema) {
+  const checks = schema?._def?.checks ?? []
+  const get = (kind) => checks.find((c) => c.kind === kind)
+  const min = get('min')?.value
+  const max = get('max')?.value
+  const wantInt = checks.some((c) => c.kind === 'int')
+
+  let v = min !== undefined ? min : 1
+  if (max !== undefined && v > max) v = max
+  if (wantInt) v = Math.trunc(v)
+  return v
+}
+
+function zodExample(schema, { preferNonEmptyObject = false, depth = 0 } = {}) {
+  if (!schema || depth > 6) return null
+  const s = unwrapZod(schema)
+  const t = s?._def?.typeName
+  if (!t) return null
+
+  if (t === 'ZodString') return zodStringExample(s)
+  if (t === 'ZodNumber') return zodNumberExample(s)
+  if (t === 'ZodBoolean') return true
+  if (t === 'ZodEnum') return (s._def.values ?? s._def.options ?? [])[0] ?? null
+  if (t === 'ZodLiteral') return s._def.value
+  if (t === 'ZodArray') return [zodExample(s._def.type, { preferNonEmptyObject, depth: depth + 1 })]
+  if (t === 'ZodUnion') return zodExample(s._def.options?.[0], { preferNonEmptyObject, depth: depth + 1 })
+
+  if (t === 'ZodObject') {
+    const shape = typeof s._def.shape === 'function' ? s._def.shape() : s._def.shape
+    const out = {}
+    const entries = Object.entries(shape ?? {})
+
+    for (const [k, v] of entries) {
+      const vt = v?._def?.typeName
+      const isOptionalish = vt === 'ZodOptional' || vt === 'ZodDefault'
+      if (isOptionalish) continue
+      out[k] = zodExample(v, { preferNonEmptyObject, depth: depth + 1 })
+    }
+
+    if (preferNonEmptyObject && Object.keys(out).length === 0 && entries.length > 0) {
+      const [k, v] = entries[0]
+      out[k] = zodExample(v, { preferNonEmptyObject, depth: depth + 1 })
+    }
+
+    return out
+  }
+
+  // Unknown type: return null (caller can decide fallback)
+  return null
+}
+
+function extractValidation(routeStack = []) {
+  const validates = []
+  for (const layer of routeStack) {
+    const h = layer?.handle
+    if (!h?.__validate) continue
+    validates.push(h.__schema)
+  }
+
+  let body = null
+  let params = null
+  let query = null
+
+  for (const v of validates) {
+    if (!v) continue
+    if (isZodSchema(v)) {
+      body = v
+      continue
+    }
+    if (v.body) body = v.body
+    if (v.params) params = v.params
+    if (v.query) query = v.query
+  }
+
+  return { body, params, query, count: validates.length }
+}
+
+function deepReplaceStrings(value, replacer, { depth = 0 } = {}) {
+  if (depth > 12) return value
+  if (typeof value === 'string') return replacer(value)
+  if (Array.isArray(value)) return value.map((v) => deepReplaceStrings(v, replacer, { depth: depth + 1 }))
+  if (value && typeof value === 'object') {
+    const out = {}
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = deepReplaceStrings(v, replacer, { depth: depth + 1 })
+    }
+    return out
+  }
+  return value
+}
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const ROOT = path.resolve(__dirname, '..')
@@ -282,7 +466,9 @@ function listRoutesFromRouter(router, prefix) {
       .filter(([, v]) => v)
       .map(([k]) => k.toUpperCase())
 
-    const permReq = extractPermReq(layer.route.stack)
+    const middlewareStack = layer.route.stack ?? []
+    const permReq = extractPermReq(middlewareStack)
+    const validation = extractValidation(middlewareStack)
 
     for (const method of methods) {
       const full = joinPaths(prefix, routePath)
@@ -292,6 +478,8 @@ function listRoutesFromRouter(router, prefix) {
         fullApiPath: full,
         templateRelPath: relTemplate,
         permReq,
+        validation,
+        middlewareStack,
       })
     }
   }
@@ -319,6 +507,149 @@ function fillParams(templateRelPath, ctx) {
   return p
 }
 
+function minimalValidBodyForRoute({ rt, discovered, jwtPayload }) {
+  if (!['POST', 'PUT', 'PATCH'].includes(rt.method)) return undefined
+
+  // Some write routes are intentionally "business flow" and can mutate data heavily.
+  // In SAFE_WRITE mode, we fall back to {} for these unless explicitly allowed.
+  if (SAFE_WRITE && !ALLOW_MUTATION_PROBES) {
+    if (rt.method === 'POST' && (rt.templateRelPath === '/attendance/batch' || rt.templateRelPath === '/leave-requests')) {
+      return {}
+    }
+    if (rt.method === 'POST' && rt.templateRelPath === '/job-info') {
+      return {}
+    }
+  }
+
+  const bodySchema = rt.validation?.body
+  let body = {}
+  if (bodySchema) {
+    const ex = zodExample(bodySchema, { preferNonEmptyObject: true })
+    if (ex && typeof ex === 'object' && !Array.isArray(ex)) body = ex
+  }
+
+  // SAFE_WRITE: try to force conflicts (409) for create endpoints to avoid inserting new rows.
+  if (SAFE_WRITE && rt.method === 'POST') {
+    if (rt.templateRelPath === '/departments' && discovered.departments?.[0]?.department_code) {
+      body.department_code = discovered.departments[0].department_code
+      body.department_name = discovered.departments[0].department_name ?? 'DUP'
+      return body
+    }
+
+    if (rt.templateRelPath === '/employees' && discovered.employees?.[0]) {
+      // employee_id + cnic are typically unique in this schema
+      const e = discovered.employees[0]
+      body.employee_id = e.employee_id ?? 'EMP001'
+      body.name = e.name ?? 'Dup Name'
+      body.father_name = e.father_name ?? 'Dup Father'
+      body.cnic = e.cnic ?? 'DUP-CNIC'
+      body.date_of_birth = e.date_of_birth ?? '1990-01-01'
+      return body
+    }
+
+    if (rt.templateRelPath === '/employment-types' && discovered.employmentTypes?.[0]?.type_name) {
+      body.type_name = discovered.employmentTypes[0].type_name
+      return body
+    }
+
+    if (rt.templateRelPath === '/job-statuses' && discovered.jobStatuses?.[0]?.status_name) {
+      body.status_name = discovered.jobStatuses[0].status_name
+      return body
+    }
+
+    if (rt.templateRelPath === '/work-modes' && discovered.workModes?.[0]?.mode_name) {
+      body.mode_name = discovered.workModes[0].mode_name
+      return body
+    }
+
+    if (rt.templateRelPath === '/work-locations' && discovered.workLocations?.[0]?.location_name) {
+      body.location_name = discovered.workLocations[0].location_name
+      return body
+    }
+
+    if (rt.templateRelPath === '/designations' && discovered.designations?.[0]?.title) {
+      body.title = discovered.designations[0].title
+      return body
+    }
+
+    if (rt.templateRelPath === '/shifts' && discovered.shifts?.[0]?.name) {
+      body.name = discovered.shifts[0].name
+      body.start_time = discovered.shifts[0].start_time ?? '09:00:00'
+      body.end_time = discovered.shifts[0].end_time ?? '18:00:00'
+      return body
+    }
+
+    if (rt.templateRelPath === '/leave-types' && discovered.leaveTypes?.[0]?.name) {
+      body.name = discovered.leaveTypes[0].name
+      return body
+    }
+
+    if (rt.templateRelPath === '/users' && discovered.users?.[0]?.email) {
+      const u = discovered.users[0]
+      body.email = u.email
+      body.password = 'password123'
+      body.employee_id = u.employee_id ?? discovered.employees?.[0]?.employee_id ?? 'EMP002'
+      body.role_id = u.role_id ?? jwtPayload?.role_id ?? NON_EXISTENT_UUID
+      return body
+    }
+
+    if (rt.templateRelPath === '/leave-balances' && discovered.leaveBalances?.[0]) {
+      const lb = discovered.leaveBalances[0]
+      body.employee_id = lb.employee_id ?? discovered.employees?.[0]?.employee_id ?? 'EMP002'
+      body.leave_type_id = lb.leave_type_id ?? discovered.leaveTypes?.[0]?.id ?? NON_EXISTENT_UUID
+      body.year = lb.year ?? 2026
+      body.balance = lb.balance ?? 0
+      body.used = lb.used ?? 0
+      return body
+    }
+  }
+
+  // Fill in common foreign key fields from discovery where possible (reduces 500s).
+  if (rt.templateRelPath === '/leave-policies') {
+    if (body.department_id === NON_EXISTENT_UUID && discovered.departments?.[0]?.id) body.department_id = discovered.departments[0].id
+    if (body.leave_type_id === NON_EXISTENT_UUID && discovered.leaveTypes?.[0]?.id) body.leave_type_id = discovered.leaveTypes[0].id
+  }
+  if (rt.templateRelPath === '/job-info') {
+    if (body.employee_id === 'A' && discovered.employees?.[0]?.employee_id) body.employee_id = discovered.employees[0].employee_id
+    if (body.department_id === NON_EXISTENT_UUID && discovered.departments?.[0]?.id) body.department_id = discovered.departments[0].id
+    if (body.shift_id === NON_EXISTENT_UUID && discovered.shifts?.[0]?.id) body.shift_id = discovered.shifts[0].id
+    if (body.designation_id === NON_EXISTENT_UUID && discovered.designations?.[0]?.id) body.designation_id = discovered.designations[0].id
+    if (body.employment_type_id === NON_EXISTENT_UUID && discovered.employmentTypes?.[0]?.id) body.employment_type_id = discovered.employmentTypes[0].id
+    if (body.job_status_id === NON_EXISTENT_UUID && discovered.jobStatuses?.[0]?.id) body.job_status_id = discovered.jobStatuses[0].id
+    if (body.work_mode_id === NON_EXISTENT_UUID && discovered.workModes?.[0]?.id) body.work_mode_id = discovered.workModes[0].id
+    if (body.work_location_id === NON_EXISTENT_UUID && discovered.workLocations?.[0]?.id) body.work_location_id = discovered.workLocations[0].id
+    body.date_of_joining = body.date_of_joining ?? '2026-01-15'
+  }
+
+  return body
+}
+
+function preserveKeysForSafePost(rt) {
+  // Keys to preserve to keep conflict behavior (avoid creating new rows during probes).
+  switch (rt.templateRelPath) {
+    case '/departments': return ['department_code']
+    case '/employees': return ['employee_id', 'cnic']
+    case '/users': return ['email']
+    case '/employment-types': return ['type_name']
+    case '/job-statuses': return ['status_name']
+    case '/work-modes': return ['mode_name']
+    case '/work-locations': return ['location_name']
+    case '/designations': return ['title']
+    case '/leave-types': return ['name']
+    case '/leave-balances': return ['employee_id', 'leave_type_id', 'year']
+    default: return []
+  }
+}
+
+function injectBody({ baseBody, payload, preserveKeys = [] }) {
+  const out = {}
+  for (const [k, v] of Object.entries(baseBody ?? {})) {
+    if (preserveKeys.includes(k)) out[k] = v
+    else out[k] = deepReplaceStrings(v, () => payload.value)
+  }
+  return out
+}
+
 async function discoverIds(saToken) {
   // Pull core IDs so we can test UUID-based routes properly.
   const out = {
@@ -328,6 +659,14 @@ async function discoverIds(saToken) {
     leaveBalances: [],
     jobInfo: [],
     attendanceId: null,
+    designations: [],
+    employmentTypes: [],
+    jobStatuses: [],
+    workModes: [],
+    workLocations: [],
+    leaveTypes: [],
+    leavePolicies: [],
+    users: [],
   }
 
   const shifts = await http('GET', '/shifts', { token: saToken })
@@ -344,6 +683,30 @@ async function discoverIds(saToken) {
 
   const jobInfo = await http('GET', '/job-info', { token: saToken })
   if (jobInfo.ok && jobInfo.status === 200 && Array.isArray(jobInfo.data)) out.jobInfo = jobInfo.data
+
+  const designations = await http('GET', '/designations', { token: saToken })
+  if (designations.ok && designations.status === 200 && Array.isArray(designations.data)) out.designations = designations.data
+
+  const employmentTypes = await http('GET', '/employment-types', { token: saToken })
+  if (employmentTypes.ok && employmentTypes.status === 200 && Array.isArray(employmentTypes.data)) out.employmentTypes = employmentTypes.data
+
+  const jobStatuses = await http('GET', '/job-statuses', { token: saToken })
+  if (jobStatuses.ok && jobStatuses.status === 200 && Array.isArray(jobStatuses.data)) out.jobStatuses = jobStatuses.data
+
+  const workModes = await http('GET', '/work-modes', { token: saToken })
+  if (workModes.ok && workModes.status === 200 && Array.isArray(workModes.data)) out.workModes = workModes.data
+
+  const workLocations = await http('GET', '/work-locations', { token: saToken })
+  if (workLocations.ok && workLocations.status === 200 && Array.isArray(workLocations.data)) out.workLocations = workLocations.data
+
+  const leaveTypes = await http('GET', '/leave-types', { token: saToken })
+  if (leaveTypes.ok && leaveTypes.status === 200 && Array.isArray(leaveTypes.data)) out.leaveTypes = leaveTypes.data
+
+  const leavePolicies = await http('GET', '/leave-policies', { token: saToken })
+  if (leavePolicies.ok && leavePolicies.status === 200 && Array.isArray(leavePolicies.data)) out.leavePolicies = leavePolicies.data
+
+  const users = await http('GET', '/users', { token: saToken })
+  if (users.ok && users.status === 200 && Array.isArray(users.data)) out.users = users.data
 
   return out
 }
@@ -576,7 +939,7 @@ async function authBypassChecks({ allRoutes, ctx }) {
   }
 }
 
-async function injectionProbeChecks({ allRoutes, ctx, superAdminToken }) {
+async function injectionProbeChecks({ allRoutes, ctx, superAdminToken, discovered, superAdminJwt }) {
   section('6) Input/Injection Probes (super_admin)')
   info('This is not a full pentest; it’s a quick “do we crash / do we validate” smoke check.')
 
@@ -622,7 +985,7 @@ async function injectionProbeChecks({ allRoutes, ctx, superAdminToken }) {
 
       const res = await http(rt.method, p, {
         token: superAdminToken,
-        body: shouldSendBody ? {} : undefined,
+        body: shouldSendBody ? minimalValidBodyForRoute({ rt, discovered, jwtPayload: superAdminJwt }) : undefined,
       })
 
       if (!res.ok) {
@@ -639,6 +1002,73 @@ async function injectionProbeChecks({ allRoutes, ctx, superAdminToken }) {
       }
 
       ok(`[probe] ${rt.method} ${p} -> ${res.status}`)
+    }
+
+    // Body probes + mass assignment (write endpoints only)
+    if (['POST', 'PUT', 'PATCH'].includes(rt.method)) {
+      const reqPath = fillParams(rt.templateRelPath, ctx)
+
+      const safePost = rt.method === 'POST' && SAFE_WRITE && !ALLOW_MUTATION_PROBES
+      const preserveKeys = safePost ? preserveKeysForSafePost(rt) : []
+
+      if (safePost && preserveKeys.length === 0) {
+        info(`[probe-body] skipped ${rt.method} ${rt.templateRelPath} (SAFE_WRITE=1, no safe preserve keys)`)
+      } else {
+        const baseBody = minimalValidBodyForRoute({ rt, discovered, jwtPayload: superAdminJwt }) ?? {}
+
+        for (const payload of INJECTION_PAYLOADS) {
+          checks++
+          const injected = safePost
+            ? injectBody({ baseBody, payload, preserveKeys })
+            : deepReplaceStrings(baseBody, () => payload.value)
+
+          const r = await http(rt.method, reqPath, { token: superAdminToken, body: injected })
+
+          if (!r.ok) {
+            warnings++
+            warn(`[probe-body:${payload.label}] ${rt.method} ${reqPath} -> network error: ${r.error}`)
+            continue
+          }
+
+          if (r.status >= 500) {
+            warnings++
+            warn(`[probe-body:${payload.label}] ${rt.method} ${reqPath} -> ${r.status} (server crash; expected 4xx)`)
+            continue
+          }
+
+          if (r.status >= 200 && r.status < 300) {
+            warnings++
+            warn(`[probe-body:${payload.label}] ${rt.method} ${reqPath} -> ${r.status} (accepted payload)`)
+            continue
+          }
+
+          ok(`[probe-body:${payload.label}] ${rt.method} ${reqPath} -> ${r.status}`)
+        }
+
+        // Mass assignment probe: try to smuggle privileged fields into body
+        checks++
+        const mass = { ...baseBody, ...MASS_ASSIGNMENT_FIELDS }
+        const mr = await http(rt.method, reqPath, { token: superAdminToken, body: mass })
+
+        if (!mr.ok) {
+          warnings++
+          warn(`[mass] ${rt.method} ${reqPath} -> network error: ${mr.error}`)
+        } else if (mr.status >= 500) {
+          warnings++
+          warn(`[mass] ${rt.method} ${reqPath} -> ${mr.status} (server error)`)
+        } else if (mr.status >= 200 && mr.status < 300) {
+          const bodyStr = JSON.stringify(mr.data ?? {})
+          const reflected = Object.keys(MASS_ASSIGNMENT_FIELDS).some((k) => bodyStr.includes(`\"${k}\"`))
+          if (reflected) {
+            vulns++
+            vuln(`[mass] ${rt.method} ${reqPath} -> ${mr.status} (privileged fields reflected in response) body=${bodyStr.slice(0, 180)}`)
+          } else {
+            ok(`[mass] ${rt.method} ${reqPath} -> ${mr.status}`)
+          }
+        } else {
+          ok(`[mass] ${rt.method} ${reqPath} -> ${mr.status}`)
+        }
+      }
     }
   }
 }
@@ -698,23 +1128,29 @@ async function main() {
   info(`mounted routers=${mounted.length}, discovered routes=${discoveredRoutes}`)
 
   section('4) RBAC Matrix (Every Route x Every Token)')
+  const jwtPayloads = {
+    super_admin: decodeJwtPayload(tokens.super_admin),
+    hr_manager: decodeJwtPayload(tokens.hr_manager),
+    hr_executive: decodeJwtPayload(tokens.hr_executive),
+    employee: decodeJwtPayload(tokens.employee),
+    employee2: decodeJwtPayload(tokens.employee2),
+  }
+
   const roles = [
-    { role: 'super_admin', token: tokens.super_admin },
-    { role: 'hr_manager', token: tokens.hr_manager },
-    { role: 'hr_executive', token: tokens.hr_executive },
-    { role: 'employee', token: tokens.employee },
-    { role: 'employee2', token: tokens.employee2 },
+    { role: 'super_admin', token: tokens.super_admin, jwt: jwtPayloads.super_admin },
+    { role: 'hr_manager', token: tokens.hr_manager, jwt: jwtPayloads.hr_manager },
+    { role: 'hr_executive', token: tokens.hr_executive, jwt: jwtPayloads.hr_executive },
+    { role: 'employee', token: tokens.employee, jwt: jwtPayloads.employee },
+    { role: 'employee2', token: tokens.employee2, jwt: jwtPayloads.employee2 },
   ]
 
   const ctx = {
-    anyUuid: discovered.departments?.[0]?.id
-      ?? discovered.leaveBalances?.[0]?.id
-      ?? discovered.jobInfo?.[0]?.id
-      ?? discovered.employees?.[0]?.id
-      ?? '00000000-0000-0000-0000-000000000000',
+    // Use a non-existent but valid UUID by default so we avoid mutating real rows during RBAC tests.
+    // Endpoints should return 404/422 instead of 500 when IDs are invalid/nonexistent.
+    anyUuid: NON_EXISTENT_UUID,
     employeeId: 'EMP002',
-    departmentId: discovered.departments?.[0]?.id ?? '00000000-0000-0000-0000-000000000000',
-    attendanceId: discovered.attendanceId,
+    departmentId: NON_EXISTENT_UUID,
+    attendanceId: NON_EXISTENT_UUID,
   }
 
   for (const rt of allRoutes) {
@@ -732,12 +1168,15 @@ async function main() {
 
       // For write endpoints, send an empty body so we can test permission gating without mutating data.
       const shouldSendBody = ['POST', 'PUT', 'PATCH'].includes(rt.method)
-        && !(/^\/attendance\/[^/]+\/ack$/.test(reqPath))
         && !(rt.templateRelPath === '/auth/login')
+
+      const body = shouldSendBody
+        ? minimalValidBodyForRoute({ rt, discovered, jwtPayload: r.jwt })
+        : undefined
 
       const res = await http(rt.method, reqPath, {
         token: r.token,
-        body: shouldSendBody ? {} : undefined,
+        body,
       })
 
       classify({ role: r.role, method: rt.method, path: reqPath, res, expectation })
@@ -746,7 +1185,13 @@ async function main() {
 
   await deepChecks({ tokens, discovered })
   await authBypassChecks({ allRoutes, ctx })
-  await injectionProbeChecks({ allRoutes, ctx, superAdminToken: tokens.super_admin })
+  await injectionProbeChecks({
+    allRoutes,
+    ctx,
+    superAdminToken: tokens.super_admin,
+    discovered,
+    superAdminJwt: jwtPayloads.super_admin,
+  })
 
   section('Summary (Warnings Only; Exit 0)')
   console.log(`  discovered routes: ${discoveredRoutes}`)

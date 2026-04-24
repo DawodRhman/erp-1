@@ -59,5 +59,6 @@ export const validate = (schemaOrGroup) => {
 
     // Expose metadata so security/audit scripts can verify middleware order.
     middleware.__validate = true
+    middleware.__schema = schemaOrGroup
     return middleware
 }
