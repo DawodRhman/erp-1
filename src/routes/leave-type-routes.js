@@ -8,11 +8,13 @@ import { createLeaveTypeSchema, updateLeaveTypeSchema } from '../schemas/leave-t
 
 const router = Router()
 
-router.get('/', verifyToken, requireAnyPermission(['config:read', 'config:manage']), leaveTypeController.getAll)
+// Employees need read-only access to leave types to submit leave requests.
+// Keep management super_admin-only via config:manage on write routes.
+router.get('/', verifyToken, requireAnyPermission(['config:read', 'config:manage', 'leave:read']), leaveTypeController.getAll)
 router.get(
     '/:id',
     verifyToken,
-    requireAnyPermission(['config:read', 'config:manage']),
+    requireAnyPermission(['config:read', 'config:manage', 'leave:read']),
     validate({ params: z.object({ id: z.string().uuid() }) }),
     leaveTypeController.getById
 )

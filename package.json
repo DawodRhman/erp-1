@@ -12,7 +12,8 @@
     "db:rollback": "node-pg-migrate down",
     "db:check": "node-pg-migrate up --dry-run",
     "db:fake": "node-pg-migrate up --fake",
-    "db:seed": "node seeds/dev_seed.js"
+    "db:seed": "node seeds/dev_seed.js",
+    "db:seed:full": "node seeds/full_mock_seed.js"
   },
   "keywords": [],
   "author": "",

@@ -1,8 +1,3 @@
-So here is the thing you are an Ai that will only enhanced this requriemnts because there are many things like the way i was telling is hard so make it easyly understandable and also dont remove add or delete any of the requriments and if some requriments conficlts btn the SRS Track#60 document or my explained written then go wiht the SRS Track#60 document ok and also dont add any extra feilds or tables or anything ok you just make my teeling thing enhaced ok no things from youand just tell my word in simple and more understandable way ok and  just some wording changes and making things prefesctly formatted ok understood ?
-also add the images referancs in following section even if you dont have images just add a referance ok 
-
-
-Ok first i am creating a simple PRD or SRS or anything that will create a full strucutre of this backend for me for creating the backend ok so if i know all the things and check then i will not miss anything ok here is the total finalize database foucs only on attendance and leave and employeee and deperament and employee histry everything releated to employee only for attendace OK
 so here is the flow firstly lets talk about the first table only employee_info as looking in a prototype i am seeing that we need multiple thing for employee 
 
 1. Employee_info we need multiple things like forstly we need total employees all of them we can do it by simpleing getting all the employees in array and then get the length of it.![alt text](image-3.png)

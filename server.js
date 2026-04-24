@@ -81,6 +81,19 @@ app.get('/', (req, res) => {
 
 // Global error handler middleware - handles all application errors
 app.use((err, req, res, next) => {
+    // JSON parse errors from express.json()
+    // Make this deterministic (avoid leaking parser internals / unstable messages).
+    if (
+        err &&
+        (err.type === 'entity.parse.failed' ||
+            (err instanceof SyntaxError && err.status === 400 && 'body' in err))
+    ) {
+        return res.status(400).json({
+            error: 'Invalid request payload',
+            details: 'Expected valid JSON object',
+        })
+    }
+
     // Map common Postgres errors to stable HTTP codes when controllers/services didn't.
     // This keeps behavior deterministic and prevents "duplicate" noise as 500s.
     if (err?.code === '23505' && !err.status) {
