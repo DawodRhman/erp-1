@@ -3,9 +3,57 @@
 **Project:** Employee Management System (EMS) Backend  
 **Technology Stack:** Node.js, Express 5, PostgreSQL, Zod  
 **Architecture:** Three-Layer (Model → Service → Controller)  
-**Last Updated:** 2026-04-22
+**Last Updated:** 2026-04-24
 
 ---
+
+## 0. 2026-04-24 Status (What Happened Recently)
+
+This section captures the most recent changes and the current state of security + data seeding so the team can reproduce results quickly.
+
+### 0.1 RBAC / Permissions (Backend)
+- RBAC is enforced via `verifyToken` -> `requirePermission(...)` / `requireAnyPermission(...)` -> `validate(...)` -> controller.
+- Permission split:
+  - `config:read`: read-only access to configuration/lookup endpoints for HR roles.
+  - `config:manage`: super_admin-only access for config writes.
+- Employee self-service / leave UI support:
+  - Employees have `leave:read` and must be able to read `leave_types` to submit leave requests.
+  - `src/routes/leave-type-routes.js` allows read access via `requireAnyPermission(['config:read','config:manage','leave:read'])` while keeping writes `config:manage`.
+
+### 0.2 Security Test Automation (Backend Scripts)
+- Security runner behavior:
+  - Logs in all seed users, stores JWTs, then tests every discovered route against every token (RBAC matrix).
+  - Runs auth-bypass checks (`no_token`, `bad_token`) for each discovered route.
+  - Runs deep checks: employee self-service isolation; attendance Ack flow (HR writes, employee acks, HR cannot ack, super_admin can).
+  - Runs injection smoke probes (path/query and selected bodies) and expects 4xx rather than crashing with 500.
+- Typical verification command used during hardening:
+  - `node scripts/api-security-check.mjs && node scripts/route-middleware-audit.mjs`
+- Latest observed results (dev DB after reset + seed):
+  - Auto-discovered routes: 74
+  - RBAC matrix + deep checks: 0 vulnerabilities (no unexpected allows)
+  - Remaining warnings are mainly validation hardening (missing `validate()` on a few routes) and some endpoints returning 500 when given obviously invalid IDs (should be 4xx).
+- Optional request logger (dev only):
+  - `server.js` contains a gated logger that prints non-2xx/3xx responses when `DEBUG_HTTP=1`.
+  - PowerShell usage: `$env:DEBUG_HTTP="1"; npm start` (must be in the same command/session as `npm start`).
+- Route middleware audit:
+  - Auto-discovers routes from `server.js` mounts and flags missing/incorrect middleware patterns.
+  - Current state: a few routes are flagged with "no validate() middleware" (input hardening), but RBAC is still enforced.
+
+### 0.3 Mock Data / Seeds (Reproducible DB State)
+- Existing seed: `npm run db:seed` runs `seeds/dev_seed.js` (lookup tables + employees/users).
+- Added full mock seed: `npm run db:seed:full` runs `seeds/full_mock_seed.js`:
+  - Populates all HCM tables behind current API routes (employees/job/extra/history, leave types/policies/balances/requests, attendance with `ack`, RBAC tables).
+  - Clears only HCM-related tables (does not touch inventory/purchasing tables).
+  - Seeds mixed leave request statuses (pending/approved/rejected + early return) and attendance rows around Jan 2026.
+
+### 0.4 Known "Noise" During Security Runs (Not a Vulnerability)
+- For write routes, even with correct RBAC, requests can return 400/422/409/500 if:
+  - payload is invalid (missing required fields),
+  - record IDs do not exist,
+  - DB constraints are violated.
+- In the runner output:
+  - **VULN** means an unexpected allow (should have been 401/403).
+  - **WARN** means unexpected status (commonly validation gaps or handler-level failures), not an auth bypass.
 
 ## 1. Project Overview
 
