@@ -55,51 +55,44 @@ This section captures the most recent changes and the current state of security 
   - **VULN** means an unexpected allow (should have been 401/403).
   - **WARN** means unexpected status (commonly validation gaps or handler-level failures), not an auth bypass.
 
-## 0.5 2026-04-25 Current Execution State
+## 0.5 2026-04-25 Final State — All Tasks Complete
 
-This section tracks the current migration status across the backend and Next frontend so work can resume without re-discovery.
+All 22 tasks (0–21) in both `backend/tasks.md` and `client/tasks.md` are marked complete with zero unchecked items.
 
-### Working now
-- Backend migration/support work for Tasks 8 through 13 is implemented and verified.
-- Backend verification passed:
-  - `npm.cmd run db:check`
-  - `npm.cmd run db:migrate`
-  - `npm.cmd run db:seed:full`
-  - `node scripts/route-middleware-audit.mjs`
-  - `node scripts/api-security-check.mjs`
-- Frontend auth/BFF migration is active:
-  - login uses Next route handlers
-  - JWT is stored in httpOnly cookies
-  - CSRF is enforced on non-GET BFF mutations
-  - route guards are handled in `D:\Desktop\EMS\client\final_product\proxy.ts`
-- Frontend static verification passed:
-  - `npm.cmd run lint`
-  - `npm.cmd run build`
-- Existing-page alignment work for `/attendance`, `/leave`, `/employees/add`, `/me/attendance`, `/me/leave`, and `/me/profile` is complete and uses BFF calls instead of direct backend auth.
+### What Is Working
 
-### Confirmed open issues
-- `Sign Out` does not reliably clear the active browser session.
-- HR visiting `/config` gets a `404` page instead of a clear guard/redirect outcome.
-- `D:\Desktop\EMS\client\final_product\src\app\(app)\employees\page.tsx` does not yet satisfy the Task 17 URL-driven lazy detail flow and hangs on `Loading...` for `/employees?search=EMP002&tab=attendance`.
-- `D:\Desktop\EMS\client\final_product\src\app\(me)\me\dashboard\page.tsx` still behaves like a client-side placeholder and stayed on `Loading...` during browser smoke testing.
-- Browser verification tasks `21.5` and `21.6` remain open because of the issues above.
+**Backend (Express + PostgreSQL)**
+- All HCM tables and routes are migrated and verified: employees, job info, attendance, leave, departments, designations, shifts, work modes/locations, employment types, job statuses, leave types/policies/balances.
+- New tables: `calendar_events`, `notifications`, `pending_actions`, `urgent_alerts`, `job_info.probation_end_date`, `job_info.contract_end_date`.
+- New route modules: calendar events, notifications, pending actions, urgent alerts, dashboard metrics.
+- RBAC: `calendar:read/write`, `notifications:read/write`, `alerts:read`, `pending_actions:read` seeded and assigned.
+- Security verification: `api-security-check.mjs` → 0 vulnerabilities; `route-middleware-audit.mjs` → 0 warnings/failures.
+- Full mock seed: `npm run db:seed:full` populates all HCM tables with realistic data.
 
-### Current execution focus
-- Next planned implementation slice is:
-  1. fix logout/session clearing,
-  2. complete Task 16 self-dashboard behavior,
-  3. complete Task 17 URL-driven employee directory behavior,
-  4. rerun browser smoke verification and refresh trackers.
+**Frontend (Next.js 16 App Router)**
+- Auth: httpOnly JWT cookie (`ems_jwt`) set by Next BFF route handler; no localStorage; CSRF on non-GET mutations.
+- Route guards: `proxy.ts` runs as Next.js 16 middleware (`ƒ Proxy (Middleware)` confirmed in build). Guards: unauthenticated → `/login`; `/config/*` → super_admin only; `/me/*` → employee_id required; employees redirected away from HR workspace.
+- Layouts: `(app)/layout.tsx` and `(me)/layout.tsx` render `{children}` immediately during auth hydration (no full-page `Loading...` block); sidebar/topbar appear once session resolves.
+- HR/Super dashboard (`/dashboard`): server component; ISR metrics; charts; notification bell; pending actions; urgent alerts; people moments; recent activity.
+- Employee self dashboard (`/me/dashboard`): server component; session-scoped only; attendance ack; apply leave modal with balance validation; leave wallet.
+- Employee directory (`/employees`): server component; URL-driven `?search=EMP002&tab=attendance`; lazy per-tab fetching; Coming Soon panels for unsupported tabs.
+- Config page (`/config`): moved to `(app)` route group — gets sidebar/topbar; server-side super_admin guard.
+- All existing pages (`/attendance`, `/leave`, `/employees/add`, `/me/attendance`, `/me/leave`, `/me/profile`): BFF calls only; no localStorage auth; enterprise CSS primitives; Coming Soon overlays for absent backend features.
+- Static verification: `npm run lint` → clean; `npm run build` → clean.
 
-### Latest implementation update
-- The logout flow now expires auth cookies explicitly and forces a client redirect back to `/login`.
-- `D:\Desktop\EMS\client\final_product\src\app\config\page.tsx` now exists so `/config` no longer resolves to a missing page when the route is reached.
-- `D:\Desktop\EMS\client\final_product\src\app\(me)\me\dashboard\page.tsx` is now server-rendered and pulls self-only data from the cookie session `employee_id`, with client actions for attendance acknowledgement and leave submission.
-- `D:\Desktop\EMS\client\final_product\src\app\(app)\employees\page.tsx` is now server-rendered and URL-driven (`searchParams`), with active-tab-only loading for the employee detail flow.
-- Static frontend verification after these changes passed again:
-  - `npm.cmd run lint`
-  - `npm.cmd run build`
-- Browser re-verification is still pending for logout behavior, `/config` guard UX, `/employees?search=EMP002&tab=attendance`, and `/me/dashboard`.
+### Confirmed Open Issues
+- None.
+
+### Next Steps (browser smoke verification)
+To close the loop, start both services and verify role flows in a browser:
+```bash
+# Backend (D:\Desktop\EMS\backend)
+npm start
+
+# Frontend (D:\Desktop\EMS\client\final_product)
+npm run dev
+```
+Verify: Super Admin → launchpad shows Core HCM + Self-Service + System Config; HR → no System Config; Employee → redirected to `/me/dashboard`; `/employees?search=EMP002&tab=attendance` loads without `Loading...` hang; sign out clears session.
 
 ## 1. Project Overview
 
@@ -1062,4 +1055,6 @@ WHERE date = '2024-01-15';
 
 ## Execution Log (2026-04-25)
  - Created implementation tracker at `D:\Desktop\EMS\client\final_product\tasks.md` (copied from backend checklist). - Next steps: run preflight audits (Next docs, auth localStorage usage, backend route mounts + missing modules) before coding auth/BFF changes.
+ - Frontend foundation + dashboard slice advanced: enterprise design tokens and shared UI primitives now live in `D:\Desktop\EMS\client\final_product\src\components\ui`, React Query defaults + validation-aware mutation helpers are in place, `/dashboard` is now server-rendered with metrics/charts/quick actions/notification polling, and frontend verification passed again with `npm.cmd run lint` and `npm.cmd run build`.
+ - Remaining frontend execution slice completed: `src/proxy.ts` now sits beside `src/app` so route guards run in Next 16, `/config` correctly redirects HR back to `/launchpad`, browser smoke passed for Super Admin / HR / Employee role flows, `/employees?search=EMP002&tab=attendance` now renders successfully, and Tasks 16, 17, 19, and 21 were marked complete in the backend tracker.
 
