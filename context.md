@@ -860,3 +860,156 @@ WHERE date = '2024-01-15';
 **Document Version:** 1.0  
 **Last Updated By:** Claude Code  
 **Purpose:** Complete context reference for EMS backend development
+
+---
+
+## Conversation Log (Codex) — 2026-04-25
+
+### Operator Rule (Logging)
+- From this point forward: write conversation context only into this `context.md`.
+- For long assistant messages: append a concise context summary instead of full text.
+
+### Locked Answers / Decisions
+- Standard fields: include `created_at` and `updated_at` on new tables (and keep update trigger behavior consistent).
+- Employee visibility: strictly self-only for employees.
+- Leave balances: prorated.
+- Notifications: enterprise default is polling.
+- Calendar permissions: HR can edit events created by others; editor name must be visible.
+- Prototype ambiguities: keep extra dashboard sections (distributions/activity/etc.) for MVP.
+- HR/Superadmin: if assigned an `employee_id`, they can access Self-Service (`/me/*`) via Launchpad.
+
+### Decision-Complete Implementation Plan (Full)
+
+#### 1) Target App + Source of Truth
+- Production Next.js app: `D:\Desktop\EMS\client\final_product` (Next App Router).
+- Backend system-of-record: `D:\Desktop\EMS\backend` (Express + PostgreSQL + Zod).
+- UI must follow enterprise constraints: neutral palette, consistent radius tokens (`radius-sm`/`radius-md`), no decorative shadows, no emojis, no gradients.
+- Prototype is layout reference only:
+  - HR/Super dashboard reference: `D:\Desktop\EMS\client\prototype\src\pages\Dashboard.tsx`
+  - Employee self dashboard reference: `D:\Desktop\EMS\client\prototype\src\pages\MyDashboard.tsx`
+  - HR directory reference: `D:\Desktop\EMS\client\prototype\src\pages\Employees.tsx`
+
+#### 2) Session, Auth, and Security (Secure-by-default)
+- Move Next frontend off localStorage token:
+  - Replace `localStorage` token usage in Next (`src/lib/api.ts`, `src/contexts/AuthContext.tsx`) with **httpOnly JWT cookie**.
+- Next acts as BFF:
+  - `POST /api/auth/login` (Next Route Handler) calls backend `POST /api/auth/login`, sets `ems_jwt` cookie (httpOnly).
+  - `POST /api/auth/logout` clears cookies.
+  - `GET /api/auth/session` returns decoded user/session for UI.
+  - `GET/POST/PATCH/... /api/proxy/*` forwards to backend with `Authorization: Bearer <jwt-from-cookie>` and preserves backend status + error shapes.
+- CSRF (for cookie-based auth):
+  - Issue `ems_csrf` (non-httpOnly) and require `x-csrf-token` on non-GET Next `/api/*` routes.
+- Role-based route guards:
+  - Add Next `src/middleware.ts`:
+    - Unauthenticated users redirected to `/login`.
+    - `/config/*` allowed only for `super_admin`.
+    - `/me/*` always allowed for any authenticated user (including HR/Super), but data access remains strictly self-only.
+- Server-side RBAC:
+  - Backend remains authoritative for data RBAC.
+  - Next BFF must still block obvious role routes (defense-in-depth).
+
+#### 3) URL-Driven Lazy Loading (No bulk tab loading)
+- Employee directory detail navigation (HR/Super):
+  - URL scheme: `/employees?search=EMP002&tab=attendance`.
+  - Server-rendered page resolves `search` to employee (uuid + employee_id) then fetches **only active tab**.
+- Tabs:
+  - Use `searchParams.tab` as single source of truth.
+  - Switching tabs updates URL only (`router.replace()`); no preloading other tabs.
+
+#### 4) Data Fetching + State Management
+- Server Components:
+  - Initial renders and tab content fetch server-side.
+  - For org-wide metrics: use ISR (`next: { revalidate }`), not for per-user content.
+- Client Components:
+  - Forms, modals, charts, notification dropdown, and all mutations.
+  - Use React Query for mutations + optimistic updates where safe.
+- URL params for UI state:
+  - `?tab=...`, `?range=6m|12m`, `?search=...`, `?department=...`, etc.
+
+#### 5) Notifications (Enterprise Default: Polling)
+- Delivery mechanism:
+  - Poll unread count + feed via React Query (`refetchInterval: 30000`, `staleTime: 15000`).
+- Required backend endpoints (RBAC + self-only enforced):
+  - `GET /api/notifications?scope=me` -> items + `unread_count`
+  - `PATCH /api/notifications/:id/read` (self-only)
+  - `POST /api/notifications` (HR/Super only)
+
+#### 6) Calendar Events
+- Permissions:
+  - All authenticated roles can `GET` relevant calendar events.
+  - HR/Super can `POST/PUT` (and HR can edit events created by others); show editor identity.
+- Required backend endpoints:
+  - `GET /api/calendar-events?from=YYYY-MM-DD&to=YYYY-MM-DD`
+  - `POST /api/calendar-events`
+  - `PUT /api/calendar-events/:id`
+
+#### 7) Pending Actions + Urgent Alerts
+- Pending Actions:
+  - Derived list of employees missing critical fields (banking, emergency contact, etc.).
+  - Source tables: `employee_info`, `extra_employee_info`, and other “required for payroll/HR” fields.
+  - Endpoint: `GET /api/pending-actions` (HR/Super).
+- Urgent Alerts:
+  - Generate from new `job_info` dates: `probation_end_date`, `contract_end_date`.
+  - Endpoint: `GET /api/urgent-alerts?days=30` (HR/Super).
+
+#### 8) Backend Schema + Standards (No delete APIs)
+- Add/ensure `created_at`, `updated_at` for all newly introduced tables; keep `updated_at` trigger pattern consistent.
+- Add job info fields:
+  - `job_info.probation_end_date date null`
+  - `job_info.contract_end_date date null`
+- Add new tables (append-only; no delete routes):
+  - `calendar_events` (type, date, title, visibility, created_by, updated_by, created_at, updated_at)
+  - `notifications` (user_id nullable, role nullable, type, message, is_read, created_by, created_at, updated_at)
+  - `pending_actions` (employee_id, missing_fields jsonb, status, resolved_by/at, created_at, updated_at)
+  - `urgent_alerts` (employee_id, type, expiry_date, status, updated_by, created_at, updated_at)
+- Add permission keys + seed assignments (exact mapping to roles to be finalized during implementation):
+  - `calendar:read`, `calendar:write`
+  - `notifications:read`, `notifications:write`
+  - `alerts:read`, `pending_actions:read`
+
+#### 9) Dashboard Execution (HR/Super)
+- Match the prototype layout sections but fix padding/state logic:
+  - Remove “Add Employee” from dashboard header; keep it in Quick Actions only.
+  - Keep sections: top metrics (4 cards), quick actions, charts (attendance + headcount), calendar (birthdays/anniversaries + events), pending actions, urgent alerts, announcements, recent activity.
+- Metrics endpoint (backend or BFF) must support `?range=6m|12m` and be ISR-friendly on the Next side.
+
+#### 10) Employee Self Dashboard (All roles with an employee_id)
+- Self-only:
+  - Profile card: name, department, employee id, date, shift start/end (no break field; no check-in/out controls).
+  - Attendance ack: appears only if HR marked attendance; immutable once acked; shows Late status if applicable.
+  - Apply leave modal: validate date range and remaining balance; return 422 field issues on errors.
+  - Calendar preview: read-only.
+  - “My Team” uses Coming Soon overlay.
+
+#### 11) Coming Soon Pattern (Unfinished Modules)
+- Render unfinished modules with:
+  - `opacity-30 pointer-events-none backdrop-blur-[2px]` + visible “Coming Soon” badge.
+  - Underlying layout remains visible (not fully obscured).
+
+#### 12) Validation + Error Mapping
+- Backend:
+  - Zod validation on all inputs (body/params/query) via `validate()` middleware.
+  - Preserve documented error shapes from `API_ROUTES.md`:
+    - `422` -> `{ "error": "Validation failed", "issues": [...] }`
+    - `403` -> `{ "error": "Insufficient permissions." }` (or endpoint-specific message)
+    - `404` -> `{ "error": "Not found" }` or existing endpoint-specific errors.
+
+#### 13) Verification / Acceptance
+- Backend verification:
+  - `node scripts/api-security-check.mjs`
+  - `node scripts/route-middleware-audit.mjs`
+- Acceptance checks:
+  - Self-only enforcement for employee endpoints and `/me/*`.
+  - Next middleware blocks `/config/*` for HR.
+  - Employee detail tabs fetch only active tab data (no bulk loading).
+  - Notification bell updates via polling; mark-as-read works and updates badge count.
+
+---
+
+## Conversation Summary (Codex) - 2026-04-25
+
+- The full strategic architecture plan has been saved locally as `plan.md`.
+- The dependency-ordered technical task tracker has been saved locally as `tasks.md`.
+- Going forward, use `plan.md` for the high-level ERP migration blueprint and `tasks.md` for execution sequencing, acceptance checks, and task tracking.
+- Keep `context.md` as the concise running context file only; for long future messages, append summaries here instead of duplicating full plans.
+- Current locked direction remains: Next.js App Router in `D:\Desktop\EMS\client\final_product`, Express/PostgreSQL backend in `D:\Desktop\EMS\backend`, httpOnly JWT cookie auth through a Next BFF, strict self-service isolation, URL-driven lazy employee tabs, enterprise UI styling, and no delete APIs.
