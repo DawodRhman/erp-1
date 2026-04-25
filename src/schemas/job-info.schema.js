@@ -14,3 +14,7 @@ export const createJobInfoSchema = z.object({
 })
 
 export const updateJobInfoSchema = createJobInfoSchema.partial()
+
+export const jobInfoQuerySchema = z.object({
+    employee: z.string().min(1).max(10).optional(),
+})

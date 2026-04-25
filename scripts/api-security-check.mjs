@@ -4,7 +4,7 @@
  *
  * Run:
  *   node scripts/api-security-check.mjs
- *   BASE_URL=http://localhost:3000/api node scripts/api-security-check.mjs
+ *   BASE_URL=http://localhost:3001/api node scripts/api-security-check.mjs
  *
  * Goal:
  * - Login core roles (super_admin, hr_manager, hr_executive, employee, employee2)
@@ -15,7 +15,7 @@
  * - Very clear story logs; warnings only (exit 0)
  */
 
-const BASE = process.env.BASE_URL ?? 'http://localhost:3000/api'
+const BASE = process.env.BASE_URL ?? 'http://localhost:3001/api'
 
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -133,24 +133,40 @@ const ROLE_PERMS = {
     'leave:approve',
     'attendance:read',
     'attendance:write',
+    'calendar:read',
+    'calendar:write',
+    'notifications:read',
+    'notifications:write',
+    'pending_actions:read',
+    'alerts:read',
   ],
   hr_executive: [
     'config:read',
     'employees:read',
     'leave:read',
     'attendance:read',
+    'calendar:read',
+    'calendar:write',
+    'notifications:read',
+    'notifications:write',
+    'pending_actions:read',
+    'alerts:read',
   ],
   employee: [
     'employees:read',
     'leave:read',
     'leave:write',
     'attendance:read',
+    'calendar:read',
+    'notifications:read',
   ],
   employee2: [
     'employees:read',
     'leave:read',
     'leave:write',
     'attendance:read',
+    'calendar:read',
+    'notifications:read',
   ],
 }
 
@@ -340,6 +356,10 @@ function zodExample(schema, { preferNonEmptyObject = false, depth = 0 } = {}) {
   }
 
   // Unknown type: return null (caller can decide fallback)
+  if (method === 'GET' && templateRelPath === '/dashboard/metrics') {
+    return role === 'employee' || role === 'employee2' ? 'deny' : 'allow'
+  }
+
   return null
 }
 
@@ -712,7 +732,7 @@ async function discoverIds(saToken) {
 }
 
 async function deepChecks({ tokens, discovered }) {
-  section('Deep Security Checks (Self-Service + Ack)')
+  section('Deep Security Checks (Self-Service + Ack + Notifications)')
 
   const SA = tokens.super_admin
   const HRM = tokens.hr_manager
@@ -885,6 +905,97 @@ async function deepChecks({ tokens, discovered }) {
     else ok('[employee] GET /leave-requests/calendar self-only')
   } else {
     warnings++; warn(`[employee] GET /leave-requests/calendar unexpected status=${lrCal.status}`)
+  }
+
+  sub('Dashboard/alerts: employee blocked, HR allowed')
+
+  const employeePendingActions = await http('GET', '/pending-actions', { token: EMP })
+  checks++
+  if (employeePendingActions.status === 403) ok('[employee] GET /pending-actions blocked (403)')
+  else {
+    vulns++
+    vuln(`[employee] GET /pending-actions returned ${employeePendingActions.status} (expected 403)`)
+  }
+
+  const employeeUrgentAlerts = await http('GET', '/urgent-alerts?days=30', { token: EMP })
+  checks++
+  if (employeeUrgentAlerts.status === 403) ok('[employee] GET /urgent-alerts blocked (403)')
+  else {
+    vulns++
+    vuln(`[employee] GET /urgent-alerts returned ${employeeUrgentAlerts.status} (expected 403)`)
+  }
+
+  const employeeMetrics = await http('GET', '/dashboard/metrics?range=6m', { token: EMP })
+  checks++
+  if (employeeMetrics.status === 403) ok('[employee] GET /dashboard/metrics blocked (403)')
+  else {
+    vulns++
+    vuln(`[employee] GET /dashboard/metrics returned ${employeeMetrics.status} (expected 403)`)
+  }
+
+  const hrPendingActions = await http('GET', '/pending-actions', { token: HRM })
+  checks++
+  if (hrPendingActions.ok && hrPendingActions.status === 200 && Array.isArray(hrPendingActions.data)) {
+    ok('[hr_manager] GET /pending-actions allowed')
+  } else {
+    warnings++
+    warn(`[hr_manager] GET /pending-actions unexpected status=${hrPendingActions.status}`)
+  }
+
+  const hrUrgentAlerts = await http('GET', '/urgent-alerts?days=30', { token: HRM })
+  checks++
+  if (hrUrgentAlerts.ok && hrUrgentAlerts.status === 200 && Array.isArray(hrUrgentAlerts.data)) {
+    ok('[hr_manager] GET /urgent-alerts allowed')
+  } else {
+    warnings++
+    warn(`[hr_manager] GET /urgent-alerts unexpected status=${hrUrgentAlerts.status}`)
+  }
+
+  const hrMetrics = await http('GET', '/dashboard/metrics?range=6m', { token: HRM })
+  checks++
+  if (hrMetrics.ok && hrMetrics.status === 200 && hrMetrics.data && typeof hrMetrics.data === 'object') {
+    ok('[hr_manager] GET /dashboard/metrics allowed')
+  } else {
+    warnings++
+    warn(`[hr_manager] GET /dashboard/metrics unexpected status=${hrMetrics.status}`)
+  }
+
+  sub('Notifications: employees stay self-scoped and cannot mark peer notification read')
+
+  const employeeNotifications = await http('GET', '/notifications?scope=me', { token: EMP })
+  checks++
+  if (employeeNotifications.ok && employeeNotifications.status === 200 && Array.isArray(employeeNotifications.data?.items)) {
+    ok('[employee] GET /notifications?scope=me allowed')
+  } else {
+    warnings++
+    warn(`[employee] GET /notifications?scope=me unexpected status=${employeeNotifications.status}`)
+  }
+
+  if (EMP2) {
+    const employee2Notifications = await http('GET', '/notifications?scope=me', { token: EMP2 })
+    checks++
+    if (employee2Notifications.ok && employee2Notifications.status === 200 && Array.isArray(employee2Notifications.data?.items)) {
+      ok('[employee2] GET /notifications?scope=me allowed')
+
+      const otherNotificationId = employee2Notifications.data.items[0]?.id
+      if (otherNotificationId) {
+        const crossRead = await http('PATCH', `/notifications/${otherNotificationId}/read`, { token: EMP })
+        checks++
+        if (crossRead.status === 404 || crossRead.status === 403) ok('[employee] PATCH /notifications/:id/read blocked for peer notification')
+        else {
+          vulns++
+          vuln(`[employee] PATCH /notifications/:id/read returned ${crossRead.status} for peer notification (expected 403/404)`)
+        }
+      } else {
+        warnings++
+        warn('employee2 has no notifications to use for peer read test.')
+      }
+    } else {
+      warnings++
+      warn(`[employee2] GET /notifications?scope=me unexpected status=${employee2Notifications.status}`)
+    }
+  } else {
+    info('employee2 token missing; skipping peer notification read test.')
   }
 }
 

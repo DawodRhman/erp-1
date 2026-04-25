@@ -24,13 +24,17 @@ import leavePolicyRoutes from './src/routes/leave-policy-routes.js';
 import leaveBalanceRoutes from './src/routes/leave-balance-routes.js';
 import attendanceRoutes from './src/routes/attendance-routes.js';
 import leaveRequestRoutes from './src/routes/leave-request-routes.js';
+import calendarEventRoutes from './src/routes/calendar-event-routes.js';
+import notificationRoutes from './src/routes/notification-routes.js';
+import dashboardSupportRoutes from './src/routes/dashboard-support-routes.js';
+import dashboardMetricsRoutes from './src/routes/dashboard-metrics-routes.js';
 
 // Initialize Express application
 const app = express();
 
 // Configure CORS for frontend communication
 app.use(cors({
-    origin: 'http://localhost:5173',
+    origin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     credentials: true
 }));
@@ -73,6 +77,10 @@ app.use('/api/leave-policies', leavePolicyRoutes);
 app.use('/api/leave-balances', leaveBalanceRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/leave-requests', leaveRequestRoutes);
+app.use('/api/calendar-events', calendarEventRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api', dashboardSupportRoutes);
+app.use('/api/dashboard', dashboardMetricsRoutes);
 
 // Health check endpoint
 app.get('/', (req, res) => {
@@ -117,7 +125,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start server on configured port
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });

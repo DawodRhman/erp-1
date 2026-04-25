@@ -11,3 +11,16 @@ export const createLeaveRequestSchema = z.object({
 export const earlyReturnSchema = z.object({
     end_by_force: z.string().date(),
 })
+
+export const leaveRequestListQuerySchema = z.object({
+    status: z.enum(['pending', 'approved', 'rejected']).optional(),
+    employee: z.string().min(1).max(10).optional(),
+    department: z.string().uuid().optional(),
+})
+
+export const leaveBalanceQuerySchema = z.object({
+    department: z.string().uuid().optional(),
+    location: z.string().uuid().optional(),
+    shift: z.string().uuid().optional(),
+    employee: z.string().min(1).max(10).optional(),
+})

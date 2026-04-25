@@ -3,7 +3,7 @@
 **Project:** Employee Management System (EMS) Backend  
 **Technology Stack:** Node.js, Express 5, PostgreSQL, Zod  
 **Architecture:** Three-Layer (Model → Service → Controller)  
-**Last Updated:** 2026-04-24
+**Last Updated:** 2026-04-25
 
 ---
 
@@ -54,6 +54,52 @@ This section captures the most recent changes and the current state of security 
 - In the runner output:
   - **VULN** means an unexpected allow (should have been 401/403).
   - **WARN** means unexpected status (commonly validation gaps or handler-level failures), not an auth bypass.
+
+## 0.5 2026-04-25 Current Execution State
+
+This section tracks the current migration status across the backend and Next frontend so work can resume without re-discovery.
+
+### Working now
+- Backend migration/support work for Tasks 8 through 13 is implemented and verified.
+- Backend verification passed:
+  - `npm.cmd run db:check`
+  - `npm.cmd run db:migrate`
+  - `npm.cmd run db:seed:full`
+  - `node scripts/route-middleware-audit.mjs`
+  - `node scripts/api-security-check.mjs`
+- Frontend auth/BFF migration is active:
+  - login uses Next route handlers
+  - JWT is stored in httpOnly cookies
+  - CSRF is enforced on non-GET BFF mutations
+  - route guards are handled in `D:\Desktop\EMS\client\final_product\proxy.ts`
+- Frontend static verification passed:
+  - `npm.cmd run lint`
+  - `npm.cmd run build`
+- Existing-page alignment work for `/attendance`, `/leave`, `/employees/add`, `/me/attendance`, `/me/leave`, and `/me/profile` is complete and uses BFF calls instead of direct backend auth.
+
+### Confirmed open issues
+- `Sign Out` does not reliably clear the active browser session.
+- HR visiting `/config` gets a `404` page instead of a clear guard/redirect outcome.
+- `D:\Desktop\EMS\client\final_product\src\app\(app)\employees\page.tsx` does not yet satisfy the Task 17 URL-driven lazy detail flow and hangs on `Loading...` for `/employees?search=EMP002&tab=attendance`.
+- `D:\Desktop\EMS\client\final_product\src\app\(me)\me\dashboard\page.tsx` still behaves like a client-side placeholder and stayed on `Loading...` during browser smoke testing.
+- Browser verification tasks `21.5` and `21.6` remain open because of the issues above.
+
+### Current execution focus
+- Next planned implementation slice is:
+  1. fix logout/session clearing,
+  2. complete Task 16 self-dashboard behavior,
+  3. complete Task 17 URL-driven employee directory behavior,
+  4. rerun browser smoke verification and refresh trackers.
+
+### Latest implementation update
+- The logout flow now expires auth cookies explicitly and forces a client redirect back to `/login`.
+- `D:\Desktop\EMS\client\final_product\src\app\config\page.tsx` now exists so `/config` no longer resolves to a missing page when the route is reached.
+- `D:\Desktop\EMS\client\final_product\src\app\(me)\me\dashboard\page.tsx` is now server-rendered and pulls self-only data from the cookie session `employee_id`, with client actions for attendance acknowledgement and leave submission.
+- `D:\Desktop\EMS\client\final_product\src\app\(app)\employees\page.tsx` is now server-rendered and URL-driven (`searchParams`), with active-tab-only loading for the employee detail flow.
+- Static frontend verification after these changes passed again:
+  - `npm.cmd run lint`
+  - `npm.cmd run build`
+- Browser re-verification is still pending for logout behavior, `/config` guard UX, `/employees?search=EMP002&tab=attendance`, and `/me/dashboard`.
 
 ## 1. Project Overview
 
@@ -1013,3 +1059,7 @@ WHERE date = '2024-01-15';
 - Going forward, use `plan.md` for the high-level ERP migration blueprint and `tasks.md` for execution sequencing, acceptance checks, and task tracking.
 - Keep `context.md` as the concise running context file only; for long future messages, append summaries here instead of duplicating full plans.
 - Current locked direction remains: Next.js App Router in `D:\Desktop\EMS\client\final_product`, Express/PostgreSQL backend in `D:\Desktop\EMS\backend`, httpOnly JWT cookie auth through a Next BFF, strict self-service isolation, URL-driven lazy employee tabs, enterprise UI styling, and no delete APIs.
+
+## Execution Log (2026-04-25)
+ - Created implementation tracker at `D:\Desktop\EMS\client\final_product\tasks.md` (copied from backend checklist). - Next steps: run preflight audits (Next docs, auth localStorage usage, backend route mounts + missing modules) before coding auth/BFF changes.
+

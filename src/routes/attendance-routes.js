@@ -38,6 +38,7 @@ router.get(
             month: z.string().regex(/^(0?[1-9]|1[0-2])$/),
             year: z.string().regex(/^\d{4}$/),
             department: z.string().uuid().optional(),
+            employee: z.string().min(1).max(10).optional(),
         }),
     }),
     getMonthlyReport

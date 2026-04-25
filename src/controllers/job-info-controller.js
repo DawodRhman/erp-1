@@ -12,6 +12,7 @@ export const createJobInfo = async (req, res, next) => {
 export const getJobInfo = async (req, res, next) => {
     try {
         const { id } = req.params;
+        let { employee } = req.query;
 
         // Self-service: employees can only access their own job info
         if (!req.user.is_super_admin &&
@@ -29,6 +30,11 @@ export const getJobInfo = async (req, res, next) => {
             }
 
             const rows = await jobInfoService.readByEmployeeId(req.user.employee_id);
+            return res.status(200).json(rows);
+        }
+
+        if (employee) {
+            const rows = await jobInfoService.readByEmployeeId(employee);
             return res.status(200).json(rows);
         }
 

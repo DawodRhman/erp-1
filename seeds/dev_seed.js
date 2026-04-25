@@ -16,6 +16,10 @@ async function seed() {
         await client.query("BEGIN");
 
         // Clear existing data (reverse dependency order)
+        await client.query("DELETE FROM urgent_alerts");
+        await client.query("DELETE FROM pending_actions");
+        await client.query("DELETE FROM notifications");
+        await client.query("DELETE FROM calendar_events");
         await client.query("DELETE FROM users");
         await client.query("DELETE FROM job_info");
         await client.query("DELETE FROM extra_employee_info");
@@ -53,6 +57,13 @@ async function seed() {
             // Attendance management
             { key: "attendance:read", desc: "View attendance records" },
             { key: "attendance:write", desc: "Mark and update attendance" },
+            // Calendar / notifications / dashboard alerts
+            { key: "calendar:read", desc: "View shared calendar events" },
+            { key: "calendar:write", desc: "Create and update calendar events" },
+            { key: "notifications:read", desc: "View notifications" },
+            { key: "notifications:write", desc: "Create notifications" },
+            { key: "alerts:read", desc: "View urgent alerts" },
+            { key: "pending_actions:read", desc: "View pending HR actions" },
             // Inventory/Purchasing (if needed)
             { key: "inventory:read", desc: "View inventory" },
             { key: "inventory:write", desc: "Manage inventory" },
@@ -273,6 +284,12 @@ async function seed() {
             "leave:approve",
             "attendance:read",
             "attendance:write",
+            "calendar:read",
+            "calendar:write",
+            "notifications:read",
+            "notifications:write",
+            "alerts:read",
+            "pending_actions:read",
         ];
         for (const permKey of hrManagerPerms) {
             await client.query(
@@ -287,6 +304,12 @@ async function seed() {
             "employees:read",
             "leave:read",
             "attendance:read",
+            "calendar:read",
+            "calendar:write",
+            "notifications:read",
+            "notifications:write",
+            "alerts:read",
+            "pending_actions:read",
         ];
         for (const permKey of hrExecPerms) {
             await client.query(
@@ -301,6 +324,8 @@ async function seed() {
             "leave:read",
             "leave:write",
             "attendance:read",
+            "calendar:read",
+            "notifications:read",
         ];
         for (const empRoleId of [itEmployeeRoleId, finEmployeeRoleId, salesEmployeeRoleId]) {
             for (const permKey of employeePerms) {

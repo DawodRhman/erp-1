@@ -28,6 +28,10 @@ async function seed() {
         await client.query('BEGIN')
 
         // Clear existing HCM data (reverse dependency order)
+        await client.query('DELETE FROM urgent_alerts')
+        await client.query('DELETE FROM pending_actions')
+        await client.query('DELETE FROM notifications')
+        await client.query('DELETE FROM calendar_events')
         await client.query('DELETE FROM attendance')
         await client.query('DELETE FROM leave_requests')
         await client.query('DELETE FROM leave_balances')
@@ -65,6 +69,12 @@ async function seed() {
             { key: 'leave:approve', desc: 'Approve/reject leave requests' },
             { key: 'attendance:read', desc: 'View attendance records' },
             { key: 'attendance:write', desc: 'Mark and update attendance' },
+            { key: 'calendar:read', desc: 'View shared calendar events' },
+            { key: 'calendar:write', desc: 'Create and update calendar events' },
+            { key: 'notifications:read', desc: 'View notifications' },
+            { key: 'notifications:write', desc: 'Create notifications' },
+            { key: 'alerts:read', desc: 'View urgent alerts' },
+            { key: 'pending_actions:read', desc: 'View pending HR actions' },
         ]
 
         const permissionMap = {}
@@ -262,6 +272,12 @@ async function seed() {
             'leave:approve',
             'attendance:read',
             'attendance:write',
+            'calendar:read',
+            'calendar:write',
+            'notifications:read',
+            'notifications:write',
+            'alerts:read',
+            'pending_actions:read',
         ]
         for (const permKey of hrManagerPerms) {
             await client.query('INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2)', [
@@ -270,7 +286,18 @@ async function seed() {
             ])
         }
 
-        const hrExecPerms = ['config:read', 'employees:read', 'leave:read', 'attendance:read']
+        const hrExecPerms = [
+            'config:read',
+            'employees:read',
+            'leave:read',
+            'attendance:read',
+            'calendar:read',
+            'calendar:write',
+            'notifications:read',
+            'notifications:write',
+            'alerts:read',
+            'pending_actions:read',
+        ]
         for (const permKey of hrExecPerms) {
             await client.query('INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2)', [
                 hrExecRoleId,
@@ -279,7 +306,7 @@ async function seed() {
         }
 
         // Employees can read employees (self-service enforced by controllers), submit leave, and view attendance.
-        const employeePerms = ['employees:read', 'leave:read', 'leave:write', 'attendance:read']
+        const employeePerms = ['employees:read', 'leave:read', 'leave:write', 'attendance:read', 'calendar:read', 'notifications:read']
         for (const roleId of [itEmployeeRoleId, finEmployeeRoleId, salesEmployeeRoleId]) {
             for (const permKey of employeePerms) {
                 await client.query('INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2)', [
@@ -311,6 +338,8 @@ async function seed() {
                 workLoc: workLocMap['Main Office'],
                 shift: shiftMap.General,
                 doj: '2023-01-15',
+                probationEnd: null,
+                contractEnd: null,
             },
             // IT employees
             {
@@ -330,6 +359,8 @@ async function seed() {
                 workLoc: workLocMap['Main Office'],
                 shift: shiftMap.General,
                 doj: '2023-02-01',
+                probationEnd: '2026-05-20',
+                contractEnd: null,
             },
             {
                 empId: 'EMP003',
@@ -348,6 +379,8 @@ async function seed() {
                 workLoc: workLocMap.Home,
                 shift: shiftMap.General,
                 doj: '2022-11-10',
+                probationEnd: null,
+                contractEnd: null,
             },
             // Finance employees
             {
@@ -367,6 +400,8 @@ async function seed() {
                 workLoc: workLocMap['Main Office'],
                 shift: shiftMap.General,
                 doj: '2021-07-01',
+                probationEnd: null,
+                contractEnd: '2026-06-30',
             },
             // Sales employees
             {
@@ -386,6 +421,8 @@ async function seed() {
                 workLoc: workLocMap['Branch Office'],
                 shift: shiftMap.Morning,
                 doj: '2023-04-01',
+                probationEnd: '2026-05-10',
+                contractEnd: null,
             },
             // HR (Manager + Executive)
             {
@@ -405,6 +442,8 @@ async function seed() {
                 workLoc: workLocMap['Main Office'],
                 shift: shiftMap.General,
                 doj: '2020-06-15',
+                probationEnd: null,
+                contractEnd: null,
             },
             {
                 empId: 'EMP007',
@@ -423,6 +462,8 @@ async function seed() {
                 workLoc: workLocMap['Main Office'],
                 shift: shiftMap.General,
                 doj: '2022-01-10',
+                probationEnd: null,
+                contractEnd: null,
             },
         ]
 
@@ -454,6 +495,8 @@ async function seed() {
                 workLoc: workLocMap['Main Office'],
                 shift: shiftMap.General,
                 doj: '2023-05-01',
+                probationEnd: i % 2 === 0 ? '2026-05-15' : null,
+                contractEnd: deptCode === 'SAL' ? '2026-07-31' : null,
             })
         }
 
@@ -474,10 +517,10 @@ async function seed() {
                     emp.empId,
                     `0300-${emp.empId.slice(-3)}0000`,
                     null,
-                    `0301-${emp.empId.slice(-3)}0000`,
+                    emp.empId === 'EMP004' ? null : `0301-${emp.empId.slice(-3)}0000`,
                     null,
-                    'HBL',
-                    `${emp.empId}00000000`,
+                    emp.empId === 'EMP005' ? null : 'HBL',
+                    emp.empId === 'EMP005' ? null : `${emp.empId}00000000`,
                     `${emp.name} Address, Karachi`,
                     `${emp.name} Address, Karachi`,
                 ]
@@ -486,8 +529,8 @@ async function seed() {
             await client.query(
                 `INSERT INTO job_info
                  (employee_id, department_id, designation_id, employment_type_id, job_status_id,
-                  work_mode_id, work_location_id, shift_id, date_of_joining, date_of_exit)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+                  work_mode_id, work_location_id, shift_id, date_of_joining, date_of_exit, probation_end_date, contract_end_date)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
                 [
                     emp.empId,
                     emp.deptId,
@@ -499,6 +542,8 @@ async function seed() {
                     emp.shift,
                     emp.doj,
                     null,
+                    emp.probationEnd,
+                    emp.contractEnd,
                 ]
             )
 
@@ -522,6 +567,20 @@ async function seed() {
              LIMIT 1`
         )
         const hrManagerUserId = hrManagerUser.rows?.[0]?.id || null
+        const userDirectory = await client.query(
+            `SELECT u.id, u.employee_id, r.role_name
+             FROM users u
+             JOIN roles r ON r.id = u.role_id`
+        )
+        const userIdByEmployee = Object.fromEntries(userDirectory.rows.map((row) => [row.employee_id, row.id]))
+        const userIdsByRole = userDirectory.rows.reduce((acc, row) => {
+            acc[row.role_name] = acc[row.role_name] ?? []
+            acc[row.role_name].push(row.id)
+            return acc
+        }, {})
+        const hrUserIds = userDirectory.rows
+            .filter((row) => row.role_name === 'hr_manager' || row.role_name === 'hr_executive')
+            .map((row) => row.id)
 
         // ==================== EMPLOYEE JOB HISTORY ====================
         // Use HR manager as default manager for most employees for realistic hierarchy.
@@ -660,6 +719,106 @@ async function seed() {
         }
         console.log('Created attendance rows')
 
+        // ==================== CALENDAR EVENTS ====================
+        const calendarEvents = [
+            { type: 'holiday', date: '2026-05-01', title: 'Labour Day', visibility: 'all' },
+            { type: 'birthday', date: '2026-05-12', title: 'Huzaifa Kaleem Birthday', visibility: 'all' },
+            { type: 'anniversary', date: '2026-06-15', title: 'Sadia Malik Work Anniversary', visibility: 'all' },
+            { type: 'hr_event', date: '2026-05-05', title: 'HR Policy Review Meeting', visibility: 'hr' },
+        ]
+        for (const event of calendarEvents) {
+            await client.query(
+                `INSERT INTO calendar_events (type, date, title, visibility, created_by, updated_by)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [event.type, event.date, event.title, event.visibility, hrManagerUserId, hrManagerUserId]
+            )
+        }
+        console.log('Created calendar events')
+
+        // ==================== NOTIFICATIONS ====================
+        const notifications = [
+            {
+                userId: userIdByEmployee.EMP002,
+                role: null,
+                type: 'attendance',
+                message: 'Your attendance for 2026-01-15 is ready for acknowledgement.',
+                isRead: false,
+            },
+            {
+                userId: userIdByEmployee.EMP003,
+                role: null,
+                type: 'leave',
+                message: 'Your annual leave request was approved.',
+                isRead: true,
+            },
+            {
+                userId: null,
+                role: 'employee',
+                type: 'announcement',
+                message: 'Submit May timesheets before Friday 5 PM.',
+                isRead: false,
+            },
+            {
+                userId: null,
+                role: 'hr_manager',
+                type: 'alert',
+                message: 'Two pending employee profile actions need review.',
+                isRead: false,
+            },
+        ]
+        for (const notification of notifications) {
+            const recipientIds =
+                notification.userId
+                    ? [notification.userId]
+                    : userIdsByRole[notification.role] ?? []
+
+            for (const recipientId of recipientIds) {
+                await client.query(
+                    `INSERT INTO notifications (user_id, role, type, message, is_read, created_by)
+                     VALUES ($1, $2, $3, $4, $5, $6)`,
+                    [recipientId, notification.role, notification.type, notification.message, notification.isRead, hrManagerUserId]
+                )
+            }
+        }
+        console.log('Created notifications')
+
+        // ==================== PENDING ACTIONS ====================
+        const pendingActions = [
+            {
+                employeeId: 'EMP004',
+                missingFields: ['emergence_contact_1'],
+                status: 'open',
+            },
+            {
+                employeeId: 'EMP005',
+                missingFields: ['bank_name', 'bank_acc_num'],
+                status: 'open',
+            },
+        ]
+        for (const action of pendingActions) {
+            await client.query(
+                `INSERT INTO pending_actions (employee_id, missing_fields, status, resolved_by, resolved_at)
+                 VALUES ($1, $2::jsonb, $3, $4, $5)`,
+                [action.employeeId, JSON.stringify(action.missingFields), action.status, null, null]
+            )
+        }
+        console.log('Created pending actions')
+
+        // ==================== URGENT ALERTS ====================
+        const urgentAlerts = [
+            { employeeId: 'EMP002', type: 'probation_end', expiryDate: '2026-05-20' },
+            { employeeId: 'EMP004', type: 'contract_end', expiryDate: '2026-06-30' },
+            { employeeId: 'EMP005', type: 'probation_end', expiryDate: '2026-05-10' },
+        ]
+        for (const alert of urgentAlerts) {
+            await client.query(
+                `INSERT INTO urgent_alerts (employee_id, type, expiry_date, status, updated_by)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [alert.employeeId, alert.type, alert.expiryDate, 'open', hrUserIds[0] ?? hrManagerUserId]
+            )
+        }
+        console.log('Created urgent alerts')
+
         await client.query('COMMIT')
 
         console.log('\n=== Full mock seed completed successfully! ===\n')
@@ -682,4 +841,3 @@ async function seed() {
 }
 
 seed()
-

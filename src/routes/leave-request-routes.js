@@ -3,7 +3,12 @@ import { z } from 'zod'
 import { verifyToken } from '../middleware/auth-middleware.js'
 import { requirePermission } from '../middleware/permission-middleware.js'
 import { validate } from '../middleware/validate-middleware.js'
-import { createLeaveRequestSchema, earlyReturnSchema } from '../schemas/leave-request.schema.js'
+import {
+    createLeaveRequestSchema,
+    earlyReturnSchema,
+    leaveBalanceQuerySchema,
+    leaveRequestListQuerySchema,
+} from '../schemas/leave-request.schema.js'
 import {
     getLeaveRequests,
     createLeaveRequest,
@@ -16,8 +21,20 @@ import {
 
 const router = Router()
 
-router.get('/', verifyToken, requirePermission('leave:read'), getLeaveRequests)
-router.get('/balances', verifyToken, requirePermission('leave:read'), getLeaveBalances)
+router.get(
+    '/',
+    verifyToken,
+    requirePermission('leave:read'),
+    validate({ query: leaveRequestListQuerySchema }),
+    getLeaveRequests
+)
+router.get(
+    '/balances',
+    verifyToken,
+    requirePermission('leave:read'),
+    validate({ query: leaveBalanceQuerySchema }),
+    getLeaveBalances
+)
 router.get(
     '/calendar',
     verifyToken,

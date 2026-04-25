@@ -82,25 +82,25 @@ export const batchSaveAttendance = async (req, res, next) => {
 // Get monthly attendance report - statistics per employee
 export const getMonthlyReport = async (req, res, next) => {
     try {
-        let { month, year, department } = req.query
+        let { month, year, department, employee } = req.query
 
         if (!month || !year) {
             return res.status(400).json({ error: 'month and year query params are required.' })
         }
 
-        // Employee role - force department to null (will filter by employee_id in service if needed)
+        // Employee role - force employee filter to self
         if (!req.user.is_super_admin &&
             req.user.role !== 'hr_manager' &&
             req.user.role !== 'hr_executive') {
             department = null
-            // Add employee filter
-            req.query.employee = req.user.employee_id
+            employee = req.user.employee_id
         }
 
         const data = await attendanceService.getMonthlyReport({
             month,
             year,
             department_id: department || null,
+            employee_id: employee || null,
         })
 
         return res.status(200).json(data)

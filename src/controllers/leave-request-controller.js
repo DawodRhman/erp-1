@@ -84,8 +84,8 @@ export const earlyReturnLeaveRequest = async (req, res, next) => {
 // Get leave balances - filtered by role (HR sees all, employee sees own)
 export const getLeaveBalances = async (req, res, next) => {
     try {
-        let { department, location, shift } = req.query
-        let employee_id = null
+        let { department, location, shift, employee } = req.query
+        let employee_id = employee || null
 
         // Employee role - force filter to self
         if (!req.user.is_super_admin &&

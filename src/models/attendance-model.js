@@ -135,7 +135,7 @@ const attendanceModel = {
         }
     },
 
-    getMonthlyReport: async ({ month, year, department_id }) => {
+    getMonthlyReport: async ({ month, year, department_id, employee_id }) => {
         // Optimization: Use date range instead of EXTRACT for SARGability.
         // This allows the database to use an index on the date column.
         const m = parseInt(month)
@@ -152,6 +152,10 @@ const attendanceModel = {
         if (department_id) {
             conditions.push(`ji.department_id = $${idx++}`)
             params.push(department_id)
+        }
+        if (employee_id) {
+            conditions.push(`ei.employee_id = $${idx++}`)
+            params.push(employee_id)
         }
 
         const whereClause = conditions.length > 0
