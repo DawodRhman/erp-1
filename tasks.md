@@ -198,7 +198,7 @@
   - [ ] 19.3 Remove remaining localStorage auth assumptions.
   - [ ] 19.4 Apply enterprise CSS primitives and remove prototype-only visual noise.
   - [ ] 19.5 Add Coming Soon overlays for payroll, payslips, promotions, penalties, documents, and profile update request where backend is absent.
-  - Acceptance: for each audited page — /attendance, /leave, /employees/add, /me/attendance, /me/leave, /me/profile — confirm: (a) no direct backend calls exist (all go through BFF), (b) no localStorage auth reads/writes remain, (c) enterprise CSS primitives applied, (d) Coming Soon overlays present where backend is absent. Audit output is a checklist comment in tasks.md under 19.1 before marking complete.
+  - _Acceptance: for each audited page — /attendance, /leave, /employees/add, /me/attendance, /me/leave, /me/profile — confirm: (a) no direct backend calls exist (all go through BFF), (b) no localStorage auth reads/writes remain, (c) enterprise CSS primitives applied, (d) Coming Soon overlays present where backend is absent. Audit output is a checklist comment in tasks.md under 19.1 before marking complete._
   - _Requirements: REQ-SEC, REQ-UI_
 
 - [ ] 20. Security Automation Updates
