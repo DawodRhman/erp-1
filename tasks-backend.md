@@ -10,7 +10,7 @@ When told "start executing", begin at TASK-B001 and work sequentially. Do not sk
 
 ## GLOBAL CONSTRAINTS (apply to every single task)
 - Runtime: Node.js ES Modules only. `import`/`export` everywhere. No `require()`, no `module.exports`.
-- File naming: kebab-case always. e.g. `leave-requests.routes.js`, `auth.service.js`
+- File naming: kebab-case always. e.g. `calendar-event-routes.js`, `calendar-event-services.js`
 - Validation: Every POST/PUT/PATCH route validates request body with a Zod schema before any DB call.
 - No delete: No `DELETE` HTTP method. No `.delete()` or `DROP` in any service or migration UP section.
 - HTTP codes: `200` success, `201` created, `400` malformed, `401` unauthenticated, `403` forbidden, `404` not found, `409` conflict/state violation, `422` Zod validation failure, `500` unhandled.
