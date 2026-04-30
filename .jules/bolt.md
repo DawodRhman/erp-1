@@ -1,3 +1,0 @@
-## 2025-05-14 - SARGability Anti-pattern in Reports
-**Learning:** The codebase frequently uses `EXTRACT(MONTH FROM ...)` and `EXTRACT(YEAR FROM ...)` in `WHERE` clauses for monthly reports (e.g., in `attendance-model.js` and `leave-request-model.js`). This makes queries non-SARGable and prevents PostgreSQL from using existing indexes on date columns (like `idx_attendance_date`).
-**Action:** Always prefer date range filters (`date >= $1 AND date < $2`) over SQL date functions when filtering by month/year on indexed columns. Calculate the range boundaries in the service or model layer before execution.
