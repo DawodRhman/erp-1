@@ -30,7 +30,7 @@ process.stderr.on('error', (e) => {
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const ROOT = path.resolve(__dirname, '..')
-const SERVER_FILE = path.join(ROOT, 'server.js')
+const APP_FILE = path.join(ROOT, 'src', 'app.js')
 
 const C = {
   reset: '\x1b[0m',
@@ -61,7 +61,7 @@ function toRelApiPath(fullApiPath) {
 }
 
 async function loadMountedRouters() {
-  const text = await fs.readFile(SERVER_FILE, 'utf8')
+  const text = await fs.readFile(APP_FILE, 'utf8')
 
   const imports = new Map()
   const importRe = /import\s+(\w+)\s+from\s+['"](.+?)['"]\s*;/g
@@ -76,13 +76,13 @@ async function loadMountedRouters() {
     const varName = m[2]
     const spec = imports.get(varName)
     if (!spec) continue
-    if (!spec.includes('/src/routes/')) continue
+    if (!spec.startsWith('./')) continue
     mounts.push({ prefix, varName, spec })
   }
 
   const routers = []
   for (const mount of mounts) {
-    const abs = path.resolve(ROOT, mount.spec)
+    const abs = path.resolve(path.dirname(APP_FILE), mount.spec)
     const mod = await import(pathToFileURL(abs).href)
     if (!mod?.default) continue
     routers.push({
@@ -98,6 +98,7 @@ async function loadMountedRouters() {
 function listRoutes(router, prefix, routerFile) {
   const out = []
   const stack = router?.stack ?? []
+  const sharedMiddleware = stack.filter((layer) => !layer?.route)
 
   for (const layer of stack) {
     if (!layer?.route) continue
@@ -115,7 +116,7 @@ function listRoutes(router, prefix, routerFile) {
         fullApiPath: full,
         templateRelPath: rel,
         routerFile,
-        middlewareStack: layer.route.stack ?? [],
+        middlewareStack: [...sharedMiddleware, ...(layer.route.stack ?? [])],
       })
     }
   }
@@ -125,6 +126,26 @@ function listRoutes(router, prefix, routerFile) {
 function isPublicRoute({ method, templateRelPath }) {
   // Auth login is intentionally public.
   return method === 'POST' && templateRelPath === '/auth/login'
+}
+
+function allowsAuthOnlyRoute({ method, templateRelPath }) {
+  // Authenticated-only endpoints that intentionally skip explicit permission middleware.
+  const authOnly = new Set([
+    'POST /auth/logout',
+    'GET /auth/session',
+    'POST /auth/change-password',
+    'PATCH /attendance/:id/ack',
+    'GET /leave-requests/mine',
+    'POST /leave-requests',
+    'GET /leave-requests/balances/mine',
+    'GET /dashboard/me',
+    'GET /calendar-events',
+    'GET /notifications',
+    'PATCH /notifications/:id/read',
+    'PATCH /penalties/:id/ack',
+  ])
+
+  return authOnly.has(`${method} ${templateRelPath}`)
 }
 
 function auditRoute(rt) {
@@ -148,7 +169,7 @@ function auditRoute(rt) {
 
   if (!isPublicRoute(rt)) {
     if (verifyIdx === -1) failures.push('missing verifyToken')
-    if (permIdx === -1) failures.push('missing permission middleware')
+    if (permIdx === -1 && !allowsAuthOnlyRoute(rt)) failures.push('missing permission middleware')
     if (verifyIdx !== -1 && verifyIdx !== 0) failures.push('verifyToken is not first middleware')
     if (verifyIdx !== -1 && permIdx !== -1 && permIdx < verifyIdx) failures.push('permission middleware is before verifyToken')
 
@@ -166,7 +187,7 @@ function auditRoute(rt) {
 
 async function main() {
   console.log(`${C.bold}${C.cyan}━━ Route Middleware Audit${C.reset}`)
-  info(`server=${SERVER_FILE}`)
+  info(`app=${APP_FILE}`)
 
   const mounted = await loadMountedRouters()
   info(`mounted routers=${mounted.length}`)

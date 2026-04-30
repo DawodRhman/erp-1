@@ -2,7 +2,14 @@ import jwt from 'jsonwebtoken';
 import { sendError } from '../utils/respond.js';
 
 export function verifyToken(req, res, next) {
-  const token = req.cookies?.ems_jwt;
+  // Check both cookie and Authorization header
+  let token = req.cookies?.ems_jwt;
+  if (!token && req.headers.authorization) {
+    const authHeader = req.headers.authorization;
+    if (authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+  }
 
   if (!token) {
     return sendError(res, 'UNAUTHORIZED', 'Authentication required.', 401);
@@ -36,3 +43,5 @@ export function verifyToken(req, res, next) {
     return sendError(res, 'UNAUTHORIZED', 'Invalid or expired token.', 401);
   }
 }
+
+verifyToken.__auth = true;

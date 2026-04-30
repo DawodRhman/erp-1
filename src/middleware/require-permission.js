@@ -2,6 +2,22 @@ import pool from '../config/db.js';
 import { sendError } from '../utils/respond.js';
 
 const rolePermissionCache = new Map();
+const roleNameCache = new Map();
+
+async function getRoleName(roleId) {
+  if (roleNameCache.has(roleId)) {
+    return roleNameCache.get(roleId);
+  }
+
+  const result = await pool.query(
+    `SELECT role_name FROM public.roles WHERE id = $1 LIMIT 1`,
+    [roleId]
+  );
+
+  const roleName = result.rows[0]?.role_name || null;
+  roleNameCache.set(roleId, roleName);
+  return roleName;
+}
 
 async function getPermissionsForRole(roleId) {
   if (rolePermissionCache.has(roleId)) {
@@ -24,12 +40,17 @@ async function getPermissionsForRole(roleId) {
 }
 
 export function requirePermission(permissionKey) {
-  return async (req, res, next) => {
+  const middleware = async (req, res, next) => {
     try {
       const roleId = req.user?.role_id;
 
       if (!roleId) {
         return sendError(res, 'UNAUTHORIZED', 'Authentication required.', 401);
+      }
+
+      const roleName = await getRoleName(roleId);
+      if (roleName === 'super_admin') {
+        return next();
       }
 
       const permissions = await getPermissionsForRole(roleId);
@@ -42,4 +63,7 @@ export function requirePermission(permissionKey) {
       return next(error);
     }
   };
+
+  middleware.__perm = { mode: 'all', keys: [permissionKey] };
+  return middleware;
 }

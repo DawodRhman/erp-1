@@ -53,6 +53,50 @@ export async function getLeaveBalances(employeeId) {
   return result.rows;
 }
 
+export async function getLeaveRequests({ status, employee_id, department_id } = {}) {
+  const params = [];
+  const filters = [];
+
+  if (status) {
+    params.push(status);
+    filters.push(`lr.status = $${params.length}`);
+  }
+
+  if (employee_id) {
+    params.push(employee_id);
+    filters.push(`lr.employee_id = $${params.length}`);
+  }
+
+  if (department_id) {
+    params.push(department_id);
+    filters.push(`ji.department_id = $${params.length}`);
+  }
+
+  const result = await pool.query(
+    `
+      SELECT
+        lr.*,
+        ei.name AS employee_name,
+        lt.name AS leave_type,
+        d.department_name
+      FROM public.leave_requests lr
+      JOIN public.employee_info ei ON ei.employee_id = lr.employee_id
+      JOIN public.job_info ji ON ji.employee_id = lr.employee_id
+      LEFT JOIN public.departments d ON d.id = ji.department_id
+      JOIN public.leave_types lt ON lt.id = lr.leave_type_id
+      ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}
+      ORDER BY lr.created_at DESC
+    `,
+    params
+  );
+
+  return result.rows;
+}
+
+export async function getMyLeaveRequests(employeeId) {
+  return getLeaveRequests({ employee_id: employeeId });
+}
+
 export async function getLeaveBalancesAll({ department_id, location_id, shift_id, year }) {
   const selectedYear = year || new Date().getFullYear();
   const params = [selectedYear];

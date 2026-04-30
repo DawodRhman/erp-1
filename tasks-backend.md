@@ -25,6 +25,7 @@ When told "start executing", begin at TASK-B001 and work sequentially. Do not sk
 ## PHASE 1 — MIGRATIONS
 
 ### TASK-B001 — Migration 009: Users Auth Fields
+- [x] IMPLEMENTED
 **Refs:** Architecture §2 (Gap Migrations), Requirements V3 §Module 4  
 **Files to create:**
 - `migrations/1712620809000_users_auth_fields.sql`
@@ -46,6 +47,7 @@ Run this migration against the DB after creating the file. Confirm the columns e
 ---
 
 ### TASK-B002 — Migration 010: Departments `is_active` + `updated_at`
+- [x] IMPLEMENTED
 **Refs:** Architecture §2, Requirements V3 §Module 5 (Hard Rules: `is_active` universal)  
 **Files to create:**
 - `migrations/1712620810000_departments_is_active.sql`
@@ -72,6 +74,7 @@ Run migration. Confirm columns exist.
 ---
 
 ### TASK-B003 — Migration 011: Attendance Branch-Lock State Machine
+- [x] IMPLEMENTED
 **Refs:** Architecture §2, Requirements V3 §Module 1.2, 1.6  
 **Files to create:**
 - `migrations/1712620811000_attendance_branch_lock.sql`
@@ -107,6 +110,7 @@ Run migration. Confirm columns exist on `attendance`.
 ---
 
 ### TASK-B004 — Migration 012: Penalty Engine Tables
+- [x] IMPLEMENTED
 **Refs:** Architecture §2, Requirements V3 §Module 2.3  
 **Files to create:**
 - `migrations/1712620812000_penalty_engine.sql`
@@ -168,6 +172,7 @@ Run migration. Confirm both tables exist.
 ---
 
 ### TASK-B005 — Migration 013: Leave Capacity Config
+- [x] IMPLEMENTED
 **Refs:** Architecture §2, Requirements V3 §Module 5.4  
 **Files to create:**
 - `migrations/1712620813000_leave_capacity_config.sql`
@@ -200,6 +205,7 @@ Run migration.
 ---
 
 ### TASK-B006 — Migration 014: Company Directory
+- [x] IMPLEMENTED
 **Refs:** Architecture §2, Requirements V3 §Module 8  
 **Files to create:**
 - `migrations/1712620814000_directory_entries.sql`
@@ -242,6 +248,7 @@ Run migration.
 ---
 
 ### TASK-B007 — Migration 015: Activity Logs
+- [x] IMPLEMENTED
 **Refs:** Architecture §2, Requirements V3 §Module 9.2  
 **Files to create:**
 - `migrations/1712620815000_activity_logs.sql`
@@ -272,6 +279,7 @@ Run migration. Note: no `updated_at` — this table is append-only, rows are nev
 ---
 
 ### TASK-B008 — Seed New Permission Keys
+- [x] IMPLEMENTED
 **Refs:** Architecture §2 (Permissions Seed), Requirements V3 §Module 5  
 **Files to create:**
 - `scripts/seed-permissions.js`
@@ -302,6 +310,7 @@ Script must log each key inserted vs skipped. Use `src/config/db.js` pool.
 ## PHASE 2 — CORE INFRASTRUCTURE
 
 ### TASK-B009 — DB Config Module
+- [x] IMPLEMENTED
 **Refs:** Architecture §3  
 **Files to create:**
 - `src/config/db.js`
@@ -312,6 +321,7 @@ Export a single `pg` Pool instance. Read `DATABASE_URL` from `process.env`. Set 
 ---
 
 ### TASK-B010 — Error Utility
+- [x] IMPLEMENTED
 **Refs:** Architecture §6  
 **Files to create:**
 - `src/utils/errors.js`
@@ -324,6 +334,7 @@ Export a single `pg` Pool instance. Read `DATABASE_URL` from `process.env`. Set 
 ---
 
 ### TASK-B011 — Response Helper
+- [x] IMPLEMENTED
 **Refs:** Architecture §6  
 **Files to create:**
 - `src/utils/respond.js`
@@ -336,6 +347,7 @@ Two named exports:
 ---
 
 ### TASK-B012 — Auth Middleware
+- [x] IMPLEMENTED
 **Refs:** Architecture §5, Requirements V3 §Module 4  
 **Files to create:**
 - `src/middleware/auth.js`
@@ -351,6 +363,7 @@ Two named exports:
 ---
 
 ### TASK-B013 — Permission Middleware
+- [x] IMPLEMENTED
 **Refs:** Architecture §7, Requirements V3 §Hard Rules  
 **Files to create:**
 - `src/middleware/require-permission.js`
@@ -361,6 +374,7 @@ Two named exports:
 ---
 
 ### TASK-B014 — Zod Validation Middleware
+- [x] IMPLEMENTED
 **Refs:** Architecture §6  
 **Files to create:**
 - `src/middleware/validate.js`
@@ -371,6 +385,7 @@ Two named exports:
 ---
 
 ### TASK-B015 — Paginate Utility
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/utils/paginate.js`
 
@@ -380,6 +395,7 @@ Two named exports:
 ---
 
 ### TASK-B016 — Express App Entry Point
+- [x] IMPLEMENTED
 **Refs:** Architecture §3  
 **Files to create:**
 - `src/app.js`
@@ -395,6 +411,7 @@ Two named exports:
 ## PHASE 3 — AUTH MODULE
 
 ### TASK-B017 — Auth Service
+- [x] IMPLEMENTED
 **Refs:** Requirements V3 §Module 3.2, 4.1  
 **Files to create:**
 - `src/modules/auth/auth.service.js`
@@ -408,6 +425,7 @@ Two named exports:
 ---
 
 ### TASK-B018 — Auth Controller + Routes
+- [x] IMPLEMENTED
 **Refs:** Requirements V3 §Module 3, 4  
 **Files to create:**
 - `src/modules/auth/auth.controller.js`
@@ -438,6 +456,7 @@ Two named exports:
 ## PHASE 4 — EMPLOYEE MODULE
 
 ### TASK-B019 — Employee Service: Create
+- [x] IMPLEMENTED
 **Refs:** Requirements V3 §Module 3.1  
 **Files to create:**
 - `src/modules/employees/employees.service.js` (start file, add more methods in later tasks)
@@ -458,6 +477,7 @@ Two named exports:
 ---
 
 ### TASK-B020 — Employee Service: Read
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/employees/employees.service.js`
 
@@ -468,6 +488,7 @@ Two named exports:
 ---
 
 ### TASK-B021 — Employee Service: Update
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/employees/employees.service.js`
 
@@ -480,6 +501,7 @@ Two named exports:
 ---
 
 ### TASK-B022 — Employee Zod Schemas
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/employees/employees.schema.js`
 
@@ -492,6 +514,7 @@ Two named exports:
 ---
 
 ### TASK-B023 — Employee Controller + Routes
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/employees/employees.controller.js`
 - `src/modules/employees/employees.routes.js`
@@ -513,6 +536,7 @@ Two named exports:
 ## PHASE 5 — CONFIGURATION MODULE
 
 ### TASK-B024 — Config Service: Departments
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/config/config.service.js`
 
@@ -526,6 +550,7 @@ Two named exports:
 ---
 
 ### TASK-B025 — Config Service: All Other Config Tables
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/config/config.service.js`
 
@@ -546,6 +571,7 @@ For all `getAll` methods: HR callers receive only `is_active = true`. Super Admi
 ---
 
 ### TASK-B026 — Config Controller + Routes
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/config/config.controller.js`
 - `src/modules/config/config.routes.js`
@@ -563,6 +589,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ## PHASE 6 — ATTENDANCE MODULE
 
 ### TASK-B027 — Attendance Service: Get Sheet
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/attendance/attendance.service.js`
 
@@ -578,6 +605,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ---
 
 ### TASK-B028 — Attendance Service: Batch Save
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/attendance/attendance.service.js`
 
@@ -592,6 +620,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ---
 
 ### TASK-B029 — Attendance Service: Employee Acknowledge
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/attendance/attendance.service.js`
 
@@ -604,6 +633,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ---
 
 ### TASK-B030 — Attendance Service: Submit to Head Office
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/attendance/attendance.service.js`
 
@@ -616,6 +646,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ---
 
 ### TASK-B031 — Attendance Service: Unlock Flow
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/attendance/attendance.service.js`
 
@@ -626,6 +657,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ---
 
 ### TASK-B032 — Attendance Service: Monthly Report
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/attendance/attendance.service.js`
 
@@ -638,6 +670,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ---
 
 ### TASK-B033 — Attendance Controller + Routes
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/attendance/attendance.controller.js`
 - `src/modules/attendance/attendance.routes.js`
@@ -659,6 +692,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ## PHASE 7 — LEAVE MODULE
 
 ### TASK-B034 — Leave Service: Balances
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/leave/leave.service.js`
 
@@ -670,6 +704,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ---
 
 ### TASK-B035 — Leave Service: Capacity Check
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/leave/leave.service.js`
 
@@ -686,6 +721,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ---
 
 ### TASK-B036 — Leave Service: Submit Request
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/leave/leave.service.js`
 
@@ -700,6 +736,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ---
 
 ### TASK-B037 — Leave Service: Approve / Reject
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/leave/leave.service.js`
 
@@ -715,6 +752,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ---
 
 ### TASK-B038 — Leave Service: Early Return
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/leave/leave.service.js`
 
@@ -729,6 +767,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ---
 
 ### TASK-B039 — Leave Service: Calendar Data
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/leave/leave.service.js`
 
@@ -740,6 +779,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ---
 
 ### TASK-B040 — Leave Controller + Routes
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/leave/leave.controller.js`
 - `src/modules/leave/leave.routes.js`
@@ -763,6 +803,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ## PHASE 8 — NOTIFICATIONS MODULE
 
 ### TASK-B041 — Notifications Service
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/notifications/notifications.service.js`
 
@@ -774,6 +815,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ---
 
 ### TASK-B042 — Notifications Controller + Routes
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/notifications/notifications.controller.js`
 - `src/modules/notifications/notifications.routes.js`
@@ -791,6 +833,7 @@ Where `:entity` maps to: `departments`, `designations`, `employment-types`, `job
 ## PHASE 9 — CALENDAR EVENTS MODULE
 
 ### TASK-B043 — Calendar Events Service + Routes
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/calendar-events/calendar-events.service.js`
 - `src/modules/calendar-events/calendar-events.controller.js`
@@ -808,6 +851,7 @@ Zod schema for body validation. `visibility` must be `'all' | 'hr' | 'employee'`
 ## PHASE 10 — DASHBOARD MODULE
 
 ### TASK-B044 — Dashboard Service: HR Metrics
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/dashboard/dashboard.service.js`
 
@@ -838,6 +882,7 @@ Zod schema for body validation. `visibility` must be `'all' | 'hr' | 'employee'`
 ---
 
 ### TASK-B045 — Dashboard Service: Employee Self Metrics
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/dashboard/dashboard.service.js`
 
@@ -858,6 +903,7 @@ Returns:
 ---
 
 ### TASK-B046 — Dashboard Controller + Routes
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/dashboard/dashboard.controller.js`
 - `src/modules/dashboard/dashboard.routes.js`
@@ -874,6 +920,7 @@ Returns:
 ## PHASE 11 — PENALTY MODULE
 
 ### TASK-B047 — Penalty Service: Rules CRUD
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/penalties/penalties.service.js`
 
@@ -885,6 +932,7 @@ Returns:
 ---
 
 ### TASK-B048 — Penalty Service: Propose
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/penalties/penalties.service.js`
 
@@ -897,6 +945,7 @@ Returns:
 ---
 
 ### TASK-B049 — Penalty Service: Approve / Reject
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/penalties/penalties.service.js`
 
@@ -913,6 +962,7 @@ Returns:
 ---
 
 ### TASK-B050 — Penalty Service: Employee Acknowledge
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/modules/penalties/penalties.service.js`
 
@@ -925,6 +975,7 @@ Returns:
 ---
 
 ### TASK-B051 — Penalty Controller + Routes
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/penalties/penalties.controller.js`
 - `src/modules/penalties/penalties.routes.js`
@@ -948,6 +999,7 @@ Returns:
 ## PHASE 12 — DIRECTORY MODULE
 
 ### TASK-B052 — Directory Service + Routes
+- [x] IMPLEMENTED
 **Files to create:**
 - `src/modules/directory/directory.service.js`
 - `src/modules/directory/directory.controller.js`
@@ -975,6 +1027,7 @@ Returns:
 ## PHASE 13 — PENDING ACTIONS & URGENT ALERTS
 
 ### TASK-B053 — Pending Actions + Urgent Alerts Routes
+- [x] IMPLEMENTED
 **Refs:** Architecture §1.3 (Support Tables), Requirements V3 §7.1  
 These tables exist. Build read-only endpoints that compute on the fly (don't persist snapshots for v1).
 
@@ -989,6 +1042,7 @@ These tables exist. Build read-only endpoints that compute on the fly (don't per
 ## PHASE 14 — FINAL WIRING
 
 ### TASK-B054 — Mount All Routes in app.js
+- [x] IMPLEMENTED
 **Files to modify:**
 - `src/app.js`
 
@@ -1010,6 +1064,7 @@ import directoryRoutes from './modules/directory/directory.routes.js'
 ---
 
 ### TASK-B055 — API Security Check Script
+- [x] IMPLEMENTED
 **Files to create:**
 - `scripts/api-security-check.mjs`
 
@@ -1025,6 +1080,7 @@ Logs PASS/FAIL per route. Use `node-fetch` or built-in `fetch`.
 ---
 
 ### TASK-B056 — Environment Variable Documentation
+- [x] IMPLEMENTED
 **Files to create:**
 - `.env.example`
 
@@ -1041,6 +1097,7 @@ PORT=5000
 ---
 
 ### TASK-B057 — Final Backend Integration Test
+- [x] IMPLEMENTED
 **Files to create:**
 - `scripts/integration-test.mjs`
 

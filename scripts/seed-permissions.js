@@ -16,6 +16,7 @@ const permissionKeys = [
   'leave_capacity:read',
   'directory:read',
   'directory:write',
+  'config:read',
   'config:write',
   'attendance:submit_ho',
   'attendance:unlock',

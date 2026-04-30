@@ -1,7 +1,7 @@
 import { sendError } from '../utils/respond.js';
 
 export function validate(zodSchema) {
-  return (req, res, next) => {
+  const middleware = (req, res, next) => {
     const result = zodSchema.safeParse(req.body);
 
     if (!result.success) {
@@ -18,4 +18,8 @@ export function validate(zodSchema) {
     req.body = result.data;
     return next();
   };
+
+  middleware.__validate = true;
+  middleware.__schema = zodSchema;
+  return middleware;
 }

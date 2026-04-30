@@ -17,6 +17,15 @@ async function userHasPermissionByUserId(userId, permissionKey) {
   return result.rowCount > 0;
 }
 
+async function isSuperAdmin(roleId) {
+  const result = await pool.query(
+    `SELECT role_name FROM public.roles WHERE id = $1 LIMIT 1`,
+    [roleId]
+  );
+
+  return result.rows[0]?.role_name === 'super_admin';
+}
+
 function computeLateMinutes(checkIn, shiftStart, lateAfterMinutes) {
   if (!checkIn || !shiftStart) {
     return 0;
@@ -33,8 +42,10 @@ function computeLateMinutes(checkIn, shiftStart, lateAfterMinutes) {
   return Math.floor((checkInDate.getTime() - lateThreshold.getTime()) / 60000);
 }
 
-export async function getAttendanceSheet(date, locationId, callerEmployeeId, isSuperAdmin) {
-  if (!isSuperAdmin) {
+export async function getAttendanceSheet(date, locationId, callerEmployeeId, roleId) {
+  const superAdmin = await isSuperAdmin(roleId);
+
+  if (!superAdmin) {
     const callerLocation = await pool.query(
       `SELECT work_location_id FROM public.job_info WHERE employee_id = $1 LIMIT 1`,
       [callerEmployeeId]

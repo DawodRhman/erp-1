@@ -9,7 +9,9 @@
       "Bash(curl *)",
       "Bash(curl -s http://localhost:3000/api/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"email\":\"zaidbinasif468@gmail.com\",\"password\":\"zaidkhan123\"}')",
       "Read(//tmp/**)",
-      "Bash(npm.cmd run *)"
+      "Bash(npm.cmd run *)",
+      "mcp__ide__executeCode",
+      "Bash(taskkill /F /IM node.exe)"
     ]
   }
 }

@@ -7,7 +7,7 @@ export async function getAttendanceSheet(req, res, next) {
       req.query.date,
       req.query.location_id,
       req.user.employee_id,
-      req.user.is_super_admin === true
+      req.user.role_id
     );
     return sendSuccess(res, result, 200);
   } catch (error) {

@@ -31,6 +31,13 @@ import directoryModuleRoutes from './modules/directory/directory.routes.js';
 
 const app = express();
 
+const debugMiddleware = (req, res, next) => {
+    console.log('[DEBUG] Request:', req.method, req.url, 'cookies:', Object.keys(req.cookies || {}), 'auth:', req.headers.authorization ? 'present' : 'none');
+    next();
+};
+
+app.use(debugMiddleware);
+
 app.use(
 	cors({
 		origin: process.env.CLIENT_URL || 'http://localhost:3000',

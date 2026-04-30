@@ -141,6 +141,16 @@ export async function approvePenalty(penaltyId, reviewedByUserId) {
     throw new AppError(404, 'NOT_FOUND', 'Penalty not found.');
   }
 
+  await pool.query(
+    `
+      INSERT INTO public.notifications (user_id, role, type, message, created_by)
+      SELECT u.id, NULL, 'penalty_approved', $2, $3
+      FROM public.users u
+      WHERE u.employee_id = $1
+    `,
+    [result.rows[0].employee_id, 'Your penalty has been approved.', reviewedByUserId]
+  );
+
   return result.rows[0];
 }
 
@@ -161,6 +171,16 @@ export async function rejectPenalty(penaltyId, reviewedByUserId, reviewNote) {
 
   if (result.rowCount === 0) {
     throw new AppError(404, 'NOT_FOUND', 'Penalty not found.');
+  }
+
+  if (result.rows[0].proposed_by) {
+    await pool.query(
+      `
+        INSERT INTO public.notifications (user_id, role, type, message, created_by)
+        VALUES ($1, NULL, 'penalty_rejected', $2, $3)
+      `,
+      [result.rows[0].proposed_by, 'A proposed penalty was rejected.', reviewedByUserId]
+    );
   }
 
   return result.rows[0];

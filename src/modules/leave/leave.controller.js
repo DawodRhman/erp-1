@@ -3,11 +3,10 @@ import * as leaveService from './leave.service.js';
 
 export async function getLeaveRequests(req, res, next) {
   try {
-    const result = await leaveService.getLeaveCalendar({
-      month: Number(req.query.month || new Date().getMonth() + 1),
-      year: Number(req.query.year || new Date().getFullYear()),
+    const result = await leaveService.getLeaveRequests({
+      status: req.query.status,
+      employee_id: req.query.employee_id,
       department_id: req.query.department_id,
-      branch_id: req.query.branch_id,
     });
     return sendSuccess(res, result, 200);
   } catch (error) {
@@ -17,12 +16,8 @@ export async function getLeaveRequests(req, res, next) {
 
 export async function getMyLeaveRequests(req, res, next) {
   try {
-    const result = await leaveService.getLeaveCalendar({
-      month: Number(req.query.month || new Date().getMonth() + 1),
-      year: Number(req.query.year || new Date().getFullYear()),
-    });
-    const mine = result.filter((row) => row.employee_id === req.user.employee_id);
-    return sendSuccess(res, mine, 200);
+    const result = await leaveService.getMyLeaveRequests(req.user.employee_id);
+    return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
   }

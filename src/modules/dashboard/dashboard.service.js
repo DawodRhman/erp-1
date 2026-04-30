@@ -139,10 +139,10 @@ export async function getHRMetrics(range = '6m') {
           CASE
             WHEN ji.probation_end_date IS NOT NULL
               AND ji.probation_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 day'
-              THEN 'probation_end'
+              THEN 'probation'
             WHEN ji.contract_end_date IS NOT NULL
               AND ji.contract_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 day'
-              THEN 'contract_end'
+              THEN 'contract'
           END AS type,
           LEAST(
             COALESCE(ji.probation_end_date, '9999-12-31'::date),
@@ -177,7 +177,9 @@ export async function getHRMetrics(range = '6m') {
     penalties_this_month: { coming_soon: true, count: 0, amount_pkr: 0 },
     attendance_trend: attendanceTrend.rows,
     headcount_trend: headcountTrend.rows,
-    upcoming_birthdays: upcomingBirthdays.rows.filter((row) => row.days_until !== null),
+    upcoming_birthdays: upcomingBirthdays.rows.filter(
+      (row) => row.days_until !== null && row.days_until <= 30
+    ),
     pending_actions: pendingActions.rows.map((row) => ({
       employee_id: row.employee_id,
       name: row.name,
@@ -196,7 +198,14 @@ export async function getEmployeeSelfMetrics(employeeId) {
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
 
-  const [attendanceSummary, leaveWallet, activePenalties, upcomingBirthdays] = await Promise.all([
+  const [
+    attendanceSummary,
+    leaveBalances,
+    activePenalties,
+    upcomingBirthdays,
+    recentAttendance,
+    leaveRequests,
+  ] = await Promise.all([
     pool.query(
       `
         SELECT
@@ -284,9 +293,43 @@ export async function getEmployeeSelfMetrics(employeeId) {
         LIMIT 10
       `
     ),
+    pool.query(
+      `
+        SELECT
+          date,
+          status,
+          check_in,
+          check_out
+        FROM public.attendance
+        WHERE employee_id = $1
+        ORDER BY date DESC
+        LIMIT 6
+      `,
+      [employeeId]
+    ),
+    pool.query(
+      `
+        SELECT
+          lr.id,
+          lt.name AS leave_type,
+          lr.start_date,
+          lr.end_date,
+          lr.status
+        FROM public.leave_requests lr
+        JOIN public.leave_types lt ON lt.id = lr.leave_type_id
+        WHERE lr.employee_id = $1
+        ORDER BY lr.created_at DESC
+        LIMIT 20
+      `,
+      [employeeId]
+    ),
   ]);
 
   const monthLabel = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+  const upcomingBirthdayRows = upcomingBirthdays.rows.filter(
+    (row) => row.days_until !== null && row.days_until <= 30
+  );
 
   return {
     attendance_summary: {
@@ -296,9 +339,12 @@ export async function getEmployeeSelfMetrics(employeeId) {
       half_days: attendanceSummary.rows[0]?.half_days || 0,
       month: monthLabel,
     },
-    leave_wallet: leaveWallet.rows,
+    leave_balances: leaveBalances.rows,
+    leave_wallet: leaveBalances.rows,
     active_penalties: activePenalties.rows,
-    upcoming_birthdays: upcomingBirthdays.rows,
+    recent_attendance: recentAttendance.rows,
+    leave_requests: leaveRequests.rows,
+    upcoming_birthdays: upcomingBirthdayRows,
   };
 }
 
