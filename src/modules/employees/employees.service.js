@@ -48,7 +48,7 @@ export async function createEmployee(data, createdByUserId) {
           date_of_birth
         )
         VALUES ($1, $2, $3, $4, $5)
-        RETURNING *
+        RETURNING employee_id, name, father_name, cnic, date_of_birth
       `,
       [
         employeeId,
@@ -322,7 +322,14 @@ export async function updatePersonalInfo(employeeId, data) {
   }
 
   if (updates.length === 0) {
-    return getEmployeeById(employeeId);
+    const safe = await getEmployeeById(employeeId);
+    return {
+      employee_id: safe.employee_id,
+      name: safe.name,
+      father_name: safe.father_name,
+      cnic: safe.cnic,
+      date_of_birth: safe.date_of_birth,
+    };
   }
 
   params.push(employeeId);
@@ -332,7 +339,7 @@ export async function updatePersonalInfo(employeeId, data) {
       UPDATE public.employee_info
       SET ${updates.join(', ')}, updated_at = now()
       WHERE employee_id = $${params.length}
-      RETURNING *
+      RETURNING name, father_name, cnic, date_of_birth, employee_id
     `,
     params
   );
@@ -341,6 +348,7 @@ export async function updatePersonalInfo(employeeId, data) {
     throw new AppError(404, 'NOT_FOUND', 'Employee not found.');
   }
 
+  console.log('DEBUG updatePersonalInfo returning:', result.rows[0]);
   return result.rows[0];
 }
 
@@ -419,7 +427,17 @@ export async function updateJobInfo(employeeId, data) {
 
     if (updates.length === 0) {
       await client.query('COMMIT');
-      return current;
+      return {
+        employee_id: current.employee_id,
+        department_id: current.department_id,
+        designation_id: current.designation_id,
+        employment_type_id: current.employment_type_id,
+        job_status_id: current.job_status_id,
+        work_mode_id: current.work_mode_id,
+        work_location_id: current.work_location_id,
+        shift_id: current.shift_id,
+        date_of_joining: current.date_of_joining,
+      };
     }
 
     params.push(employeeId);
@@ -428,7 +446,8 @@ export async function updateJobInfo(employeeId, data) {
         UPDATE public.job_info
         SET ${updates.join(', ')}, updated_at = now()
         WHERE employee_id = $${params.length}
-        RETURNING *
+        RETURNING employee_id, department_id, designation_id, employment_type_id, job_status_id,
+                  work_mode_id, work_location_id, shift_id, date_of_joining
       `,
       params
     );
@@ -479,7 +498,8 @@ export async function updateExtraInfo(employeeId, data) {
         perment_address = EXCLUDED.perment_address,
         postal_address = EXCLUDED.postal_address,
         updated_at = now()
-      RETURNING *
+      RETURNING employee_id, contact_1, contact_2, emergence_contact_1, emergence_contact_2,
+                bank_name, bank_acc_num, perment_address, postal_address
     `,
     [
       employeeId,

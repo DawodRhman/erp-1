@@ -264,7 +264,7 @@ export async function acknowledgeAttendance(attendanceId, employeeId) {
       SET ack = true,
           updated_at = now()
       WHERE id = $1
-      RETURNING *
+      RETURNING id, employee_id, shift_id, date, check_in, check_out, status, notes, marked_by, state, ack
     `,
     [attendanceId]
   );

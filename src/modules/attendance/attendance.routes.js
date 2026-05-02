@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { verifyToken } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/require-permission.js';
-import { validate } from '../../middleware/validate.js';
+import { validate, validateParams } from '../../middleware/validate.js';
 import {
   getAttendanceSheet,
   saveAttendanceSheet,
@@ -14,6 +14,10 @@ import {
 } from './attendance.controller.js';
 
 const router = Router();
+
+const uuidParamSchema = z.object({
+  id: z.string().uuid(),
+});
 
 const saveSheetSchema = z.object({
   date: z.string().min(8),
@@ -64,7 +68,7 @@ router.post(
   validate(approveUnlockSchema),
   approveUnlock
 );
-router.patch('/:id/ack', acknowledgeAttendance);
+router.patch('/:id/ack', validateParams(uuidParamSchema), acknowledgeAttendance);
 router.get('/report', requirePermission('attendance:read'), getMonthlyReport);
 
 export default router;

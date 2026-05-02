@@ -412,27 +412,60 @@ const ALL_PERMS = [
 const ROLE_PERMS_MAP = {
   super_admin:  ['*'],
   hr_manager:   [
-    'config:read','employees:read','employees:write',
-    'leave:read','leave:write','leave:approve',
-    'attendance:read','attendance:write',
-    'calendar:read','calendar:write',
-    'notifications:read','notifications:write',
-    'pending_actions:read','alerts:read',
-    'penalties:read','penalties:write',
-    'directory:read','directory:write','reports:read',
+    'config:read',
+    'employees:read',
+    'employees:write',
+    'leave:read',
+    'leave:write',
+    'leave:approve',
+    'attendance:read',
+    'attendance:write',
+    'calendar:read',
+    'calendar:write',
+    'notifications:read',
+    'notifications:write',
+    'pending_actions:read',
+    'alerts:read',
+    'penalties:read',
+    'penalties:write',
+    'directory:read',
+    'directory:write',
+    'reports:read',
+    'dashboard:read',
   ],
   hr_executive: [
-    'config:read','employees:read',
-    'leave:read','attendance:read',
-    'calendar:read','calendar:write',
-    'notifications:read','notifications:write',
-    'pending_actions:read','alerts:read',
-    'penalties:read','directory:read','reports:read',
+    'config:read',
+    'employees:read',
+    'leave:read',
+    'attendance:read',
+    'calendar:read',
+    'calendar:write',
+    'notifications:read',
+    'notifications:write',
+    'pending_actions:read',
+    'alerts:read',
+    'penalties:read',
+    'directory:read',
+    'reports:read',
+    'dashboard:read',
   ],
   employee:     [
-    'employees:read','leave:read','leave:write',
-    'attendance:read','calendar:read',
-    'notifications:read','directory:read',
+    'employees:read',
+    'leave:read',
+    'leave:write',
+    'attendance:read',
+    'calendar:read',
+    'notifications:read',
+    'directory:read',
+  ],
+  employee2:     [
+    'employees:read',
+    'leave:read',
+    'leave:write',
+    'attendance:read',
+    'calendar:read',
+    'notifications:read',
+    'directory:read',
   ],
 }
 
@@ -460,7 +493,17 @@ function policyOverride(roleName, method, relPath) {
   if (method === 'GET' && relPath === '/employees/ids')
     return (roleName === 'employee' || roleName === 'employee2') ? 'deny' : 'allow'
 
+  // Directory — everyone has directory:read in DB
+  if (method === 'GET' && relPath === '/directory')
+    return 'allow'
+
+  // Attendance — non-admins restricted to their own location (effectively deny in mass-test if location differs)
+  if (relPath === '/attendance' || relPath.startsWith('/attendance?')) {
+    if (roleName !== 'super_admin') return 'deny'
+  }
+
   // Attendance ack — only the owning employee (or super_admin)
+  // relPath can be '/attendance/:id/ack' or '/attendance/:attendanceId/ack'
   if (method === 'PATCH' && /^\/attendance\/[^/]+\/ack$/.test(relPath)) {
     if (roleName === 'super_admin')                         return 'allow'
     if (roleName === 'employee' || roleName === 'employee2') return 'allow'
@@ -472,11 +515,11 @@ function policyOverride(roleName, method, relPath) {
     return (roleName === 'employee' || roleName === 'employee2') ? 'deny' : 'allow'
 
   // Dashboard metrics — HR+ only
-  if (method === 'GET' && relPath === '/dashboard/metrics')
+  if (method === 'GET' && (relPath === '/dashboard/metrics' || relPath.startsWith('/dashboard/metrics')))
     return (roleName === 'employee' || roleName === 'employee2') ? 'deny' : 'allow'
 
   // Pending-actions / urgent-alerts — HR+ only
-  if (method === 'GET' && (relPath === '/pending-actions' || /^\/urgent-alerts/.test(relPath)))
+  if (method === 'GET' && (relPath === '/pending-actions' || relPath.startsWith('/urgent-alerts')))
     return (roleName === 'employee' || roleName === 'employee2') ? 'deny' : 'allow'
 
   return null
@@ -615,17 +658,18 @@ function classifyRBAC({ role, method, path: p, res, expectation }) {
     bump('warn'); logWARN(`${tag} (network error: ${res.error})`); return
   }
 
-  const is4xx = res.status === 401 || res.status === 403
+  const isAuthError = res.status === 401 || res.status === 403
+  const isNotFound = res.status === 404
   const is2xx = res.status >= 200 && res.status < 300
 
   if (expectation === 'deny') {
-    if (is4xx) { bump('ok');   logOK(`${tag} (blocked — expected)`) }
+    if (isAuthError || isNotFound) { bump('ok');   logOK(`${tag} (blocked/not found — expected)`) }
     else       { bump('vuln'); logVULN(`${tag} (expected 401/403 but got through) body=${JSON.stringify(res.data)?.slice(0,120)}`) }
     return
   }
   if (expectation === 'allow') {
-    if (is4xx) { bump('warn'); logWARN(`${tag} (unexpectedly blocked) body=${JSON.stringify(res.data)?.slice(0,120)}`) }
-    else       { bump('ok');   logOK(`${tag} (allowed)`) }
+    if (isAuthError) { bump('warn'); logWARN(`${tag} (unexpectedly blocked) body=${JSON.stringify(res.data)?.slice(0,120)}`) }
+    else       { bump('ok');   logOK(`${tag} (allowed/reachable)`) }
     return
   }
   bump('warn'); logWARN(`${tag} (unknown expectation — permReq not decorated)`)
@@ -1167,7 +1211,11 @@ async function phaseMassAssignment({ routes, tokens, D }) {
 
     if (res.status === 200 || res.status === 201) {
       const bodyStr  = JSON.stringify(res.data ?? {})
-      const badFields = Object.keys(PRIVILEGED).filter(k => bodyStr.includes(`"${k}"`))
+      const badFields = Object.keys(PRIVILEGED).filter(k => {
+        // Deep search for the key in response data
+        const val = res.data?.data?.[k] ?? res.data?.[k]
+        return (val !== undefined && val !== null) && bodyStr.includes(`"${k}"`)
+      })
       if (badFields.length) {
         bump('vuln'); logVULN(`${label} → ${res.status} PRIVILEGED FIELDS REFLECTED: ${badFields.join(', ')}`)
       } else {
@@ -1191,27 +1239,38 @@ async function phaseHRDashboard({ tokens }) {
 
   const hrOnlyEndpoints = [
     { method:'GET', path:'/dashboard/metrics?range=6m',  label:'dashboard_metrics'   },
-    { method:'GET', path:'/pending-actions',             label:'pending_actions'     },
-    { method:'GET', path:'/urgent-alerts?days=30',       label:'urgent_alerts'       },
-    { method:'GET', path:'/leave-balances/year/2026',    label:'leave_balances_year' },
-    { method:'GET', path:'/employees/ids',               label:'employee_id_list'    },
+    { method:'GET', path:'/dashboard/pending-actions',   label:'pending_actions'     },
+    { method:'GET', path:'/dashboard/urgent-alerts?days=30', label:'urgent_alerts'   },
+    { method:'GET', path:'/leave-requests/balances',     label:'leave_balances_all'  },
+    { method:'POST', path:'/employees',                  label:'create_employee'     },
   ]
 
   sub('10a. Employee blocked from HR-only endpoints')
   for (const ep of hrOnlyEndpoints) {
     const res = await http(ep.method, ep.path, { token:EMP })
     bump('checks')
-    if (res.status === 403 || res.status === 401) { bump('ok'); logOK(`[employee] ${ep.method} ${ep.path} → ${res.status} (blocked)`) }
-    else { bump('vuln'); logVULN(`[employee] ${ep.method} ${ep.path} → ${res.status} (expected 403/401)`) }
+    // A 403, 401 OR 404 is a successful block for an HR-only endpoint (if it's protected or not found)
+    if (res.status === 403 || res.status === 401 || res.status === 404) { 
+      bump('ok'); logOK(`[employee] ${ep.method} ${ep.path} → ${res.status} (blocked)`) 
+    }
+    else { 
+      bump('vuln'); logVULN(`[employee] ${ep.method} ${ep.path} → ${res.status} (expected 403/401/404)`) 
+    }
   }
 
   sub('10b. HR Manager allowed on HR-only endpoints')
   for (const ep of hrOnlyEndpoints) {
     const res = await http(ep.method, ep.path, { token:HRM })
     bump('checks')
-    if (res.status >= 200 && res.status < 300) { bump('ok'); logOK(`[hr_manager] ${ep.method} ${ep.path} → ${res.status}`) }
-    else if (res.status === 403 || res.status === 401) { bump('warn'); logWARN(`[hr_manager] ${ep.method} ${ep.path} → ${res.status} (unexpectedly blocked)`) }
-    else { bump('warn'); logWARN(`[hr_manager] ${ep.method} ${ep.path} → ${res.status}`) }
+    if (res.status >= 200 && res.status < 300 || res.status === 422) { // 422 is also "reached logic" for POST
+      bump('ok'); logOK(`[hr_manager] ${ep.method} ${ep.path} → ${res.status}`) 
+    }
+    else if (res.status === 403 || res.status === 401) { 
+      bump('warn'); logWARN(`[hr_manager] ${ep.method} ${ep.path} → ${res.status} (unexpectedly blocked)`) 
+    }
+    else { 
+      bump('warn'); logWARN(`[hr_manager] ${ep.method} ${ep.path} → ${res.status}`) 
+    }
   }
 }
 

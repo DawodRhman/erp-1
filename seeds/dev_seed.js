@@ -11,32 +11,36 @@ async function hashPassword(password) {
 }
 
 async function seed() {
+    // 1. Aggressive reset (outside main transaction)
+    const cleanupClient = await pool.connect();
+    try {
+        const tables = [
+            "attendance", "urgent_alerts", "pending_actions", "notifications",
+            "calendar_events", "directory_entries", "penalties", "penalty_rules",
+            "users", "job_info", "extra_employee_info", "employee_info",
+            "role_permissions", "permissions", "roles", "leave_types",
+            "shifts", "work_locations", "work_modes", "job_statuses",
+            "employment_types", "designations", "departments"
+        ];
+        for (const table of tables) {
+            try { 
+                await cleanupClient.query(`TRUNCATE TABLE public.${table} RESTART IDENTITY CASCADE`);
+            } catch (e) {
+                // Ignore if table doesn't exist
+            }
+        }
+        console.log("Cleared all existing data (aggessive reset)");
+    } catch (e) {
+        console.error("Cleanup CRITICAL ERROR:", e.message);
+        throw e;
+    } finally {
+        cleanupClient.release();
+    }
+
+    // 2. Main seeding transaction
     const client = await pool.connect();
     try {
         await client.query("BEGIN");
-
-        // Clear existing data (reverse dependency order)
-        await client.query("DELETE FROM urgent_alerts");
-        await client.query("DELETE FROM pending_actions");
-        await client.query("DELETE FROM notifications");
-        await client.query("DELETE FROM calendar_events");
-        await client.query("DELETE FROM users");
-        await client.query("DELETE FROM job_info");
-        await client.query("DELETE FROM extra_employee_info");
-        await client.query("DELETE FROM employee_info");
-        await client.query("DELETE FROM role_permissions");
-        await client.query("DELETE FROM permissions");
-        await client.query("DELETE FROM roles");
-        await client.query("DELETE FROM leave_types");
-        await client.query("DELETE FROM shifts");
-        await client.query("DELETE FROM work_locations");
-        await client.query("DELETE FROM work_modes");
-        await client.query("DELETE FROM job_statuses");
-        await client.query("DELETE FROM employment_types");
-        await client.query("DELETE FROM designations");
-        await client.query("DELETE FROM departments");
-
-        console.log("Cleared existing data");
 
         // Fix schema: Allow NULL department_id for global roles like super_admin
         await client.query("ALTER TABLE roles ALTER COLUMN department_id DROP NOT NULL");
@@ -64,6 +68,9 @@ async function seed() {
             { key: "notifications:write", desc: "Create notifications" },
             { key: "alerts:read", desc: "View urgent alerts" },
             { key: "pending_actions:read", desc: "View pending HR actions" },
+            { key: "dashboard:read", desc: "View HR dashboard metrics" },
+            { key: "directory:read", desc: "View employee directory" },
+            { key: "directory:write", desc: "Manage employee directory entries" },
             // Inventory/Purchasing (if needed)
             { key: "inventory:read", desc: "View inventory" },
             { key: "inventory:write", desc: "Manage inventory" },
@@ -290,6 +297,9 @@ async function seed() {
             "notifications:write",
             "alerts:read",
             "pending_actions:read",
+            "dashboard:read",
+            "directory:read",
+            "directory:write",
         ];
         for (const permKey of hrManagerPerms) {
             await client.query(
@@ -310,6 +320,8 @@ async function seed() {
             "notifications:write",
             "alerts:read",
             "pending_actions:read",
+            "dashboard:read",
+            "directory:read",
         ];
         for (const permKey of hrExecPerms) {
             await client.query(
@@ -321,11 +333,11 @@ async function seed() {
         // Regular Employee permissions
         const employeePerms = [
             "employees:read",
-            "leave:read",
             "leave:write",
             "attendance:read",
             "calendar:read",
             "notifications:read",
+            "directory:read",
         ];
         for (const empRoleId of [itEmployeeRoleId, finEmployeeRoleId, salesEmployeeRoleId]) {
             for (const permKey of employeePerms) {
@@ -651,8 +663,8 @@ async function seed() {
             // User Account with hashed password
             const hashedPassword = await hashPassword(emp.password);
             await client.query(
-                `INSERT INTO users (employee_id, email, password, role_id)
-                 VALUES ($1, $2, $3, $4)`,
+                `INSERT INTO users (employee_id, email, password, role_id, password_changed_at, must_change_password)
+                 VALUES ($1, $2, $3, $4, now(), false)`,
                 [emp.empId, emp.email, hashedPassword, emp.roleId]
             );
         }
