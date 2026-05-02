@@ -25,28 +25,18 @@ Node.js/Express backend for an Employee Management System (EMS), using PostgreSQ
 
 ## Main Routes
 
-All routes are mounted under `/api` in [server.js](/c:/Users/Zaid Esspl/Desktop/EMS/backend/server.js).
+All routes are mounted under `/api` in `src/app.js`.
 
-- Employees:
-  - `/api` -> employee info and extra employee info
-  - `/api/job-status` -> job status
-  - `/api/job-info` -> job information
-- Organization setup:
-  - `/api/departments` -> departments
-  - `/api/designations` -> designations
-  - `/api/employment-types` -> employment types
-  - `/api/work-modes` -> work modes
-  - `/api/work-locations` -> work locations
-  - `/api/shifts` -> shift definitions
-- Leaves:
-  - `/api/leave-types` -> leave types
-  - `/api/leave-policies` -> leave policies
-  - `/api/leave-balances` -> leave balances
-- Users & auth:
-  - `/api/auth` -> login/authentication
-  - `/api/users` -> user management
+**Full API Documentation**: See [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) for detailed endpoints, payloads, and response codes.
 
-For exact HTTP methods, request bodies, and response formats, inspect the corresponding files under `src/routes`, `src/controllers`, and `src/models`.
+- **Authentication**: `/api/auth` (Login, Logout, Session, Password)
+- **Employees**: `/api/employees` (Profile management, Personal/Job/Extra info)
+- **Attendance**: `/api/attendance` (Tracking, Reports, Acknowledgment)
+- **Leaves**: `/api/leave-requests` (Requests, Approvals, Balances)
+- **Dashboard**: `/api/dashboard` (HR Metrics, Employee self-service summary)
+- **Configuration**: `/api/config` (Global lookups like Departments, Designations)
+- **Penalties**: `/api/penalties` (Rule management and issuance)
+- **Directory**: `/api/directory` (Employee phonebook)
 
 ## Getting Started
 
