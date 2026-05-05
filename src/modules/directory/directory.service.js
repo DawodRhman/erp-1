@@ -147,13 +147,13 @@ export async function autoPopulateFromEmployee(employeeId) {
         ei.employee_id,
         ei.name,
         u.email,
-        ex.contact_1 AS phone_mobile,
+        ec.contact_1 AS phone_mobile,
         ji.department_id,
         ji.work_location_id AS branch_id,
         d.title AS role_title
       FROM public.employee_info ei
       LEFT JOIN public.users u ON u.employee_id = ei.employee_id
-      LEFT JOIN public.extra_employee_info ex ON ex.employee_id = ei.employee_id
+      LEFT JOIN public.emergency_contacts ec ON ec.employee_id = ei.employee_id
       LEFT JOIN public.job_info ji ON ji.employee_id = ei.employee_id
       LEFT JOIN public.designations d ON d.id = ji.designation_id
       WHERE ei.employee_id = $1
@@ -161,6 +161,7 @@ export async function autoPopulateFromEmployee(employeeId) {
     `,
     [employeeId]
   );
+
 
   if (source.rowCount === 0) {
     throw new AppError(404, 'NOT_FOUND', 'Employee not found for directory population.');

@@ -9,7 +9,7 @@ function nextEmployeeCodeFromMax(maxEmployeeId) {
 }
 
 export async function createEmployee(data, createdByUserId) {
-  const { personalInfo, jobInfo, accountInfo, extraInfo } = data;
+  const { personalInfo, jobInfo, accountInfo, emergencyContacts, bankInfo, medicalInfo } = data;
 
   const duplicateCnic = await pool.query(
     `SELECT 1 FROM public.employee_info WHERE cnic = $1 LIMIT 1`,
@@ -93,32 +93,120 @@ export async function createEmployee(data, createdByUserId) {
       ]
     );
 
-    if (extraInfo) {
+    if (emergencyContacts) {
       await client.query(
         `
-          INSERT INTO public.extra_employee_info (
+          INSERT INTO public.emergency_contacts (
             employee_id,
             contact_1,
             contact_2,
-            emergence_contact_1,
-            emergence_contact_2,
-            bank_name,
-            bank_acc_num,
             perment_address,
-            postal_address
+            postal_address,
+            e_contact_1_relation,
+            e_contact_1_full_name,
+            e_contact_1_phone,
+            e_contact_1_phone_country_code,
+            e_contact_1_email,
+            e_contact_2_relation,
+            e_contact_2_full_name,
+            e_contact_2_phone,
+            e_contact_2_phone_country_code,
+            e_contact_2_email,
+            primary_contact
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         `,
         [
           employeeId,
-          extraInfo.contact_1 || accountInfo.phone,
-          extraInfo.contact_2 || null,
-          extraInfo.emergence_contact_1 || null,
-          extraInfo.emergence_contact_2 || null,
-          extraInfo.bank_name || null,
-          extraInfo.bank_acc_num || null,
-          extraInfo.perment_address || null,
-          extraInfo.postal_address || null,
+          emergencyContacts.contact_1 || accountInfo.phone,
+          emergencyContacts.contact_2 || null,
+          emergencyContacts.perment_address || null,
+          emergencyContacts.postal_address || null,
+          emergencyContacts.e_contact_1_relation,
+          emergencyContacts.e_contact_1_full_name,
+          emergencyContacts.e_contact_1_phone,
+          emergencyContacts.e_contact_1_phone_country_code || '+92',
+          emergencyContacts.e_contact_1_email || null,
+          emergencyContacts.e_contact_2_relation || null,
+          emergencyContacts.e_contact_2_full_name || null,
+          emergencyContacts.e_contact_2_phone || null,
+          emergencyContacts.e_contact_2_phone_country_code || '+92',
+          emergencyContacts.e_contact_2_email || null,
+          emergencyContacts.primary_contact || 1,
+        ]
+      );
+    }
+
+    if (bankInfo) {
+      await client.query(
+        `
+          INSERT INTO public.employee_bank_accounts (
+            employee_id,
+            bank_name,
+            branch_name,
+            branch_code,
+            iban,
+            account_title,
+            account_number,
+            account_type
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `,
+        [
+          employeeId,
+          bankInfo.bank_name,
+          bankInfo.branch_name || null,
+          bankInfo.branch_code || null,
+          bankInfo.iban,
+          bankInfo.account_title,
+          bankInfo.account_number || null,
+          bankInfo.account_type || null,
+        ]
+      );
+    }
+
+    if (medicalInfo) {
+      await client.query(
+        `
+          INSERT INTO public.employee_medical (
+            employee_id,
+            blood_group,
+            date_of_birth,
+            gender,
+            height_cm,
+            weight_kg,
+            has_disability,
+            disability_type,
+            disability_description,
+            has_chronic_condition,
+            chronic_condition_notes,
+            has_known_allergies,
+            allergy_notes,
+            emergency_medication,
+            fitness_status,
+            last_medical_exam_date,
+            next_medical_exam_date
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        `,
+        [
+          employeeId,
+          medicalInfo.blood_group || null,
+          medicalInfo.date_of_birth || null,
+          medicalInfo.gender || null,
+          medicalInfo.height_cm || null,
+          medicalInfo.weight_kg || null,
+          medicalInfo.has_disability || false,
+          medicalInfo.disability_type || null,
+          medicalInfo.disability_description || null,
+          medicalInfo.has_chronic_condition || false,
+          medicalInfo.chronic_condition_notes || null,
+          medicalInfo.has_known_allergies || false,
+          medicalInfo.allergy_notes || null,
+          medicalInfo.emergency_medication || null,
+          medicalInfo.fitness_status || null,
+          medicalInfo.last_medical_exam_date || null,
+          medicalInfo.next_medical_exam_date || null,
         ]
       );
     }
@@ -256,14 +344,6 @@ export async function getEmployeeById(employeeId) {
     `
       SELECT
         ei.*,
-        ex.contact_1,
-        ex.contact_2,
-        ex.emergence_contact_1,
-        ex.emergence_contact_2,
-        ex.bank_name,
-        ex.bank_acc_num,
-        ex.perment_address,
-        ex.postal_address,
         ji.department_id,
         ji.designation_id,
         ji.employment_type_id,
@@ -285,9 +365,19 @@ export async function getEmployeeById(employeeId) {
         s.name AS shift_name,
         s.start_time AS shift_start_time,
         s.end_time AS shift_end_time,
-        s.late_after_minutes
+        s.late_after_minutes,
+        -- Emergency Contacts
+        ec.contact_1, ec.contact_2, ec.perment_address, ec.postal_address,
+        ec.e_contact_1_relation, ec.e_contact_1_full_name, ec.e_contact_1_phone, ec.e_contact_1_phone_country_code, ec.e_contact_1_email,
+        ec.e_contact_2_relation, ec.e_contact_2_full_name, ec.e_contact_2_phone, ec.e_contact_2_phone_country_code, ec.e_contact_2_email,
+        ec.primary_contact,
+        -- Bank Account (assuming 1:1 for display)
+        eba.bank_name, eba.branch_name, eba.branch_code, eba.iban, eba.account_title, eba.account_number, eba.account_type, eba.is_verified,
+        -- Medical Info
+        em.blood_group, em.date_of_birth AS medical_dob, em.gender, em.height_cm, em.weight_kg, em.has_disability, em.disability_type, em.disability_description,
+        em.has_chronic_condition, em.chronic_condition_notes, em.has_known_allergies, em.allergy_notes, em.emergency_medication, em.fitness_status,
+        em.last_medical_exam_date, em.next_medical_exam_date
       FROM public.employee_info ei
-      LEFT JOIN public.extra_employee_info ex ON ex.employee_id = ei.employee_id
       LEFT JOIN public.job_info ji ON ji.employee_id = ei.employee_id
       LEFT JOIN public.departments dep ON dep.id = ji.department_id
       LEFT JOIN public.designations dsg ON dsg.id = ji.designation_id
@@ -296,6 +386,9 @@ export async function getEmployeeById(employeeId) {
       LEFT JOIN public.work_modes wm ON wm.id = ji.work_mode_id
       LEFT JOIN public.work_locations wl ON wl.id = ji.work_location_id
       LEFT JOIN public.shifts s ON s.id = ji.shift_id
+      LEFT JOIN public.emergency_contacts ec ON ec.employee_id = ei.employee_id
+      LEFT JOIN public.employee_bank_accounts eba ON eba.employee_id = ei.employee_id
+      LEFT JOIN public.employee_medical em ON em.employee_id = ei.employee_id
       WHERE ei.employee_id = $1
       LIMIT 1
     `,
@@ -306,8 +399,75 @@ export async function getEmployeeById(employeeId) {
     throw new AppError(404, 'NOT_FOUND', 'Employee not found.');
   }
 
-  return result.rows[0];
+  const row = result.rows[0];
+  
+  // Structure the response
+  const employee = {
+    ...row,
+    emergencyContacts: row.contact_1 ? {
+      contact_1: row.contact_1,
+      contact_2: row.contact_2,
+      perment_address: row.perment_address,
+      postal_address: row.postal_address,
+      e_contact_1_relation: row.e_contact_1_relation,
+      e_contact_1_full_name: row.e_contact_1_full_name,
+      e_contact_1_phone: row.e_contact_1_phone,
+      e_contact_1_phone_country_code: row.e_contact_1_phone_country_code,
+      e_contact_1_email: row.e_contact_1_email,
+      e_contact_2_relation: row.e_contact_2_relation,
+      e_contact_2_full_name: row.e_contact_2_full_name,
+      e_contact_2_phone: row.e_contact_2_phone,
+      e_contact_2_phone_country_code: row.e_contact_2_phone_country_code,
+      e_contact_2_email: row.e_contact_2_email,
+      primary_contact: row.primary_contact
+    } : null,
+    bankInfo: row.bank_name ? {
+      bank_name: row.bank_name,
+      branch_name: row.branch_name,
+      branch_code: row.branch_code,
+      iban: row.iban,
+      account_title: row.account_title,
+      account_number: row.account_number,
+      account_type: row.account_type,
+      is_verified: row.is_verified
+    } : null,
+    medicalInfo: row.blood_group || row.gender ? {
+      blood_group: row.blood_group,
+      date_of_birth: row.medical_dob,
+      gender: row.gender,
+      height_cm: row.height_cm,
+      weight_kg: row.weight_kg,
+      has_disability: row.has_disability,
+      disability_type: row.disability_type,
+      disability_description: row.disability_description,
+      has_chronic_condition: row.has_chronic_condition,
+      chronic_condition_notes: row.chronic_condition_notes,
+      has_known_allergies: row.has_known_allergies,
+      allergy_notes: row.allergy_notes,
+      emergency_medication: row.emergency_medication,
+      fitness_status: row.fitness_status,
+      last_medical_exam_date: row.last_medical_exam_date,
+      next_medical_exam_date: row.next_medical_exam_date
+    } : null
+  };
+
+  // Remove flat properties that are now in nested objects
+  const fieldsToRemove = [
+    'contact_1', 'contact_2', 'perment_address', 'postal_address',
+    'e_contact_1_relation', 'e_contact_1_full_name', 'e_contact_1_phone', 'e_contact_1_phone_country_code', 'e_contact_1_email',
+    'e_contact_2_relation', 'e_contact_2_full_name', 'e_contact_2_phone', 'e_contact_2_phone_country_code', 'e_contact_2_email',
+    'primary_contact',
+    'bank_name', 'branch_name', 'branch_code', 'iban', 'account_title', 'account_number', 'account_type', 'is_verified',
+    'blood_group', 'medical_dob', 'gender', 'height_cm', 'weight_kg', 'has_disability', 'disability_type', 'disability_description',
+    'has_chronic_condition', 'chronic_condition_notes', 'has_known_allergies', 'allergy_notes', 'emergency_medication', 'fitness_status',
+    'last_medical_exam_date', 'next_medical_exam_date'
+  ];
+  
+  fieldsToRemove.forEach(field => delete employee[field]);
+
+  return employee;
 }
+
 
 export async function updatePersonalInfo(employeeId, data) {
   const allowedFields = ['name', 'father_name', 'cnic', 'date_of_birth'];
@@ -462,55 +622,174 @@ export async function updateJobInfo(employeeId, data) {
   }
 }
 
-export async function updateExtraInfo(employeeId, data) {
-  const existing = await pool.query(
-    `SELECT contact_1 FROM public.extra_employee_info WHERE employee_id = $1 LIMIT 1`,
-    [employeeId]
-  );
-
-  const contact1 = data.contact_1 || existing.rows[0]?.contact_1;
-  if (!contact1) {
-    throw new AppError(400, 'CONTACT_REQUIRED', 'contact_1 is required.');
-  }
-
+export async function updateEmergencyContacts(employeeId, data) {
   const result = await pool.query(
     `
-      INSERT INTO public.extra_employee_info (
+      INSERT INTO public.emergency_contacts (
         employee_id,
         contact_1,
         contact_2,
-        emergence_contact_1,
-        emergence_contact_2,
-        bank_name,
-        bank_acc_num,
         perment_address,
-        postal_address
+        postal_address,
+        e_contact_1_relation,
+        e_contact_1_full_name,
+        e_contact_1_phone,
+        e_contact_1_phone_country_code,
+        e_contact_1_email,
+        e_contact_2_relation,
+        e_contact_2_full_name,
+        e_contact_2_phone,
+        e_contact_2_phone_country_code,
+        e_contact_2_email,
+        primary_contact
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       ON CONFLICT (employee_id)
       DO UPDATE SET
-        contact_1 = EXCLUDED.contact_1,
-        contact_2 = EXCLUDED.contact_2,
-        emergence_contact_1 = EXCLUDED.emergence_contact_1,
-        emergence_contact_2 = EXCLUDED.emergence_contact_2,
-        bank_name = EXCLUDED.bank_name,
-        bank_acc_num = EXCLUDED.bank_acc_num,
-        perment_address = EXCLUDED.perment_address,
-        postal_address = EXCLUDED.postal_address,
+        contact_1 = COALESCE(EXCLUDED.contact_1, emergency_contacts.contact_1),
+        contact_2 = COALESCE(EXCLUDED.contact_2, emergency_contacts.contact_2),
+        perment_address = COALESCE(EXCLUDED.perment_address, emergency_contacts.perment_address),
+        postal_address = COALESCE(EXCLUDED.postal_address, emergency_contacts.postal_address),
+        e_contact_1_relation = COALESCE(EXCLUDED.e_contact_1_relation, emergency_contacts.e_contact_1_relation),
+        e_contact_1_full_name = COALESCE(EXCLUDED.e_contact_1_full_name, emergency_contacts.e_contact_1_full_name),
+        e_contact_1_phone = COALESCE(EXCLUDED.e_contact_1_phone, emergency_contacts.e_contact_1_phone),
+        e_contact_1_phone_country_code = COALESCE(EXCLUDED.e_contact_1_phone_country_code, emergency_contacts.e_contact_1_phone_country_code),
+        e_contact_1_email = COALESCE(EXCLUDED.e_contact_1_email, emergency_contacts.e_contact_1_email),
+        e_contact_2_relation = COALESCE(EXCLUDED.e_contact_2_relation, emergency_contacts.e_contact_2_relation),
+        e_contact_2_full_name = COALESCE(EXCLUDED.e_contact_2_full_name, emergency_contacts.e_contact_2_full_name),
+        e_contact_2_phone = COALESCE(EXCLUDED.e_contact_2_phone, emergency_contacts.e_contact_2_phone),
+        e_contact_2_phone_country_code = COALESCE(EXCLUDED.e_contact_2_phone_country_code, emergency_contacts.e_contact_2_phone_country_code),
+        e_contact_2_email = COALESCE(EXCLUDED.e_contact_2_email, emergency_contacts.e_contact_2_email),
+        primary_contact = COALESCE(EXCLUDED.primary_contact, emergency_contacts.primary_contact),
         updated_at = now()
-      RETURNING employee_id, contact_1, contact_2, emergence_contact_1, emergence_contact_2,
-                bank_name, bank_acc_num, perment_address, postal_address
+      RETURNING *
     `,
     [
       employeeId,
-      contact1,
+      data.contact_1 || null,
       data.contact_2 || null,
-      data.emergence_contact_1 || null,
-      data.emergence_contact_2 || null,
-      data.bank_name || null,
-      data.bank_acc_num || null,
       data.perment_address || null,
       data.postal_address || null,
+      data.e_contact_1_relation || null,
+      data.e_contact_1_full_name || null,
+      data.e_contact_1_phone || null,
+      data.e_contact_1_phone_country_code || null,
+      data.e_contact_1_email || null,
+      data.e_contact_2_relation || null,
+      data.e_contact_2_full_name || null,
+      data.e_contact_2_phone || null,
+      data.e_contact_2_phone_country_code || null,
+      data.e_contact_2_email || null,
+      data.primary_contact || null,
+    ]
+  );
+
+  return result.rows[0];
+}
+
+export async function updateBankInfo(employeeId, data) {
+  const result = await pool.query(
+    `
+      INSERT INTO public.employee_bank_accounts (
+        employee_id,
+        bank_name,
+        branch_name,
+        branch_code,
+        iban,
+        account_title,
+        account_number,
+        account_type
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ON CONFLICT (employee_id)
+      DO UPDATE SET
+        bank_name = COALESCE(EXCLUDED.bank_name, employee_bank_accounts.bank_name),
+        branch_name = COALESCE(EXCLUDED.branch_name, employee_bank_accounts.branch_name),
+        branch_code = COALESCE(EXCLUDED.branch_code, employee_bank_accounts.branch_code),
+        iban = COALESCE(EXCLUDED.iban, employee_bank_accounts.iban),
+        account_title = COALESCE(EXCLUDED.account_title, employee_bank_accounts.account_title),
+        account_number = COALESCE(EXCLUDED.account_number, employee_bank_accounts.account_number),
+        account_type = COALESCE(EXCLUDED.account_type, employee_bank_accounts.account_type),
+        updated_at = now()
+      RETURNING *
+    `,
+    [
+      employeeId,
+      data.bank_name || null,
+      data.branch_name || null,
+      data.branch_code || null,
+      data.iban || null,
+      data.account_title || null,
+      data.account_number || null,
+      data.account_type || null,
+    ]
+  );
+
+  return result.rows[0];
+}
+
+export async function updateMedicalInfo(employeeId, data) {
+  const result = await pool.query(
+    `
+      INSERT INTO public.employee_medical (
+        employee_id,
+        blood_group,
+        date_of_birth,
+        gender,
+        height_cm,
+        weight_kg,
+        has_disability,
+        disability_type,
+        disability_description,
+        has_chronic_condition,
+        chronic_condition_notes,
+        has_known_allergies,
+        allergy_notes,
+        emergency_medication,
+        fitness_status,
+        last_medical_exam_date,
+        next_medical_exam_date
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      ON CONFLICT (employee_id)
+      DO UPDATE SET
+        blood_group = COALESCE(EXCLUDED.blood_group, employee_medical.blood_group),
+        date_of_birth = COALESCE(EXCLUDED.date_of_birth, employee_medical.date_of_birth),
+        gender = COALESCE(EXCLUDED.gender, employee_medical.gender),
+        height_cm = COALESCE(EXCLUDED.height_cm, employee_medical.height_cm),
+        weight_kg = COALESCE(EXCLUDED.weight_kg, employee_medical.weight_kg),
+        has_disability = COALESCE(EXCLUDED.has_disability, employee_medical.has_disability),
+        disability_type = COALESCE(EXCLUDED.disability_type, employee_medical.disability_type),
+        disability_description = COALESCE(EXCLUDED.disability_description, employee_medical.disability_description),
+        has_chronic_condition = COALESCE(EXCLUDED.has_chronic_condition, employee_medical.has_chronic_condition),
+        chronic_condition_notes = COALESCE(EXCLUDED.chronic_condition_notes, employee_medical.chronic_condition_notes),
+        has_known_allergies = COALESCE(EXCLUDED.has_known_allergies, employee_medical.has_known_allergies),
+        allergy_notes = COALESCE(EXCLUDED.allergy_notes, employee_medical.allergy_notes),
+        emergency_medication = COALESCE(EXCLUDED.emergency_medication, employee_medical.emergency_medication),
+        fitness_status = COALESCE(EXCLUDED.fitness_status, employee_medical.fitness_status),
+        last_medical_exam_date = COALESCE(EXCLUDED.last_medical_exam_date, employee_medical.last_medical_exam_date),
+        next_medical_exam_date = COALESCE(EXCLUDED.next_medical_exam_date, employee_medical.next_medical_exam_date),
+        updated_at = now()
+      RETURNING *
+    `,
+    [
+      employeeId,
+      data.blood_group || null,
+      data.date_of_birth || null,
+      data.gender || null,
+      data.height_cm || null,
+      data.weight_kg || null,
+      data.has_disability ?? null,
+      data.disability_type || null,
+      data.disability_description || null,
+      data.has_chronic_condition ?? null,
+      data.chronic_condition_notes || null,
+      data.has_known_allergies ?? null,
+      data.allergy_notes || null,
+      data.emergency_medication || null,
+      data.fitness_status || null,
+      data.last_medical_exam_date || null,
+      data.next_medical_exam_date || null,
     ]
   );
 
@@ -520,9 +799,9 @@ export async function updateExtraInfo(employeeId, data) {
 export async function resendCredentials(employeeId) {
   const userResult = await pool.query(
     `
-      SELECT u.id, ex.contact_1
+      SELECT u.id, ec.contact_1
       FROM public.users u
-      LEFT JOIN public.extra_employee_info ex ON ex.employee_id = u.employee_id
+      LEFT JOIN public.emergency_contacts ec ON ec.employee_id = u.employee_id
       WHERE u.employee_id = $1
       LIMIT 1
     `,
@@ -553,3 +832,4 @@ export async function resendCredentials(employeeId) {
     whatsappPhone: userResult.rows[0]?.contact_1 || null,
   };
 }
+

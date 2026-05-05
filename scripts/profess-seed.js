@@ -5,7 +5,7 @@
  * Covers (in FK-safe order):
  *   work_modes → work_locations → employment_types → job_statuses →
  *   shifts → departments → designations → permissions → roles →
- *   role_permissions → employee_info (100) → extra_employee_info →
+ *   role_permissions → employee_info (100) → emergency_contacts, bank, medical →
  *   users → job_info → employee_job_history → leave_types →
  *   leave_policies → leave_balances → leave_capacity_config →
  *   leave_requests → attendance (6 months, realistic patterns) →
@@ -286,13 +286,14 @@ async function seed() {
         urgent_alerts, pending_actions, notifications, calendar_events,
         leave_requests, leave_balances, leave_capacity_config, leave_policies,
         attendance, employee_job_history, job_info,
-        users, extra_employee_info, employee_info,
+        users, emergency_contacts, employee_bank_accounts, employee_medical, employee_info,
         role_permissions, permissions, roles,
         leave_types, shifts, designations,
         departments, employment_types, job_statuses,
         work_locations, work_modes
       RESTART IDENTITY CASCADE
     `);
+
 
         // ── 1. WORK MODES ─────────────────────────────────────────────────────────
         console.log('Seeding work_modes…');
@@ -433,31 +434,75 @@ async function seed() {
             );
         }
 
-        // ── 12. EXTRA_EMPLOYEE_INFO ───────────────────────────────────────────────
-        console.log('Seeding extra_employee_info…');
+        // ── 12. EXTRA INFO (Emergency, Bank, Medical) ───────────────────────────
+        console.log('Seeding split extra info (Emergency, Bank, Medical)…');
         const CITIES = ['Karachi', 'Lahore', 'Islamabad', 'Rawalpindi', 'Hyderabad', 'Multan', 'Faisalabad', 'Quetta'];
         const BANKS = ['HBL', 'UBL', 'MCB', 'ABL', 'Meezan Bank', 'Bank Al Falah', 'Bank Al Habib', 'Faysal Bank', 'SCB'];
+        const RELATIONS = ['father', 'mother', 'brother', 'sister', 'wife', 'husband', 'son', 'daughter', 'friend', 'neighbor', 'other'];
+        const BLOODS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'unknown'];
+
         for (let i = 0; i < EMPLOYEES.length; i++) {
             const e = EMPLOYEES[i];
             const idx = i + 1;
             const city = CITIES[i % CITIES.length];
             const bank = coin(0.85) ? BANKS[i % BANKS.length] : null;
+
+            // Emergency Contacts
             await client.query(
-                `INSERT INTO extra_employee_info
-           (employee_id, contact_1, contact_2, emergence_contact_1, bank_name, bank_acc_num, perment_address, postal_address)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+                `INSERT INTO emergency_contacts
+           (employee_id, contact_1, contact_2, perment_address, postal_address, 
+            e_contact_1_relation, e_contact_1_full_name, e_contact_1_phone, 
+            e_contact_1_phone_country_code, e_contact_1_email, primary_contact)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
                 [
                     e.id,
                     `0300-${String(idx).padStart(7, '0')}`,
                     coin(0.6) ? `0312-${String(idx + 5000).padStart(7, '0')}` : null,
-                    `0321-${String(idx + 10000).padStart(7, '0')}`,
-                    bank,
-                    bank ? `PK${String(idx).padStart(10, '0')}` : null,
                     `House ${idx}, Block ${String.fromCharCode(65 + (i % 10))}, ${city}`,
                     coin(0.7) ? `House ${idx}, Block ${String.fromCharCode(65 + (i % 10))}, ${city}` : `P.O. Box ${idx}, ${city}`,
+                    pick(RELATIONS),
+                    `Emergency Contact ${idx}`,
+                    `0321-${String(idx + 10000).padStart(7, '0')}`,
+                    '+92',
+                    `emergency${idx}@example.com`,
+                    1
+                ]
+            );
+
+            // Bank Account
+            if (bank) {
+                await client.query(
+                    `INSERT INTO employee_bank_accounts
+             (employee_id, bank_name, branch_name, branch_code, iban, account_title, account_number, account_type)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+                    [
+                        e.id,
+                        bank,
+                        'Main Branch',
+                        '001',
+                        `PK${rand(10, 99)}${bank.slice(0, 4).toUpperCase()}${String(idx).padStart(14, '0')}`,
+                        e.name,
+                        String(rand(100000000, 999999999)),
+                        'salary'
+                    ]
+                );
+            }
+
+            // Medical Info
+            await client.query(
+                `INSERT INTO employee_medical
+           (employee_id, blood_group, gender, height_cm, weight_kg)
+         VALUES ($1,$2,$3,$4,$5)`,
+                [
+                    e.id,
+                    pick(BLOODS),
+                    e.g === 'M' ? 'male' : 'female',
+                    rand(150, 190),
+                    rand(50, 100)
                 ]
             );
         }
+
 
         // ── 13. USERS ─────────────────────────────────────────────────────────────
         console.log('Seeding users…');

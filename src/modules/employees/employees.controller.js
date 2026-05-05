@@ -58,12 +58,25 @@ export async function updateJobInfo(req, res, next) {
 
 export async function updateExtraInfo(req, res, next) {
   try {
-    const result = await employeesService.updateExtraInfo(req.params.employeeId, req.body);
-    return sendSuccess(res, result, 200);
+    const { emergencyContacts, bankInfo, medicalInfo } = req.body;
+    const results = {};
+
+    if (emergencyContacts) {
+      results.emergencyContacts = await employeesService.updateEmergencyContacts(req.params.employeeId, emergencyContacts);
+    }
+    if (bankInfo) {
+      results.bankInfo = await employeesService.updateBankInfo(req.params.employeeId, bankInfo);
+    }
+    if (medicalInfo) {
+      results.medicalInfo = await employeesService.updateMedicalInfo(req.params.employeeId, medicalInfo);
+    }
+
+    return sendSuccess(res, results, 200);
   } catch (error) {
     return next(error);
   }
 }
+
 
 export async function resendCredentials(req, res, next) {
   try {

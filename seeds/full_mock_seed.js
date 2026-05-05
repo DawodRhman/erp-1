@@ -16,7 +16,7 @@ async function hashPassword(password) {
  * Covers tables behind routes in src/routes:
  * - departments, designations, employment_types, job_statuses, work_modes, work_locations, shifts
  * - permissions, roles, role_permissions, users
- * - employee_info, extra_employee_info, job_info, employee_job_history
+ * - employee_info, emergency_contacts, employee_bank_accounts, employee_medical, job_info, employee_job_history
  * - leave_types, leave_policies, leave_balances, leave_requests
  * - attendance (including ack column)
  *
@@ -39,8 +39,11 @@ async function seed() {
         await client.query('DELETE FROM users')
         await client.query('DELETE FROM job_info')
         await client.query('DELETE FROM employee_job_history')
-        await client.query('DELETE FROM extra_employee_info')
+        await client.query('DELETE FROM emergency_contacts')
+        await client.query('DELETE FROM employee_bank_accounts')
+        await client.query('DELETE FROM employee_medical')
         await client.query('DELETE FROM employee_info')
+
         await client.query('DELETE FROM role_permissions')
         await client.query('DELETE FROM permissions')
         await client.query('DELETE FROM roles')
@@ -508,23 +511,61 @@ async function seed() {
                 [emp.empId, emp.name, emp.fatherName, emp.cnic, emp.dob]
             )
 
+            // Emergency Contacts
             await client.query(
-                `INSERT INTO extra_employee_info
-                 (employee_id, contact_1, contact_2, emergence_contact_1, emergence_contact_2,
-                  bank_name, bank_acc_num, perment_address, postal_address)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+                `INSERT INTO emergency_contacts
+                 (employee_id, contact_1, contact_2, perment_address, postal_address, 
+                  e_contact_1_relation, e_contact_1_full_name, e_contact_1_phone, 
+                  e_contact_1_phone_country_code, e_contact_1_email, primary_contact)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
                 [
                     emp.empId,
                     `0300-${emp.empId.slice(-3)}0000`,
                     null,
-                    emp.empId === 'EMP004' ? null : `0301-${emp.empId.slice(-3)}0000`,
-                    null,
-                    emp.empId === 'EMP005' ? null : 'HBL',
-                    emp.empId === 'EMP005' ? null : `${emp.empId}00000000`,
-                    `${emp.name} Address, Karachi`,
-                    `${emp.name} Address, Karachi`,
+                    `${emp.name} Permanent Address, Karachi`,
+                    `${emp.name} Postal Address, Karachi`,
+                    'mother',
+                    `Mother of ${emp.name}`,
+                    `0301-${emp.empId.slice(-3)}0000`,
+                    '+92',
+                    `mother.${emp.empId.toLowerCase()}@example.com`,
+                    1
                 ]
             )
+
+            // Bank Account
+            if (emp.empId !== 'EMP005') {
+                await client.query(
+                    `INSERT INTO employee_bank_accounts
+                     (employee_id, bank_name, branch_name, branch_code, iban, account_title, account_number, account_type)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                    [
+                        emp.empId,
+                        "HBL",
+                        "Main Branch",
+                        "001",
+                        `PK00HBL0000${emp.empId.slice(-3)}0000`,
+                        emp.name,
+                        `${emp.empId}00000000`,
+                        'salary'
+                    ]
+                )
+            }
+
+            // Medical Info
+            await client.query(
+                `INSERT INTO employee_medical
+                 (employee_id, blood_group, gender, height_cm, weight_kg)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [
+                    emp.empId,
+                    'A+',
+                    emp.name.toLowerCase().includes('sara') || emp.name.toLowerCase().includes('sadia') || emp.name.toLowerCase().includes('nida') || emp.name.toLowerCase().includes('fatima') ? 'female' : 'male',
+                    175,
+                    65
+                ]
+            )
+
 
             await client.query(
                 `INSERT INTO job_info

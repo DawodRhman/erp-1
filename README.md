@@ -16,6 +16,7 @@ Node.js/Express backend for an Employee Management System (EMS), using PostgreSQ
 
 - [server.js](/c:/Users/Zaid Esspl/Desktop/EMS/backend/server.js) - Express app bootstrap, CORS, JSON middleware, and route mounting.
 - [src/config/db.js](/c:/Users/Zaid Esspl/Desktop/EMS/backend/src/config/db.js) - PostgreSQL pool configuration using environment variables.
+- [SYSTEM_ARCHITECTURE.md](./SYSTEM_ARCHITECTURE.md) - **Core System Flow, DB mapping, and RBAC documentation.**
 - [src/routes](/c:/Users/Zaid Esspl/Desktop/EMS/backend/src/routes) - Route definitions grouped by domain.
 - [src/controllers](/c:/Users/Zaid Esspl/Desktop/EMS/backend/src/controllers) - Request/response handlers.
 - [src/services](/c:/Users/Zaid Esspl/Desktop/EMS/backend/src/services) - Business logic layer.
@@ -26,6 +27,8 @@ Node.js/Express backend for an Employee Management System (EMS), using PostgreSQ
 ## Main Routes
 
 All routes are mounted under `/api` in `src/app.js`.
+
+**System Architecture & Flow**: See [SYSTEM_ARCHITECTURE.md](./SYSTEM_ARCHITECTURE.md) for the ground truth on how the system operates.
 
 **Full API Documentation**: See [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) for detailed endpoints, payloads, and response codes.
 

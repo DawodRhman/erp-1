@@ -17,11 +17,12 @@ async function seed() {
         const tables = [
             "attendance", "urgent_alerts", "pending_actions", "notifications",
             "calendar_events", "directory_entries", "penalties", "penalty_rules",
-            "users", "job_info", "extra_employee_info", "employee_info",
+            "users", "job_info", "emergency_contacts", "employee_bank_accounts", "employee_medical", "employee_info",
             "role_permissions", "permissions", "roles", "leave_types",
             "shifts", "work_locations", "work_modes", "job_statuses",
             "employment_types", "designations", "departments"
         ];
+
         for (const table of tables) {
             try { 
                 await cleanupClient.query(`TRUNCATE TABLE public.${table} RESTART IDENTITY CASCADE`);
@@ -621,24 +622,59 @@ async function seed() {
                 [emp.empId, emp.name, emp.fatherName, emp.cnic, emp.dob]
             );
 
-            // Extra Employee Info
+            // Emergency Contacts
             await client.query(
-                `INSERT INTO extra_employee_info
-                 (employee_id, contact_1, contact_2, emergence_contact_1, emergence_contact_2,
-                  bank_name, bank_acc_num, perment_address, postal_address)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+                `INSERT INTO emergency_contacts
+                 (employee_id, contact_1, contact_2, perment_address, postal_address, 
+                  e_contact_1_relation, e_contact_1_full_name, e_contact_1_phone, 
+                  e_contact_1_phone_country_code, e_contact_1_email, primary_contact)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
                 [
                     emp.empId,
                     `0300-${emp.empId.slice(-3)}0000`,
                     null,
+                    `${emp.name} Permanent Address, Karachi`,
+                    `${emp.name} Postal Address, Karachi`,
+                    'father',
+                    `Father of ${emp.name}`,
                     `0301-${emp.empId.slice(-3)}0000`,
-                    null,
-                    "HBL",
-                    `${emp.empId}00000000`,
-                    `${emp.name} Address, Karachi`,
-                    `${emp.name} Address, Karachi`,
+                    '+92',
+                    `father.${emp.empId.toLowerCase()}@example.com`,
+                    1
                 ]
             );
+
+            // Bank Account
+            await client.query(
+                `INSERT INTO employee_bank_accounts
+                 (employee_id, bank_name, branch_name, branch_code, iban, account_title, account_number, account_type)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                [
+                    emp.empId,
+                    "HBL",
+                    "Main Branch",
+                    "001",
+                    `PK00HBL0000${emp.empId.slice(-3)}0000`,
+                    emp.name,
+                    `${emp.empId}00000000`,
+                    'salary'
+                ]
+            );
+
+            // Medical Info
+            await client.query(
+                `INSERT INTO employee_medical
+                 (employee_id, blood_group, gender, height_cm, weight_kg)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [
+                    emp.empId,
+                    'O+',
+                    emp.name.toLowerCase().includes('sarah') || emp.name.toLowerCase().includes('fatima') || emp.name.toLowerCase().includes('aisha') || emp.name.toLowerCase().includes('komal') || emp.name.toLowerCase().includes('sadia') || emp.name.toLowerCase().includes('nida') ? 'female' : 'male',
+                    170,
+                    70
+                ]
+            );
+
 
             // Job Info
             await client.query(

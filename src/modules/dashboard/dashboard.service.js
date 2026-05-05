@@ -121,16 +121,18 @@ export async function getHRMetrics(range = '6m') {
         SELECT
           ei.employee_id,
           ei.name,
-          ex.bank_acc_num,
-          ex.emergence_contact_1,
-          ex.postal_address
+          eba.account_number AS bank_acc_num,
+          ec.e_contact_1_phone AS emergence_contact_1,
+          ec.postal_address
         FROM public.employee_info ei
-        LEFT JOIN public.extra_employee_info ex ON ex.employee_id = ei.employee_id
-        WHERE ex.bank_acc_num IS NULL
-           OR ex.emergence_contact_1 IS NULL
-           OR ex.postal_address IS NULL
+        LEFT JOIN public.emergency_contacts ec ON ec.employee_id = ei.employee_id
+        LEFT JOIN public.employee_bank_accounts eba ON eba.employee_id = ei.employee_id
+        WHERE eba.account_number IS NULL
+           OR ec.e_contact_1_phone IS NULL
+           OR ec.postal_address IS NULL
       `
     ),
+
     pool.query(
       `
         SELECT
@@ -354,14 +356,15 @@ export async function getPendingActions() {
       SELECT
         ei.employee_id,
         ei.name,
-        ex.bank_acc_num,
-        ex.emergence_contact_1,
-        ex.postal_address
+        eba.account_number AS bank_acc_num,
+        ec.e_contact_1_phone AS emergence_contact_1,
+        ec.postal_address
       FROM public.employee_info ei
-      LEFT JOIN public.extra_employee_info ex ON ex.employee_id = ei.employee_id
-      WHERE ex.bank_acc_num IS NULL
-         OR ex.emergence_contact_1 IS NULL
-         OR ex.postal_address IS NULL
+      LEFT JOIN public.emergency_contacts ec ON ec.employee_id = ei.employee_id
+      LEFT JOIN public.employee_bank_accounts eba ON eba.employee_id = ei.employee_id
+      WHERE eba.account_number IS NULL
+         OR ec.e_contact_1_phone IS NULL
+         OR ec.postal_address IS NULL
       ORDER BY ei.employee_id ASC
     `
   );
@@ -376,6 +379,7 @@ export async function getPendingActions() {
     ].filter(Boolean),
   }));
 }
+
 
 export async function getUrgentAlerts(days = 30) {
   const result = await pool.query(
