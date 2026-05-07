@@ -91,7 +91,10 @@ function decodeJwtPayload(token) {
 
 async function http(method, path, { token, body } = {}) {
   const headers = { 'Content-Type': 'application/json' }
-  if (token) headers.Authorization = `Bearer ${token}`
+  if (token) {
+    headers.Cookie = `ems_jwt=${token}`
+    headers.Authorization = `Bearer ${token}`
+  }
 
   const opts = { method, headers }
   if (body !== undefined) opts.body = JSON.stringify(body)
@@ -105,7 +108,7 @@ async function http(method, path, { token, body } = {}) {
     } catch {
       data = null
     }
-    return { ok: true, status, data }
+    return { ok: true, status, data, headers: res.headers }
   } catch (e) {
     return { ok: false, status: 0, data: null, error: e?.message ?? String(e) }
   }
@@ -113,9 +116,11 @@ async function http(method, path, { token, body } = {}) {
 
 async function login({ email, password, label }) {
   const r = await http('POST', '/auth/login', { body: { email, password } })
-  if (r.ok && r.status === 200 && r.data?.token) {
+  const setCookie = r.headers?.get?.('set-cookie') ?? ''
+  const jwtMatch = setCookie.match(/ems_jwt=([^;]+)/)
+  if (r.ok && r.status === 200 && jwtMatch?.[1]) {
     ok(`Login succeeded: ${label} (${email})`)
-    return r.data.token
+    return jwtMatch[1]
   }
   warn(`Login failed: ${label} (${email}) [status=${r.status}] ${r.data?.error ?? r.error ?? ''}`.trim())
   warnings++
@@ -406,10 +411,10 @@ function deepReplaceStrings(value, replacer, { depth = 0 } = {}) {
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const ROOT = path.resolve(__dirname, '..')
-const SERVER_FILE = path.join(ROOT, 'server.js')
+const APP_FILE = path.join(ROOT, 'src', 'app.js')
 
 async function loadMountedRouters() {
-  const text = await fs.readFile(SERVER_FILE, 'utf8')
+  const text = await fs.readFile(APP_FILE, 'utf8')
 
   // Map variable name -> import specifier path
   const imports = new Map()
@@ -426,13 +431,13 @@ async function loadMountedRouters() {
     const varName = m[2]
     const spec = imports.get(varName)
     if (!spec) continue
-    if (!spec.includes('/src/routes/')) continue
+    if (!spec.startsWith('./')) continue
     mounts.push({ prefix, varName, spec })
   }
 
   const routers = []
   for (const mount of mounts) {
-    const abs = path.resolve(ROOT, mount.spec)
+    const abs = path.resolve(path.dirname(APP_FILE), mount.spec)
     const mod = await import(pathToFileURL(abs).href)
     if (!mod?.default) continue
     routers.push({
@@ -478,6 +483,7 @@ function toRelApiPath(fullApiPath) {
 function listRoutesFromRouter(router, prefix) {
   const out = []
   const stack = router?.stack ?? []
+  const sharedMiddleware = stack.filter((layer) => !layer?.route)
 
   for (const layer of stack) {
     if (!layer?.route) continue
@@ -486,7 +492,7 @@ function listRoutesFromRouter(router, prefix) {
       .filter(([, v]) => v)
       .map(([k]) => k.toUpperCase())
 
-    const middlewareStack = layer.route.stack ?? []
+    const middlewareStack = [...sharedMiddleware, ...(layer.route.stack ?? [])]
     const permReq = extractPermReq(middlewareStack)
     const validation = extractValidation(middlewareStack)
 
