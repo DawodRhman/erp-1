@@ -16,7 +16,7 @@ async function seed() {
     try {
         const tables = [
             "attendance", "urgent_alerts", "pending_actions", "notifications",
-            "calendar_events", "directory_entries", "penalties", "penalty_rules",
+            "calendar_events", "directory_entries", "employee_penalties", "penalty_rules",
             "users", "job_info", "emergency_contacts", "employee_bank_accounts", "employee_medical", "employee_info",
             "role_permissions", "permissions", "roles", "leave_types",
             "shifts", "work_locations", "work_modes", "job_statuses",

@@ -4,12 +4,17 @@ import { sendError } from '../utils/respond.js';
 export function verifyToken(req, res, next) {
   // Check both cookie and Authorization header
   let token = req.cookies?.ems_jwt;
+  let source = 'cookie';
+
   if (!token && req.headers.authorization) {
     const authHeader = req.headers.authorization;
     if (authHeader.startsWith('Bearer ')) {
       token = authHeader.substring(7);
+      source = 'header';
     }
   }
+
+  console.log(`[AUTH DEBUG] Request to ${req.originalUrl} | Token found: ${!!token} | Source: ${source}`);
 
   if (!token) {
     return sendError(res, 'UNAUTHORIZED', 'Authentication required.', 401);

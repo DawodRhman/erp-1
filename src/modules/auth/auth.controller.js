@@ -61,6 +61,7 @@ export async function login(req, res, next) {
           employee_id: user.employee_id,
           must_change_password: user.must_change_password,
         },
+        token, // Return token for Bearer auth
       },
       200
     );

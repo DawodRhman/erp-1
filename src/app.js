@@ -25,7 +25,11 @@ app.use(debugMiddleware);
 
 app.use(
 	cors({
-		origin: process.env.CLIENT_URL || 'http://localhost:3000',
+		origin: function (origin, callback) {
+			// In development, we allow all origins and echo them back
+			// to support 'credentials: true' which doesn't allow wildcards.
+			callback(null, true);
+		},
 		credentials: true,
 	})
 );

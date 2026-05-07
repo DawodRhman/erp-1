@@ -33,6 +33,8 @@ async function seed() {
         await client.query('DELETE FROM notifications')
         await client.query('DELETE FROM calendar_events')
         await client.query('DELETE FROM attendance')
+        await client.query('DELETE FROM employee_penalties')
+        await client.query('DELETE FROM penalty_rules')
         await client.query('DELETE FROM leave_requests')
         await client.query('DELETE FROM leave_balances')
         await client.query('DELETE FROM leave_policies')
@@ -78,6 +80,9 @@ async function seed() {
             { key: 'notifications:write', desc: 'Create notifications' },
             { key: 'alerts:read', desc: 'View urgent alerts' },
             { key: 'pending_actions:read', desc: 'View pending HR actions' },
+            { key: 'dashboard:read', desc: 'View HR dashboard metrics' },
+            { key: 'directory:read', desc: 'View employee directory' },
+            { key: 'directory:write', desc: 'Manage employee directory entries' },
         ]
 
         const permissionMap = {}
