@@ -10,12 +10,17 @@ import {
   updateJobInfo,
   updateExtraInfo,
   resendCredentials,
+  addSalaryRevision,
+  updateAllowances,
+  getFinanceHistory,
 } from './employees.controller.js';
 import {
   createEmployeeSchema,
   updatePersonalInfoSchema,
   updateJobInfoSchema,
   updateExtraInfoSchema,
+  salaryRevisionSchema,
+  updateAllowancesSchema,
 } from './employees.schema.js';
 
 const router = Router();
@@ -47,6 +52,27 @@ router.post(
   '/:employeeId/resend-credentials',
   requirePermission('employees:write'),
   resendCredentials
+);
+
+// Finance Routes
+router.get(
+  '/:employeeId/finance',
+  requirePermission('salary:read'),
+  getFinanceHistory
+);
+
+router.post(
+  '/:employeeId/salary-revision',
+  requirePermission('salary:write'),
+  validate(salaryRevisionSchema),
+  addSalaryRevision
+);
+
+router.put(
+  '/:employeeId/allowances',
+  requirePermission('allowances:write'),
+  validate(updateAllowancesSchema),
+  updateAllowances
 );
 
 export default router;

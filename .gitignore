@@ -20,7 +20,7 @@ coverage
 # Build output
 dist
 build
-
+.claude
 # Environment files
 .env
 .env*

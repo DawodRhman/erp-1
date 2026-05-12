@@ -86,3 +86,30 @@ export async function resendCredentials(req, res, next) {
     return next(error);
   }
 }
+
+export async function addSalaryRevision(req, res, next) {
+  try {
+    const result = await employeesService.addSalaryRevision(req.params.employeeId, req.body, req.user.user_id);
+    return sendSuccess(res, result, 201);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function updateAllowances(req, res, next) {
+  try {
+    const result = await employeesService.updateAllowances(req.params.employeeId, req.body.allowances, req.user.user_id);
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getFinanceHistory(req, res, next) {
+  try {
+    const result = await employeesService.getEmployeeFinanceHistory(req.params.employeeId);
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}

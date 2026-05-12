@@ -48,6 +48,10 @@ const entitySchemaMap = {
     type: z.enum(['flat', 'percentage']),
     is_active: z.boolean().optional(),
   }),
+  'allowance-types': z.object({
+    field_name: z.string().min(1).max(100),
+    is_active: z.boolean().optional(),
+  }),
 };
 
 function getEntitySchema(entity, isPatch = false) {

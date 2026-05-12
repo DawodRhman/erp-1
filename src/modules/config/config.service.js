@@ -57,6 +57,11 @@ const entityConfig = {
     createFields: ['name', 'amount_pkr', 'type', 'is_active'],
     updateFields: ['name', 'amount_pkr', 'type', 'is_active'],
   },
+  'allowance-types': {
+    table: 'allowance_types',
+    createFields: ['field_name', 'is_active'],
+    updateFields: ['field_name', 'is_active'],
+  },
 };
 
 function getEntityConfig(entity) {

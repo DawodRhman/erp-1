@@ -23,11 +23,14 @@ const jobInfoSchema = z.object({
   contract_end_date: z.string().min(8).optional().nullable(),
 });
 
-const salaryInfoSchema = z
-  .object({
-    base_salary: z.number().nonnegative().optional(),
-  })
-  .optional();
+const salaryInfoSchema = z.object({
+  base_salary: z.number().nonnegative(),
+  currency: z.string().length(3).default('PKR'),
+  effective_from: z.string().min(8),
+  revision_type: z.enum(['Initial', 'Promotion', 'Demotion', 'Increment', 'Decrement', 'Correction', 'Market Adjustment']),
+  revision_percent: z.number().nonnegative().optional().nullable(),
+  revision_reason: z.string().max(500).optional().nullable(),
+});
 
 const accountInfoSchema = z.object({
   email: z.string().email(),
@@ -63,6 +66,12 @@ const bankInfoSchema = z.object({
   account_type: z.enum(['current', 'savings', 'salary']).optional().nullable(),
 });
 
+const allowanceItemSchema = z.object({
+  allowance_type_id: z.string().uuid(),
+  amount: z.number().nonnegative(),
+  is_percentage: z.boolean().default(false),
+});
+
 const medicalInfoSchema = z.object({
   blood_group: z.enum(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'unknown']).optional().nullable(),
   date_of_birth: z.string().optional().nullable(),
@@ -90,6 +99,7 @@ export const createEmployeeSchema = z.object({
   emergencyContacts: emergencyContactsSchema.optional(),
   bankInfo: bankInfoSchema.optional(),
   medicalInfo: medicalInfoSchema.optional(),
+  allowances: z.array(allowanceItemSchema).optional(),
 });
 
 export const updatePersonalInfoSchema = personalInfoSchema.partial();
@@ -108,4 +118,8 @@ export const updateExtraInfoSchema = z.object({
   medicalInfo: updateMedicalInfoSchema.optional(),
 });
 
+export const salaryRevisionSchema = salaryInfoSchema;
 
+export const updateAllowancesSchema = z.object({
+  allowances: z.array(allowanceItemSchema),
+});

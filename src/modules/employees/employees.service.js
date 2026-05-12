@@ -9,7 +9,7 @@ function nextEmployeeCodeFromMax(maxEmployeeId) {
 }
 
 export async function createEmployee(data, createdByUserId) {
-  const { personalInfo, jobInfo, accountInfo, emergencyContacts, bankInfo, medicalInfo } = data;
+  const { personalInfo, jobInfo, accountInfo, emergencyContacts, bankInfo, medicalInfo, salaryInfo, allowances } = data;
 
   const duplicateCnic = await pool.query(
     `SELECT 1 FROM public.employee_info WHERE cnic = $1 LIMIT 1`,
@@ -252,6 +252,62 @@ export async function createEmployee(data, createdByUserId) {
       ]
     );
 
+    if (salaryInfo) {
+      await client.query(
+        `
+          INSERT INTO public.employee_salary (
+            employee_id,
+            basic_salary,
+            currency,
+            effective_from,
+            is_current,
+            is_active,
+            revision_type,
+            revision_percent,
+            revision_reason,
+            created_by
+          )
+          VALUES ($1, $2, $3, $4, true, true, $5, $6, $7, $8)
+        `,
+        [
+          employeeId,
+          salaryInfo.base_salary,
+          salaryInfo.currency || 'PKR',
+          salaryInfo.effective_from,
+          salaryInfo.revision_type,
+          salaryInfo.revision_percent || null,
+          salaryInfo.revision_reason || null,
+          createdByUserId,
+        ]
+      );
+    }
+
+    if (allowances && allowances.length > 0) {
+      for (const allowance of allowances) {
+        await client.query(
+          `
+            INSERT INTO public.employee_allowances (
+              employee_id,
+              allowance_type_id,
+              amount,
+              is_percentage,
+              is_current,
+              is_active,
+              created_by
+            )
+            VALUES ($1, $2, $3, $4, true, true, $5)
+          `,
+          [
+            employeeId,
+            allowance.allowance_type_id,
+            allowance.amount,
+            allowance.is_percentage || false,
+            createdByUserId,
+          ]
+        );
+      }
+    }
+
     await client.query('COMMIT');
 
     return {
@@ -401,9 +457,37 @@ export async function getEmployeeById(employeeId) {
 
   const row = result.rows[0];
   
+  const salaryResult = await pool.query(
+    `
+      SELECT * FROM public.employee_salary
+      WHERE employee_id = $1 AND is_current = true
+      LIMIT 1
+    `,
+    [employeeId]
+  );
+
+  const allowancesResult = await pool.query(
+    `
+      SELECT ea.*, at.field_name
+      FROM public.employee_allowances ea
+      JOIN public.allowance_types at ON at.id = ea.allowance_type_id
+      WHERE ea.employee_id = $1 AND ea.is_current = true
+    `,
+    [employeeId]
+  );
+
   // Structure the response
   const employee = {
     ...row,
+    salaryInfo: salaryResult.rows[0] ? {
+      base_salary: salaryResult.rows[0].basic_salary,
+      currency: salaryResult.rows[0].currency,
+      effective_from: salaryResult.rows[0].effective_from,
+      revision_type: salaryResult.rows[0].revision_type,
+      revision_percent: salaryResult.rows[0].revision_percent,
+      revision_reason: salaryResult.rows[0].revision_reason
+    } : null,
+    allowances: allowancesResult.rows,
     emergencyContacts: row.contact_1 ? {
       contact_1: row.contact_1,
       contact_2: row.contact_2,
@@ -833,3 +917,138 @@ export async function resendCredentials(employeeId) {
   };
 }
 
+export async function addSalaryRevision(employeeId, data, createdByUserId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Archive current salary
+    await client.query(
+      `
+        UPDATE public.employee_salary
+        SET is_current = false, effective_to = CURRENT_DATE
+        WHERE employee_id = $1 AND is_current = true
+      `,
+      [employeeId]
+    );
+
+    // Insert new salary
+    const result = await client.query(
+      `
+        INSERT INTO public.employee_salary (
+          employee_id,
+          basic_salary,
+          currency,
+          effective_from,
+          is_current,
+          is_active,
+          revision_type,
+          revision_percent,
+          revision_reason,
+          created_by
+        )
+        VALUES ($1, $2, $3, $4, true, true, $5, $6, $7, $8)
+        RETURNING *
+      `,
+      [
+        employeeId,
+        data.base_salary,
+        data.currency || 'PKR',
+        data.effective_from,
+        data.revision_type,
+        data.revision_percent || null,
+        data.revision_reason || null,
+        createdByUserId,
+      ]
+    );
+
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function updateAllowances(employeeId, allowances, createdByUserId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Archive current allowances
+    await client.query(
+      `
+        UPDATE public.employee_allowances
+        SET is_current = false
+        WHERE employee_id = $1 AND is_current = true
+      `,
+      [employeeId]
+    );
+
+    const insertedAllowances = [];
+    if (allowances && allowances.length > 0) {
+      for (const allowance of allowances) {
+        const result = await client.query(
+          `
+            INSERT INTO public.employee_allowances (
+              employee_id,
+              allowance_type_id,
+              amount,
+              is_percentage,
+              is_current,
+              is_active,
+              created_by
+            )
+            VALUES ($1, $2, $3, $4, true, true, $5)
+            RETURNING *
+          `,
+          [
+            employeeId,
+            allowance.allowance_type_id,
+            allowance.amount,
+            allowance.is_percentage || false,
+            createdByUserId,
+          ]
+        );
+        insertedAllowances.push(result.rows[0]);
+      }
+    }
+
+    await client.query('COMMIT');
+    return insertedAllowances;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getEmployeeFinanceHistory(employeeId) {
+  const salaryHistory = await pool.query(
+    `
+      SELECT * FROM public.employee_salary
+      WHERE employee_id = $1
+      ORDER BY effective_from DESC, created_at DESC
+    `,
+    [employeeId]
+  );
+
+  const allowancesHistory = await pool.query(
+    `
+      SELECT ea.*, at.field_name
+      FROM public.employee_allowances ea
+      JOIN public.allowance_types at ON at.id = ea.allowance_type_id
+      WHERE ea.employee_id = $1
+      ORDER BY ea.created_at DESC
+    `,
+    [employeeId]
+  );
+
+  return {
+    salaryHistory: salaryHistory.rows,
+    allowancesHistory: allowancesHistory.rows,
+  };
+}

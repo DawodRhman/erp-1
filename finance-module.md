@@ -30,10 +30,7 @@
 | Column Name             | Data Type    | Constraints                 | Description                                                                          |
 | ----------------------- | ------------ | --------------------------- | ------------------------------------------------------------------------------------ |
 | `id`                    | UUID         | Primary Key, Auto-generated | Unique identifier for the allowance type record.                                     |
-| `code`                  | VARCHAR(30)  | Required, Unique            | Short internal code for the allowance type such as `HRA`, `MEDICAL`, or `TRANSPORT`. |
-| `display_name`          | VARCHAR(100) | Required                    | Human-readable name displayed in the frontend, such as “House Rent Allowance”.       |
-| `description`           | TEXT         | Nullable                    | Optional explanation or details about the allowance type.                            |
-| `default_is_percentage` | BOOLEAN      | Required, Default: `FALSE`  | Indicates whether this allowance is usually percentage-based by default.             |
+| `field_name`          | VARCHAR(100) | Required                    | Human-readable name displayed in the frontend, such as “House Rent Allowance”.       |
 | `is_active`             | BOOLEAN      | Required, Default: `TRUE`   | Indicates whether the allowance type is active and available for use.                |
 | `created_at`            | TIMESTAMPTZ  | Required, Default: `NOW()`  | Date and time when the record was created.                                           |
 | `updated_at`            | TIMESTAMPTZ  | Required, Default: `NOW()`  | Date and time when the record was last updated.                                      |
