@@ -83,35 +83,46 @@ export async function getHRMetrics(range = '6m') {
     ),
     pool.query(
       `
+        WITH employees AS (
+          SELECT
+            employee_id,
+            name,
+            CASE
+              WHEN date_of_birth ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                THEN to_date(date_of_birth, 'YYYY-MM-DD')
+              ELSE NULL
+            END AS dob
+          FROM public.employee_info
+        )
         SELECT
           employee_id,
           name,
-          date_of_birth,
+          dob AS date_of_birth,
           (
             CASE
-              WHEN to_date(date_of_birth, 'YYYY-MM-DD') IS NULL THEN NULL
+              WHEN dob IS NULL THEN NULL
               ELSE (
                 CASE
                   WHEN make_date(
                     EXTRACT(YEAR FROM CURRENT_DATE)::int,
-                    EXTRACT(MONTH FROM to_date(date_of_birth, 'YYYY-MM-DD'))::int,
-                    EXTRACT(DAY FROM to_date(date_of_birth, 'YYYY-MM-DD'))::int
+                    EXTRACT(MONTH FROM dob)::int,
+                    EXTRACT(DAY FROM dob)::int
                   ) >= CURRENT_DATE
                   THEN make_date(
                     EXTRACT(YEAR FROM CURRENT_DATE)::int,
-                    EXTRACT(MONTH FROM to_date(date_of_birth, 'YYYY-MM-DD'))::int,
-                    EXTRACT(DAY FROM to_date(date_of_birth, 'YYYY-MM-DD'))::int
+                    EXTRACT(MONTH FROM dob)::int,
+                    EXTRACT(DAY FROM dob)::int
                   ) - CURRENT_DATE
                   ELSE make_date(
                     (EXTRACT(YEAR FROM CURRENT_DATE)::int + 1),
-                    EXTRACT(MONTH FROM to_date(date_of_birth, 'YYYY-MM-DD'))::int,
-                    EXTRACT(DAY FROM to_date(date_of_birth, 'YYYY-MM-DD'))::int
+                    EXTRACT(MONTH FROM dob)::int,
+                    EXTRACT(DAY FROM dob)::int
                   ) - CURRENT_DATE
                 END
               )
             END
           )::int AS days_until
-        FROM public.employee_info
+        FROM employees
         ORDER BY days_until ASC NULLS LAST
         LIMIT 30
       `
@@ -267,31 +278,47 @@ export async function getEmployeeSelfMetrics(employeeId) {
     ),
     pool.query(
       `
+        WITH employees AS (
+          SELECT
+            employee_id,
+            name,
+            CASE
+              WHEN date_of_birth ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                THEN to_date(date_of_birth, 'YYYY-MM-DD')
+              ELSE NULL
+            END AS dob
+          FROM public.employee_info
+        )
         SELECT
           employee_id,
           name,
-          date_of_birth,
+          dob AS date_of_birth,
           (
             CASE
-              WHEN make_date(
-                EXTRACT(YEAR FROM CURRENT_DATE)::int,
-                EXTRACT(MONTH FROM to_date(date_of_birth, 'YYYY-MM-DD'))::int,
-                EXTRACT(DAY FROM to_date(date_of_birth, 'YYYY-MM-DD'))::int
-              ) >= CURRENT_DATE
-              THEN make_date(
-                EXTRACT(YEAR FROM CURRENT_DATE)::int,
-                EXTRACT(MONTH FROM to_date(date_of_birth, 'YYYY-MM-DD'))::int,
-                EXTRACT(DAY FROM to_date(date_of_birth, 'YYYY-MM-DD'))::int
-              ) - CURRENT_DATE
-              ELSE make_date(
-                (EXTRACT(YEAR FROM CURRENT_DATE)::int + 1),
-                EXTRACT(MONTH FROM to_date(date_of_birth, 'YYYY-MM-DD'))::int,
-                EXTRACT(DAY FROM to_date(date_of_birth, 'YYYY-MM-DD'))::int
-              ) - CURRENT_DATE
+              WHEN dob IS NULL THEN NULL
+              ELSE (
+                CASE
+                  WHEN make_date(
+                    EXTRACT(YEAR FROM CURRENT_DATE)::int,
+                    EXTRACT(MONTH FROM dob)::int,
+                    EXTRACT(DAY FROM dob)::int
+                  ) >= CURRENT_DATE
+                  THEN make_date(
+                    EXTRACT(YEAR FROM CURRENT_DATE)::int,
+                    EXTRACT(MONTH FROM dob)::int,
+                    EXTRACT(DAY FROM dob)::int
+                  ) - CURRENT_DATE
+                  ELSE make_date(
+                    (EXTRACT(YEAR FROM CURRENT_DATE)::int + 1),
+                    EXTRACT(MONTH FROM dob)::int,
+                    EXTRACT(DAY FROM dob)::int
+                  ) - CURRENT_DATE
+                END
+              )
             END
           )::int AS days_until
-        FROM public.employee_info
-        ORDER BY days_until ASC
+        FROM employees
+        ORDER BY days_until ASC NULLS LAST
         LIMIT 10
       `
     ),
