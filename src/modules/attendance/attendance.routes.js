@@ -25,11 +25,12 @@ const saveSheetSchema = z.object({
   rows: z.array(
     z.object({
       employee_id: z.string().min(3).max(10),
+      shift_id: z.string().uuid(),
       check_in: z.string().optional().nullable(),
       check_out: z.string().optional().nullable(),
       status: z.enum(['present', 'absent', 'late', 'half_day', 'on_leave']),
       notes: z.string().optional().nullable(),
-      ack: z.boolean().optional(),
+      ack: z.boolean().nullable().optional(),
     })
   ),
 });

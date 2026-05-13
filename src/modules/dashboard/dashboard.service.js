@@ -90,6 +90,8 @@ export async function getHRMetrics(range = '6m') {
             CASE
               WHEN date_of_birth ~ '^\\d{4}-\\d{2}-\\d{2}$'
                 THEN to_date(date_of_birth, 'YYYY-MM-DD')
+              WHEN date_of_birth ~ '^\\d{2}-\\d{2}-\\d{4}$'
+                THEN to_date(date_of_birth, 'DD-MM-YYYY')
               ELSE NULL
             END AS dob
           FROM public.employee_info
@@ -99,77 +101,44 @@ export async function getHRMetrics(range = '6m') {
           name,
           dob AS date_of_birth,
           (
-            CASE
-              WHEN dob IS NULL THEN NULL
-              ELSE (
-                CASE
-                  WHEN make_date(
-                    EXTRACT(YEAR FROM CURRENT_DATE)::int,
-                    EXTRACT(MONTH FROM dob)::int,
-                    EXTRACT(DAY FROM dob)::int
-                  ) >= CURRENT_DATE
-                  THEN make_date(
-                    EXTRACT(YEAR FROM CURRENT_DATE)::int,
-                    EXTRACT(MONTH FROM dob)::int,
-                    EXTRACT(DAY FROM dob)::int
-                  ) - CURRENT_DATE
-                  ELSE make_date(
-                    (EXTRACT(YEAR FROM CURRENT_DATE)::int + 1),
-                    EXTRACT(MONTH FROM dob)::int,
-                    EXTRACT(DAY FROM dob)::int
-                  ) - CURRENT_DATE
-                END
-              )
-            END
+            make_date(
+              EXTRACT(YEAR FROM CURRENT_DATE)::int,
+              EXTRACT(MONTH FROM dob)::int,
+              EXTRACT(DAY FROM dob)::int
+            ) - CURRENT_DATE
           )::int AS days_until
         FROM employees
-        ORDER BY days_until ASC NULLS LAST
-        LIMIT 30
+        WHERE dob IS NOT NULL
+          AND EXTRACT(MONTH FROM dob) = EXTRACT(MONTH FROM CURRENT_DATE)
+          AND EXTRACT(DAY FROM dob) >= EXTRACT(DAY FROM CURRENT_DATE)
+        ORDER BY days_until ASC
       `
     ),
     pool.query(
       `
         SELECT
-          ei.employee_id,
+          pa.employee_id,
           ei.name,
-          eba.account_number AS bank_acc_num,
-          ec.e_contact_1_phone AS emergence_contact_1,
-          ec.postal_address
-        FROM public.employee_info ei
-        LEFT JOIN public.emergency_contacts ec ON ec.employee_id = ei.employee_id
-        LEFT JOIN public.employee_bank_accounts eba ON eba.employee_id = ei.employee_id
-        WHERE eba.account_number IS NULL
-           OR ec.e_contact_1_phone IS NULL
-           OR ec.postal_address IS NULL
+          pa.missing_fields
+        FROM public.pending_actions pa
+        JOIN public.employee_info ei ON ei.employee_id = pa.employee_id
+        WHERE pa.status = 'open'
+        ORDER BY pa.created_at DESC
       `
     ),
 
     pool.query(
       `
         SELECT
-          ei.employee_id,
+          ua.employee_id,
           ei.name,
-          CASE
-            WHEN ji.probation_end_date IS NOT NULL
-              AND ji.probation_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 day'
-              THEN 'probation'
-            WHEN ji.contract_end_date IS NOT NULL
-              AND ji.contract_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 day'
-              THEN 'contract'
-          END AS type,
-          LEAST(
-            COALESCE(ji.probation_end_date, '9999-12-31'::date),
-            COALESCE(ji.contract_end_date, '9999-12-31'::date)
-          ) AS expiry_date,
-          LEAST(
-            COALESCE(ji.probation_end_date, '9999-12-31'::date),
-            COALESCE(ji.contract_end_date, '9999-12-31'::date)
-          ) - CURRENT_DATE AS days_remaining
-        FROM public.job_info ji
-        JOIN public.employee_info ei ON ei.employee_id = ji.employee_id
-        WHERE (ji.probation_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 day')
-           OR (ji.contract_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 day')
-        ORDER BY expiry_date ASC
+          ua.type,
+          ua.expiry_date,
+          ua.expiry_date - CURRENT_DATE AS days_remaining
+        FROM public.urgent_alerts ua
+        JOIN public.employee_info ei ON ei.employee_id = ua.employee_id
+        WHERE ua.status = 'open'
+        ORDER BY ua.expiry_date ASC
       `
     ),
   ]);
@@ -190,17 +159,11 @@ export async function getHRMetrics(range = '6m') {
     penalties_this_month: { coming_soon: true, count: 0, amount_pkr: 0 },
     attendance_trend: attendanceTrend.rows,
     headcount_trend: headcountTrend.rows,
-    upcoming_birthdays: upcomingBirthdays.rows.filter(
-      (row) => row.days_until !== null && row.days_until <= 30
-    ),
+    upcoming_birthdays: upcomingBirthdays.rows,
     pending_actions: pendingActions.rows.map((row) => ({
       employee_id: row.employee_id,
       name: row.name,
-      missing_fields: [
-        !row.bank_acc_num ? 'bank_acc_num' : null,
-        !row.emergence_contact_1 ? 'emergence_contact_1' : null,
-        !row.postal_address ? 'postal_address' : null,
-      ].filter(Boolean),
+      missing_fields: Array.isArray(row.missing_fields) ? row.missing_fields : [],
     })),
     urgent_alerts: urgentAlerts.rows,
   };
@@ -285,6 +248,8 @@ export async function getEmployeeSelfMetrics(employeeId) {
             CASE
               WHEN date_of_birth ~ '^\\d{4}-\\d{2}-\\d{2}$'
                 THEN to_date(date_of_birth, 'YYYY-MM-DD')
+              WHEN date_of_birth ~ '^\\d{2}-\\d{2}-\\d{4}$'
+                THEN to_date(date_of_birth, 'DD-MM-YYYY')
               ELSE NULL
             END AS dob
           FROM public.employee_info
@@ -294,31 +259,17 @@ export async function getEmployeeSelfMetrics(employeeId) {
           name,
           dob AS date_of_birth,
           (
-            CASE
-              WHEN dob IS NULL THEN NULL
-              ELSE (
-                CASE
-                  WHEN make_date(
-                    EXTRACT(YEAR FROM CURRENT_DATE)::int,
-                    EXTRACT(MONTH FROM dob)::int,
-                    EXTRACT(DAY FROM dob)::int
-                  ) >= CURRENT_DATE
-                  THEN make_date(
-                    EXTRACT(YEAR FROM CURRENT_DATE)::int,
-                    EXTRACT(MONTH FROM dob)::int,
-                    EXTRACT(DAY FROM dob)::int
-                  ) - CURRENT_DATE
-                  ELSE make_date(
-                    (EXTRACT(YEAR FROM CURRENT_DATE)::int + 1),
-                    EXTRACT(MONTH FROM dob)::int,
-                    EXTRACT(DAY FROM dob)::int
-                  ) - CURRENT_DATE
-                END
-              )
-            END
+            make_date(
+              EXTRACT(YEAR FROM CURRENT_DATE)::int,
+              EXTRACT(MONTH FROM dob)::int,
+              EXTRACT(DAY FROM dob)::int
+            ) - CURRENT_DATE
           )::int AS days_until
         FROM employees
-        ORDER BY days_until ASC NULLS LAST
+        WHERE dob IS NOT NULL
+          AND EXTRACT(MONTH FROM dob) = EXTRACT(MONTH FROM CURRENT_DATE)
+          AND EXTRACT(DAY FROM dob) >= EXTRACT(DAY FROM CURRENT_DATE)
+        ORDER BY days_until ASC
         LIMIT 10
       `
     ),
@@ -356,9 +307,7 @@ export async function getEmployeeSelfMetrics(employeeId) {
 
   const monthLabel = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
-  const upcomingBirthdayRows = upcomingBirthdays.rows.filter(
-    (row) => row.days_until !== null && row.days_until <= 30
-  );
+  const upcomingBirthdayRows = upcomingBirthdays.rows;
 
   return {
     attendance_summary: {
@@ -381,29 +330,20 @@ export async function getPendingActions() {
   const result = await pool.query(
     `
       SELECT
-        ei.employee_id,
+        pa.employee_id,
         ei.name,
-        eba.account_number AS bank_acc_num,
-        ec.e_contact_1_phone AS emergence_contact_1,
-        ec.postal_address
-      FROM public.employee_info ei
-      LEFT JOIN public.emergency_contacts ec ON ec.employee_id = ei.employee_id
-      LEFT JOIN public.employee_bank_accounts eba ON eba.employee_id = ei.employee_id
-      WHERE eba.account_number IS NULL
-         OR ec.e_contact_1_phone IS NULL
-         OR ec.postal_address IS NULL
-      ORDER BY ei.employee_id ASC
+        pa.missing_fields
+      FROM public.pending_actions pa
+      JOIN public.employee_info ei ON ei.employee_id = pa.employee_id
+      WHERE pa.status = 'open'
+      ORDER BY pa.created_at DESC
     `
   );
 
   return result.rows.map((row) => ({
     employee_id: row.employee_id,
     name: row.name,
-    missing_fields: [
-      !row.bank_acc_num ? 'bank_acc_num' : null,
-      !row.emergence_contact_1 ? 'emergence_contact_1' : null,
-      !row.postal_address ? 'postal_address' : null,
-    ].filter(Boolean),
+    missing_fields: Array.isArray(row.missing_fields) ? row.missing_fields : [],
   }));
 }
 
@@ -412,48 +352,16 @@ export async function getUrgentAlerts(days = 30) {
   const result = await pool.query(
     `
       SELECT
-        ei.employee_id,
+        ua.employee_id,
         ei.name,
-        ji.probation_end_date,
-        ji.contract_end_date
-      FROM public.job_info ji
-      JOIN public.employee_info ei ON ei.employee_id = ji.employee_id
-      WHERE (ji.probation_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + ($1 || ' day')::interval)
-         OR (ji.contract_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + ($1 || ' day')::interval)
-      ORDER BY ei.employee_id ASC
-    `,
-    [String(days)]
+        ua.type,
+        ua.expiry_date,
+        ua.expiry_date - CURRENT_DATE AS days_remaining
+      FROM public.urgent_alerts ua
+      JOIN public.employee_info ei ON ei.employee_id = ua.employee_id
+      WHERE ua.status = 'open'
+      ORDER BY ua.expiry_date ASC
+    `
   );
-
-  const alerts = [];
-
-  for (const row of result.rows) {
-    if (row.probation_end_date) {
-      const daysRemaining = Math.ceil(
-        (new Date(row.probation_end_date).getTime() - Date.now()) / 86400000
-      );
-      alerts.push({
-        employee_id: row.employee_id,
-        name: row.name,
-        type: 'probation',
-        expiry_date: row.probation_end_date,
-        days_remaining: daysRemaining,
-      });
-    }
-
-    if (row.contract_end_date) {
-      const daysRemaining = Math.ceil(
-        (new Date(row.contract_end_date).getTime() - Date.now()) / 86400000
-      );
-      alerts.push({
-        employee_id: row.employee_id,
-        name: row.name,
-        type: 'contract',
-        expiry_date: row.contract_end_date,
-        days_remaining: daysRemaining,
-      });
-    }
-  }
-
-  return alerts;
+  return result.rows;
 }
