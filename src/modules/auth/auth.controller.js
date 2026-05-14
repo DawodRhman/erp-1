@@ -80,6 +80,15 @@ export function session(req, res) {
   return sendSuccess(res, req.user, 200);
 }
 
+export async function getMyPermissions(req, res, next) {
+  try {
+    const result = await authService.getRolePermissions(req.user.role_id);
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function changePassword(req, res, next) {
   try {
     await authService.changePassword(

@@ -105,3 +105,42 @@ export async function changePassword(userId, currentPassword, newPassword) {
     [userId, newHashedPassword]
   );
 }
+
+export async function getRolePermissions(roleId) {
+  const roleResult = await pool.query(
+    `SELECT id, role_name FROM public.roles WHERE id = $1 LIMIT 1`,
+    [roleId]
+  );
+
+  if (roleResult.rowCount === 0) {
+    throw new AppError(404, 'NOT_FOUND', 'Role not found.');
+  }
+
+  const roleName = roleResult.rows[0].role_name;
+  let permissions = [];
+
+  if (roleName === 'super_admin') {
+    const allPerms = await pool.query(
+      `SELECT permission_key FROM public.permissions ORDER BY permission_key ASC`
+    );
+    permissions = allPerms.rows.map((row) => row.permission_key);
+  } else {
+    const result = await pool.query(
+      `
+        SELECT p.permission_key
+        FROM public.permissions p
+        JOIN public.role_permissions rp ON rp.permission_id = p.id
+        WHERE rp.role_id = $1
+        ORDER BY p.permission_key ASC
+      `,
+      [roleId]
+    );
+    permissions = result.rows.map((row) => row.permission_key);
+  }
+
+  return {
+    role_id: roleId,
+    role_name: roleName,
+    permissions,
+  };
+}
