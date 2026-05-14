@@ -363,8 +363,13 @@ export async function approveUnlock(date, locationId, unlockedByUserId, unlockRe
 }
 
 export async function getMonthlyReport(year, month, locationId, filters = {}) {
-  const params = [year, month, locationId];
+  const params = [year, month];
   const whereExtra = [];
+
+  if (locationId) {
+    params.push(locationId);
+    whereExtra.push(`ji.work_location_id = $${params.length}`);
+  }
 
   if (filters.employee_id) {
     params.push(filters.employee_id);
@@ -394,8 +399,7 @@ export async function getMonthlyReport(year, month, locationId, filters = {}) {
         ON a.employee_id = ji.employee_id
        AND EXTRACT(YEAR FROM a.date) = $1
        AND EXTRACT(MONTH FROM a.date) = $2
-      WHERE ji.work_location_id = $3
-      ${whereExtra.length ? `AND ${whereExtra.join(' AND ')}` : ''}
+      ${whereExtra.length ? `WHERE ${whereExtra.join(' AND ')}` : ''}
       GROUP BY ei.employee_id, ei.name, d.title
       ORDER BY ei.employee_id ASC
     `,
