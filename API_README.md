@@ -6,6 +6,42 @@
 
 ---
 
+## Demo Environment
+
+The EMS backend can be quickly set up with demo data for testing and exploration:
+
+**Base URL:** `http://localhost:3001`
+
+**Admin Credentials:**
+- Email: `superadmin@esspl.com.pk`
+- Password: `SuperAdmin@123!`
+
+**Setup Steps:**
+
+1. **Configure the database** by setting `DATABASE_URL` in your `.env` file.
+
+2. **Load sample data** using the master seed script:
+   ```bash
+   node seeds/master_seed.js
+   ```
+   This creates:
+   - 520 employees (EMP001-EMP520)
+   - 21 departments with hierarchical structure
+   - All configuration lookup tables: designations, employment types, job statuses, work modes, work locations, shifts, leave types, allowance types
+   - Roles and permissions assignments
+
+3. **Optional API smoke test:** set `SEED_USE_API=1` in your environment before running the seed to automatically test login and department lookup after seeding.
+
+4. **Obtain JWT token:** After seeding, log in to get an access token:
+   ```bash
+   curl -X POST http://localhost:3001/api/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"superadmin@esspl.com.pk","password":"SuperAdmin@123!"}'
+   ```
+   Include the returned token in subsequent requests via the `Authorization: Bearer <token>` header.
+
+---
+
 ## Overview
 
 This is the comprehensive API documentation for the EMS (Employee Management System) backend. Each module is documented in its own file with complete payload structures, validation rules, and test examples.

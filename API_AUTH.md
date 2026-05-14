@@ -240,3 +240,171 @@ curl -X POST http://localhost:3001/api/auth/change-password \
 - You can also use the JWT token directly in the `Authorization: Bearer <token>` header.
 - Tokens expire according to `JWT_EXPIRES_IN` environment variable (default: 1 day).
 - All auth endpoints use the standard response format: `{ success: boolean, data?: any, error?: { code, message, details? } }`
+
+---
+
+## Demo Credentials
+
+For development and testing, the seed script creates a super admin user:
+
+> **Email:** `superadmin@esspl.com.pk`  
+> **Password:** `SuperAdmin@123!`
+
+This account has full system access via the `super_admin` role.
+
+---
+
+## Roles & Permissions
+
+The system implements role-based access control (RBAC). The seed script creates the following roles with their associated permissions:
+
+### Role Summary
+
+| Role | Description | Approx. Permissions |
+|------|-------------|---------------------|
+| `super_admin` | Full system access | All permissions |
+| `hr_manager` | HR Manager | 30 permissions |
+| `hr_executive` | HR Executive | 13 permissions |
+| `it_manager` | IT Manager | 4 permissions |
+| `swe_manager` | Software Engineering Manager | 4 permissions |
+| `tech_lead` | Technical Lead | 4 permissions |
+| `sales_manager` | Sales Manager | 3 permissions |
+| `procurement_manager` | Procurement Manager | 4 permissions |
+| `finance_manager` | Finance Manager | 3 permissions |
+| `operations_manager` | Operations Manager | 3 permissions |
+| `employee` | Standard employee | 6 permissions |
+
+### Detailed Permission Mappings
+
+**super_admin**
+All permissions in the system (full access).
+
+**hr_manager**
+```
+config:read, config:write
+employees:read, employees:write
+salary:read, salary:write
+allowances:read, allowances:write
+leave:read, leave:write, leave:approve
+leave_capacity:read, leave_capacity:write
+attendance:read, attendance:write, attendance:submit_ho
+calendar:read, calendar:write
+notifications:read, notifications:write
+alerts:read
+pending_actions:read
+dashboard:read
+directory:read, directory:write
+penalty_rules:write
+penalties:propose, penalties:review, penalties:read_all
+reports:read
+```
+
+**hr_executive**
+```
+config:read
+employees:read
+leave:read, leave:write
+attendance:read, attendance:write
+calendar:read
+notifications:read, notifications:write
+pending_actions:read
+alerts:read
+directory:read
+penalties:propose, penalties:read_all
+```
+
+**it_manager**
+```
+employees:read
+directory:read
+calendar:read
+notifications:read
+```
+
+**swe_manager**
+```
+employees:read
+directory:read
+calendar:read
+notifications:read
+```
+
+**tech_lead**
+```
+employees:read
+directory:read
+calendar:read
+notifications:read
+```
+
+**sales_manager**
+```
+employees:read
+directory:read
+dashboard:read
+```
+
+**procurement_manager**
+```
+purchasing:read, purchasing:write, purchasing:approve
+inventory:read
+```
+
+**finance_manager**
+```
+salary:read
+reports:read
+dashboard:read
+```
+
+**operations_manager**
+```
+attendance:read
+directory:read
+dashboard:read
+```
+
+**employee**
+```
+leave:read, leave:write
+attendance:read
+notifications:read
+calendar:read
+directory:read
+```
+
+---
+
+## Seeding Instructions
+
+To populate the database with demo data, run the master seed script:
+
+```bash
+node seeds/master_seed.js
+```
+
+**Prerequisites:**
+- `DATABASE_URL` environment variable must be set (see `.env.example`)
+- PostgreSQL database must be running and accessible
+
+**What the seed creates:**
+- 520 employee records (EMP001 .. EMP520)
+- 21 departments (with hierarchical tree structure)
+- Complete lookup data: designations, employment types, job statuses, work modes, work locations, shifts
+- All permission keys and role-permission mappings
+- Leave types, allowance types
+- 60+ products across 12 categories
+- Attendance records, leave balances, and HR-related data
+
+**API Smoke Test (optional):**
+Set `SEED_USE_API=1` to run a basic API verification after database seeding. This requires the backend server to be running on the port specified by `PORT` (default 3001):
+
+```bash
+SEED_USE_API=1 node seeds/master_seed.js
+```
+
+The smoke test:
+1. POST `/api/auth/login` with superadmin credentials
+2. GET `/api/config/departments` with the obtained token
+
+**Note:** The primary seed path uses direct PostgreSQL pool queries for reliability. The API smoke test is optional and only verifies that the auth and config endpoints are responding correctly.

@@ -1,10 +1,11 @@
 # Penalties API
 
-**Base Paths:**  
-- `/api/penalties` - Penalty instances (proposals, approvals)  
-- `/api/penalty-rules` - Penalty rule definitions  
+**Base Paths:**
 
-**Total Endpoints:** 10
+- `/api/penalties` - Penalty instances (proposals, approvals)
+- `/api/penalty-rules` - Penalty rule definitions
+
+**Total Endpoints:** 9
 
 Penalty management includes defining rules (e.g., late fines) and proposing/approving penalties for employees.
 
@@ -20,11 +21,13 @@ Retrieve all active penalty rules. Available to users with `penalties:propose` p
 **Permissions:** `penalties:propose`
 
 ### Query Parameters
+
 None.
 
 ### Response Body
 
 **Success (200 OK):**
+
 ```json
 {
   "success": true,
@@ -62,15 +65,15 @@ None.
 
 **Rule object fields:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | UUID | Unique rule ID |
-| `name` | String | Rule name (e.g., "Late Arrival Fine") |
-| `description` | String or null | Detailed description of when the rule applies |
-| `amount_pkr` | Number | Fine amount in PKR. For `type: "flat"` this is a fixed amount; for `type: "percentage"` this is a percentage (e.g., 5 = 5%) |
-| `type` | Enum | Either `"flat"` (fixed amount) or `"percentage"` (percentage of base salary) |
-| `is_active` | Boolean | Whether this rule is currently active |
-| `created_at` | Timestamp | When the rule was created |
+| Field         | Type           | Description                                                                                                                 |
+| ------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `id`          | UUID           | Unique rule ID                                                                                                              |
+| `name`        | String         | Rule name (e.g., "Late Arrival Fine")                                                                                       |
+| `description` | String or null | Detailed description of when the rule applies                                                                               |
+| `amount_pkr`  | Number         | Fine amount in PKR. For `type: "flat"` this is a fixed amount; for `type: "percentage"` this is a percentage (e.g., 5 = 5%) |
+| `type`        | Enum           | Either `"flat"` (fixed amount) or `"percentage"` (percentage of base salary)                                                |
+| `is_active`   | Boolean        | Whether this rule is currently active                                                                                       |
+| `created_at`  | Timestamp      | When the rule was created                                                                                                   |
 
 **Example cURL:**
 
@@ -91,6 +94,7 @@ Create a new penalty rule. Requires `penalty_rules:write` permission.
 ### Request Body
 
 **Schema:**
+
 ```json
 {
   "name": "string (minimum 1 character, required)",
@@ -102,14 +106,15 @@ Create a new penalty rule. Requires `penalty_rules:write` permission.
 
 **Field Details:**
 
-| Field | Type | Required | Nullable | Validation | Description |
-|-------|------|----------|----------|------------|-------------|
-| `name` | String | Yes | No | Min 1 char | Rule name |
-| `amount_pkr` | Number | Yes | No | >= 0 | Fine amount in PKR |
-| `type` | String | Yes | No | Must be `"flat"` or `"percentage"` | How the amount is interpreted |
-| `is_active` | Boolean | No | No | - | Whether rule is active (defaults to `true`) |
+| Field        | Type    | Required | Nullable | Validation                         | Description                                 |
+| ------------ | ------- | -------- | -------- | ---------------------------------- | ------------------------------------------- |
+| `name`       | String  | Yes      | No       | Min 1 char                         | Rule name                                   |
+| `amount_pkr` | Number  | Yes      | No       | >= 0                               | Fine amount in PKR                          |
+| `type`       | String  | Yes      | No       | Must be `"flat"` or `"percentage"` | How the amount is interpreted               |
+| `is_active`  | Boolean | No       | No       | -                                  | Whether rule is active (defaults to `true`) |
 
 **Example Request (Test Payload):**
+
 ```json
 {
   "name": "Late Arrival Fine",
@@ -120,6 +125,7 @@ Create a new penalty rule. Requires `penalty_rules:write` permission.
 ```
 
 **For percentage-type rules:**
+
 ```json
 {
   "name": "Attendance Shortfall Penalty",
@@ -132,6 +138,7 @@ Create a new penalty rule. Requires `penalty_rules:write` permission.
 ### Response Body
 
 **Success (201 Created):**
+
 ```json
 {
   "success": true,
@@ -148,6 +155,7 @@ Create a new penalty rule. Requires `penalty_rules:write` permission.
 ```
 
 **Error Responses:**
+
 - `422 Validation Error`: Missing required fields, negative amount, invalid type
 - `403 Forbidden`: User lacks `penalty_rules:write` permission
 
@@ -175,15 +183,16 @@ Update an existing penalty rule. Requires `penalty_rules:write` permission.
 
 ### Path Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | UUID | Penalty rule ID to update |
+| Parameter | Type | Description               |
+| --------- | ---- | ------------------------- |
+| `id`      | UUID | Penalty rule ID to update |
 
 ### Request Body
 
 All fields are optional (partial update). Provide only the fields you want to change.
 
 **Schema:**
+
 ```json
 {
   "name": "string (optional)",
@@ -194,6 +203,7 @@ All fields are optional (partial update). Provide only the fields you want to ch
 ```
 
 **Example Request (Test Payload):**
+
 ```json
 {
   "amount_pkr": 750,
@@ -204,6 +214,7 @@ All fields are optional (partial update). Provide only the fields you want to ch
 ### Response Body
 
 **Success (200 OK):**
+
 ```json
 {
   "success": true,
@@ -219,6 +230,7 @@ All fields are optional (partial update). Provide only the fields you want to ch
 ```
 
 **Error Responses:**
+
 - `404 Not Found`: Rule ID doesn't exist
 - `422 Validation Error`: Invalid data
 - `403 Forbidden`: Missing permission
@@ -247,14 +259,15 @@ Retrieve all penalties (across all employees). Requires `penalties:read_all` per
 
 ### Query Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `status` | Enum | Filter by status: `pending`, `approved`, `rejected`, `acknowledged` |
-| `employee_id` | String | Filter by specific employee |
+| Parameter     | Type   | Description                                                         |
+| ------------- | ------ | ------------------------------------------------------------------- |
+| `status`      | Enum   | Filter by status: `pending`, `approved`, `rejected`, `acknowledged` |
+| `employee_id` | String | Filter by specific employee                                         |
 
 ### Response Body
 
 **Success (200 OK):**
+
 ```json
 {
   "success": true,
@@ -299,23 +312,23 @@ Retrieve all penalties (across all employees). Requires `penalties:read_all` per
 
 **Penalty object fields:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | UUID | Unique penalty instance ID |
-| `employee_id` | String | Employee who received the penalty |
-| `employee_name` | String | Employee's full name |
-| `rule_id` | UUID | Reference to the penalty rule applied |
-| `rule_name` | String | Human-readable rule name |
-| `date` | Date | Date when the violation occurred |
-| `reason` | String | Specific reason/context for this penalty |
-| `amount_pkr` | Number | Calculated fine amount in PKR |
-| `status` | Enum | Current status: `pending`, `approved`, `rejected`, `acknowledged` |
-| `proposed_by` | String | User ID who proposed the penalty |
-| `proposed_at` | Timestamp | When it was proposed |
-| `approved_by` | String or null | User ID who approved (if approved) |
-| `approved_at` | Timestamp or null | Approval timestamp |
-| `acknowledged_by` | String or null | Employee who acknowledged receipt |
-| `acknowledged_at` | Timestamp or null | When employee acknowledged |
+| Field             | Type              | Description                                                       |
+| ----------------- | ----------------- | ----------------------------------------------------------------- |
+| `id`              | UUID              | Unique penalty instance ID                                        |
+| `employee_id`     | String            | Employee who received the penalty                                 |
+| `employee_name`   | String            | Employee's full name                                              |
+| `rule_id`         | UUID              | Reference to the penalty rule applied                             |
+| `rule_name`       | String            | Human-readable rule name                                          |
+| `date`            | Date              | Date when the violation occurred                                  |
+| `reason`          | String            | Specific reason/context for this penalty                          |
+| `amount_pkr`      | Number            | Calculated fine amount in PKR                                     |
+| `status`          | Enum              | Current status: `pending`, `approved`, `rejected`, `acknowledged` |
+| `proposed_by`     | String            | User ID who proposed the penalty                                  |
+| `proposed_at`     | Timestamp         | When it was proposed                                              |
+| `approved_by`     | String or null    | User ID who approved (if approved)                                |
+| `approved_at`     | Timestamp or null | Approval timestamp                                                |
+| `acknowledged_by` | String or null    | Employee who acknowledged receipt                                 |
+| `acknowledged_at` | Timestamp or null | When employee acknowledged                                        |
 
 **Example cURL:**
 
@@ -334,11 +347,13 @@ Retrieve penalties for the authenticated employee only. Requires `penalties:read
 **Permissions:** `penalties:read_own`
 
 ### Query Parameters
+
 None.
 
 ### Response Body
 
 **Success (200 Ok):**
+
 ```json
 {
   "success": true,
@@ -378,6 +393,7 @@ Propose a new penalty for an employee. Requires `penalties:propose` permission. 
 ### Request Body
 
 **Schema:**
+
 ```json
 {
   "employee_id": "string (min 3, max 10 characters, required)",
@@ -389,14 +405,15 @@ Propose a new penalty for an employee. Requires `penalties:propose` permission. 
 
 **Field Details:**
 
-| Field | Type | Required | Nullable | Validation | Description |
-|-------|------|----------|----------|------------|-------------|
-| `employee_id` | String | Yes | No | Min 3, max 10 chars | Employee code of the person receiving the penalty |
-| `rule_id` | UUID | Yes | No | Valid UUID | ID of the penalty rule to apply |
-| `date` | String | Yes | No | Min 8 chars | Date of the violation (YYYY-MM-DD) |
-| `reason` | String | No | Yes | - | Additional context or specific details |
+| Field         | Type   | Required | Nullable | Validation          | Description                                       |
+| ------------- | ------ | -------- | -------- | ------------------- | ------------------------------------------------- |
+| `employee_id` | String | Yes      | No       | Min 3, max 10 chars | Employee code of the person receiving the penalty |
+| `rule_id`     | UUID   | Yes      | No       | Valid UUID          | ID of the penalty rule to apply                   |
+| `date`        | String | Yes      | No       | Min 8 chars         | Date of the violation (YYYY-MM-DD)                |
+| `reason`      | String | No       | Yes      | -                   | Additional context or specific details            |
 
 **Example Request (Test Payload):**
+
 ```json
 {
   "employee_id": "EMP002",
@@ -409,6 +426,7 @@ Propose a new penalty for an employee. Requires `penalties:propose` permission. 
 ### Response Body
 
 **Success (201 Created):**
+
 ```json
 {
   "success": true,
@@ -429,6 +447,7 @@ Propose a new penalty for an employee. Requires `penalties:propose` permission. 
 ```
 
 **Fields in `data`:**
+
 - `id` (UUID): New penalty instance ID
 - `employee_id` (String): Employee code
 - `employee_name` (String): Resolved employee name
@@ -442,6 +461,7 @@ Propose a new penalty for an employee. Requires `penalties:propose` permission. 
 - `proposed_at` (Timestamp): Proposal timestamp
 
 **Error Responses:**
+
 - `422 Validation Error`: Invalid employee_id, rule_id, or date format
 - `404 Not Found`: Employee or rule doesn't exist
 
@@ -470,16 +490,18 @@ Approve a proposed penalty. Requires `penalties:review` permission.
 
 ### Path Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | UUID | Penalty ID to approve |
+| Parameter | Type | Description           |
+| --------- | ---- | --------------------- |
+| `id`      | UUID | Penalty ID to approve |
 
 ### Request Body
+
 None.
 
 ### Response Body
 
 **Success (200 OK):**
+
 ```json
 {
   "success": true,
@@ -494,6 +516,7 @@ None.
 ```
 
 **Error Responses:**
+
 - `404 Not Found`: Penalty doesn't exist
 - `403 Forbidden`: User lacks review permission
 - `409 Conflict`: Already approved/rejected/acknowledged
@@ -516,13 +539,14 @@ Reject a proposed penalty with a reason. Requires `penalties:review` permission.
 
 ### Path Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | UUID | Penalty ID to reject |
+| Parameter | Type | Description          |
+| --------- | ---- | -------------------- |
+| `id`      | UUID | Penalty ID to reject |
 
 ### Request Body
 
 **Schema:**
+
 ```json
 {
   "reason": "string (minimum 1 character, required)"
@@ -531,11 +555,12 @@ Reject a proposed penalty with a reason. Requires `penalties:review` permission.
 
 **Field Details:**
 
-| Field | Type | Required | Nullable | Validation | Description |
-|-------|------|----------|----------|------------|-------------|
-| `reason` | String | Yes | No | Min 1 char | Justification for rejection |
+| Field    | Type   | Required | Nullable | Validation | Description                 |
+| -------- | ------ | -------- | -------- | ---------- | --------------------------- |
+| `reason` | String | Yes      | No       | Min 1 char | Justification for rejection |
 
 **Example Request (Test Payload):**
+
 ```json
 {
   "reason": "Insufficient evidence. Employee has valid medical certificate."
@@ -545,6 +570,7 @@ Reject a proposed penalty with a reason. Requires `penalties:review` permission.
 ### Response Body
 
 **Success (200 OK):**
+
 ```json
 {
   "success": true,
@@ -560,6 +586,7 @@ Reject a proposed penalty with a reason. Requires `penalties:review` permission.
 ```
 
 **Error Responses:**
+
 - `422 Validation Error`: Missing reason
 - `404 Not Found`: Penalty doesn't exist
 - `403 Forbidden`: No review permission
@@ -586,16 +613,18 @@ Acknowledge a penalty (employee confirmation of receipt). Once approved, employe
 
 ### Path Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | UUID | Penalty ID to acknowledge |
+| Parameter | Type | Description               |
+| --------- | ---- | ------------------------- |
+| `id`      | UUID | Penalty ID to acknowledge |
 
 ### Request Body
+
 None.
 
 ### Response Body
 
 **Success (200 OK):**
+
 ```json
 {
   "success": true,
@@ -620,13 +649,27 @@ curl -X PATCH http://localhost:3001/api/penalties/e3f4a5b6-c7d8-9012-ef34-567890
 
 ---
 
+## Permissions
+
+| Permission Key | Description | Assigned Roles |
+|----------------|-------------|----------------|
+| `penalty_rules:write` | CRUD on penalty rules | HR Manager |
+| `penalties:propose` | Submit penalty proposals | HR Manager, HR Executive |
+| `penalties:review` | Approve/reject penalty proposals | HR Manager |
+| `penalties:read_all` | View all penalties in the system | HR Manager, HR Executive |
+| `penalties:read_own` | View own penalties (employee self-service) | Not explicitly assigned in seed |
+
+These assignments are defined in `seeds/master_seed.js`.
+
+---
+
 ## Notes
 
 - **Workflow:** Create rule → Propose penalty (select rule + employee + date) → Review/Approve → Notify employee → Employee acknowledges
-- **Amount Calculation:** 
+- **Amount Calculation:**
   - `type: "flat"`: `amount_pkr` is the exact fine amount
   - `type: "percentage"`: `amount_pkr` is a percentage applied to employee's base salary (e.g., 5% of salary)
-- **Permissions:** 
+- **Permissions:**
   - `penalties:propose` allows viewing rules and proposing penalties
   - `penalties:read_all` for viewing all penalties
   - `penalties:read_own` for employees to see only their own

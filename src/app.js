@@ -13,6 +13,7 @@ import employeesModuleRoutes from './modules/employees/employees.routes.js';
 import configModuleRoutes from './modules/config/config.routes.js';
 import penaltiesModuleRoutes from './modules/penalties/penalties.routes.js';
 import directoryModuleRoutes from './modules/directory/directory.routes.js';
+import pool from './config/db.js';
 
 const app = express();
 
@@ -49,6 +50,22 @@ app.use('/api/directory', directoryModuleRoutes);
 
 app.get('/', (req, res) => {
 	res.status(200).json({ success: true, data: { message: 'server is running' } });
+});
+
+app.get('/api/health/db', async (req, res, next) => {
+	try {
+		const result = await pool.query('SELECT current_database() AS name, NOW() AS server_time');
+		const row = result.rows[0] || {};
+		res.status(200).json({
+			success: true,
+			data: {
+				database: row.name || null,
+				server_time: row.server_time || null,
+			},
+		});
+	} catch (error) {
+		next(error);
+	}
 });
 
 app.use(errorHandler);

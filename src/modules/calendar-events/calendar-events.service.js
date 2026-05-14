@@ -12,18 +12,30 @@ async function getRoleName(roleId) {
 export async function getCalendarEvents({ from, to, roleId }) {
   const roleName = await getRoleName(roleId);
 
-  const filters = ['date >= $1', 'date <= $2'];
-  const params = [from, to];
+  const filters = [];
+  const params = [];
+
+  if (from) {
+    params.push(from);
+    filters.push(`date >= $${params.length}`);
+  }
+
+  if (to) {
+    params.push(to);
+    filters.push(`date <= $${params.length}`);
+  }
 
   if (roleName === 'employee') {
     filters.push(`visibility IN ('all', 'employee')`);
   }
 
+  const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
   const result = await pool.query(
     `
       SELECT *
       FROM public.calendar_events
-      WHERE ${filters.join(' AND ')}
+      ${whereClause}
       ORDER BY date ASC, created_at DESC
     `,
     params

@@ -22,90 +22,98 @@ Retrieve HR-level metrics and analytics. This endpoint provides high-level stati
 
 ### Response Body
 
-**Success (200 OK):**
-```json
-{
-  "success": true,
-  "data": {
-    "generated_at": "2025-05-06T12:00:00.000Z",
-    "range": "6m",
-    "total_employees": 150,
-    "active_employees": 142,
-    "new_hires_this_month": 8,
-    "attendance_rate_avg": "92.5%",
-    "leave_balance_used_avg": "45%",
-    "pending_leave_requests": 12,
-    "unresolved_penalties": 3,
-    "upcoming_holidays": 2,
-    "employee_growth": [      // Monthly headcount trend
-      { "month": "2025-01", "count": 145 },
-      { "month": "2025-02", "count": 147 },
-      { "month": "2025-03", "count": 148 },
-      { "month": "2025-04", "count": 150 },
-      { "month": "2025-05", "count": 150 },
-      { "month": "2025-06", "count": 152 }
-    ],
-    "leave_trends": [
-      {
-        "month": "2025-01",
-        "approved": 35,
-        "rejected": 5,
-        "pending": 3
-      },
-      {
-        "month": "2025-02",
-        "approved": 42,
-        "rejected": 3,
-        "pending": 4
-      }
-    ],
-    "attendance_summary": [
-      {
-        "month": "2025-01",
-        "present_pct": "93%",
-        "absent_pct": "4%",
-        "late_pct": "3%"
-      }
-    ],
-    "department_breakdown": [
-      {
-        "department": "Engineering",
-        "headcount": 45,
-        "avg_attendance": "94.2%"
-      },
-      {
-        "department": "HR",
-        "headcount": 12,
-        "avg_attendance": "96.1%"
-      },
-      {
-        "department": "Sales",
-        "headcount": 28,
-        "avg_attendance": "91.5%"
-      }
-    ]
-  }
-}
-```
+Success response returns an object containing the following fields:
 
 **Top-level fields:**
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `generated_at` | Timestamp | When the metrics were calculated |
-| `range` | String | Time range used ("6m" or "12m") |
-| `total_employees` | Number | Total employee count in system |
-| `active_employees` | Number | Currently active employees |
-| `new_hires_this_month` | Number | Employees who joined this month |
-| `attendance_rate_avg` | String | Overall average attendance percentage |
-| `leave_balance_used_avg` | String | Average leave balance consumed (percentage) |
-| `pending_leave_requests` | Number | Number of leave requests awaiting approval |
-| `unresolved_penalties` | Number | Penalties pending review/acknowledgment |
-| `upcoming_holidays` | Number | Number of upcoming company holidays in calendar |
-| `employee_growth` | Array | Monthly headcount trend (for charting) |
-| `leave_trends` | Array | Monthly leave request status trends |
-| `attendance_summary` | Array | Monthly attendance breakdown trends |
-| `department_breakdown` | Array | Statistics per department |
+| `total_employees` | Number | Total count of employees in the system |
+| `new_this_month` | Number | Count of employees who joined this month (based on `job_info.date_of_joining`) |
+| `department_count` | Number | Count of active departments (`departments.is_active = true`) |
+| `present_today` | Number | Count of employees marked present, late, or half_day for today |
+| `present_today_percent` | Number | Percentage of present employees (present_today / total_employees, rounded to 1 decimal) |
+| `on_leave_today` | Number | Count of employees with approved leave requests covering today |
+| `penalties_this_month` | Object | Placeholder: `{ "coming_soon": true, "count": 0, "amount_pkr": 0 }` |
+| `attendance_trend` | Array | Monthly attendance summary for the selected range. Each object: `{ month: string, present: number, absent: number, late: number }` |
+| `headcount_trend` | Array | Monthly headcount trend for the selected range. Each object: `{ month: string, count: number }` |
+| `upcoming_birthdays` | Array | Employees with birthdays in the current month, sorted by `days_until`. Each object: `{ employee_id: string, name: string, date_of_birth: string, days_until: number }` |
+| `pending_actions` | Array | Employees with missing required fields. Each object: `{ employee_id: string, name: string, missing_fields: string[] }` |
+| `urgent_alerts` | Array | Active urgent alerts expiring within lookahead window. Each object: `{ employee_id: string, name: string, type: string, expiry_date: string, days_remaining: number }` |
+
+**Notes on fields:**
+
+- `attendance_trend.month`: Short month name like `"Jan"`, `"Feb"`, etc.
+- `headcount_trend.month`: Short month name like `"Jan"`, `"Feb"`, etc.
+- `upcoming_birthdays.days_until`: Days until the birthday in the current year. If the birthday already passed this year, value is `0`.
+- `pending_actions.missing_fields`: Currently includes `"bank_account"` and `"emergency_contact"` for employees missing those records.
+- `urgent_alerts.type`: One of `"probation_end"`, `"contract_expiry"`, `"medical_exam_due"`, `"cnic_expiry"`.
+- `urgent_alerts.days_remaining`: Can be negative if the expiry date has passed (overdue alerts).
+
+**Example response (trimmed arrays):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "total_employees": 520,
+    "new_this_month": 8,
+    "department_count": 21,
+    "present_today": 387,
+    "present_today_percent": 74.4,
+    "on_leave_today": 12,
+    "penalties_this_month": {
+      "coming_soon": true,
+      "count": 0,
+      "amount_pkr": 0
+    },
+    "attendance_trend": [
+      { "month": "May", "present": 12500, "absent": 850, "late": 420 },
+      { "month": "Apr", "present": 11800, "absent": 920, "late": 380 }
+    ],
+    "headcount_trend": [
+      { "month": "May", "count": 520 },
+      { "month": "Apr", "count": 512 }
+    ],
+    "upcoming_birthdays": [
+      {
+        "employee_id": "EMP042",
+        "name": "Fatima Ali",
+        "date_of_birth": "1995-05-20",
+        "days_until": 6
+      }
+    ],
+    "pending_actions": [
+      {
+        "employee_id": "EMP105",
+        "name": "Muhammad Hassan",
+        "missing_fields": ["bank_account"]
+      },
+      {
+        "employee_id": "EMP218",
+        "name": "Ayesha Khan",
+        "missing_fields": ["emergency_contact"]
+      }
+    ],
+    "urgent_alerts": [
+      {
+        "employee_id": "EMP456",
+        "name": "Bilal Ahmed",
+        "type": "probation_end",
+        "expiry_date": "2026-06-15",
+        "days_remaining": 34
+      },
+      {
+        "employee_id": "EMP389",
+        "name": "Sana Malik",
+        "type": "contract_expiry",
+        "expiry_date": "2026-05-20",
+        "days_remaining": 8
+      }
+    ]
+  }
+}
+```
 
 **Example cURL:**
 
@@ -128,66 +136,102 @@ None.
 
 ### Response Body
 
-**Success (200 OK):**
+**Success response returns an object containing:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `attendance_summary` | Object | Current month's attendance for the employee: `{ presents, absents, lates, half_days, month }` |
+| `leave_balances` | Array | Leave balance for each leave type. Each: `{ leave_type_id, name, balance, used, remaining }` |
+| `leave_wallet` | Array | Same as `leave_balances` (alias for compatibility) |
+| `active_penalties` | Array | Penalties where `status = 'approved'` and `employee_ack = false`. Each includes rule details and review info |
+| `recent_attendance` | Array | Last ~6 attendance records with date, status, check_in, check_out |
+| `leave_requests` | Array | Recent leave requests (limited, ordered by created_at desc) |
+| `upcoming_birthdays` | Array | Same format as `/metrics` - employees with birthdays in current month |
+
+**Example response:**
+
 ```json
 {
   "success": true,
   "data": {
-    "employee_id": "EMP002",
-    "employee_name": "Fatima Ali",
-    "department": "Human Resources",
-    "upcoming_leave": {
-      "start_date": "2025-05-20",
-      "end_date": "2025-05-25",
-      "type": "Annual Leave",
-      "status": "approved"
+    "attendance_summary": {
+      "presents": 18,
+      "absents": 1,
+      "lates": 2,
+      "half_days": 0,
+      "month": "May 2026"
     },
     "leave_balances": [
       {
-        "type": "Annual Leave",
-        "total": 20,
-        "used": 5,
-        "balance": 15
+        "leave_type_id": "1",
+        "name": "Annual Leave",
+        "balance": 14,
+        "used": 3,
+        "remaining": 11
       },
       {
-        "type": "Sick Leave",
-        "total": 10,
-        "used": 2,
-        "balance": 8
+        "leave_type_id": "2",
+        "name": "Sick Leave",
+        "balance": 10,
+        "used": 0,
+        "remaining": 10
+      }
+    ],
+    "leave_wallet": [
+      {
+        "leave_type_id": "1",
+        "name": "Annual Leave",
+        "balance": 14,
+        "used": 3,
+        "remaining": 11
+      }
+    ],
+    "active_penalties": [
+      {
+        "id": "abc123",
+        "employee_id": "EMP042",
+        "rule_name": "Late Arrival (1st offense)",
+        "amount_pkr": 500,
+        "reason": "Late arrival - 15 minutes",
+        "status": "approved",
+        "employee_ack": false,
+        "reviewed_by_name": "Fatima Ali"
       }
     ],
     "recent_attendance": [
       {
-        "date": "2025-05-05",
+        "date": "2026-05-10",
         "status": "present",
-        "check_in": "09:00",
-        "check_out": "18:00"
+        "check_in": "09:00:00",
+        "check_out": "18:00:00"
       },
       {
-        "date": "2025-05-04",
-        "status": "present",
-        "check_in": "08:55",
-        "check_out": "17:45"
+        "date": "2026-05-09",
+        "status": "late",
+        "check_in": "09:15:00",
+        "check_out": "18:00:00"
       }
     ],
-    "pending_actions": 0,
-    "unread_notifications": 3
+    "leave_requests": [
+      {
+        "id": "def456",
+        "leave_type": "Annual Leave",
+        "start_date": "2026-05-20",
+        "end_date": "2026-05-25",
+        "status": "approved"
+      }
+    ],
+    "upcoming_birthdays": [
+      {
+        "employee_id": "EMP101",
+        "name": "Ali Hassan",
+        "date_of_birth": "1990-05-18",
+        "days_until": 4
+      }
+    ]
   }
 }
 ```
-
-**Fields in `data`:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `employee_id` | String | Employee code |
-| `employee_name` | String | Full name |
-| `department` | String | Department name |
-| `upcoming_leave` | Object or null | Next approved leave, if any (with start_date, end_date, type, status) |
-| `leave_balances` | Array | Balance for each leave type |
-| `recent_attendance` | Array | Last 7-10 days of attendance records |
-| `pending_actions` | Number | Count of actions requiring employee attention |
-| `unread_notifications` | Number | Number of unread notifications |
 
 **Example cURL:**
 
@@ -200,7 +244,7 @@ curl -X GET http://localhost:3001/api/dashboard/me \
 
 ## GET /dashboard/pending-actions
 
-Retrieve a list of pending actions that require attention from the user or their department. Requires `pending_actions:read` permission. This is typically used by HR and managers to see tasks that need follow-up.
+Retrieve a list of pending actions - employees who have missing required fields (bank account, emergency contact). Requires `pending_actions:read` permission. This endpoint is typically used by HR to track incomplete employee records.
 
 **Authentication:** Required  
 **Permissions:** `pending_actions:read`
@@ -210,52 +254,38 @@ None.
 
 ### Response Body
 
-**Success (200 OK):**
+Success response returns an array of objects:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `employee_id` | String | Employee code |
+| `name` | String | Full name of the employee |
+| `missing_fields` | Array of strings | List of missing required fields. Common values: `"bank_account"`, `"emergency_contact"` |
+
+**Example response:**
+
 ```json
 {
   "success": true,
   "data": [
     {
-      "type": "leave_request",
-      "count": 5,
-      "description": "Leave requests awaiting approval",
-      "action_url": "/leave-requests?status=pending",
-      "priority": "high"
+      "employee_id": "EMP105",
+      "name": "Muhammad Hassan",
+      "missing_fields": ["bank_account"]
     },
     {
-      "type": "penalty_review",
-      "count": 3,
-      "description": "Penalties pending review",
-      "action_url": "/penalties?status=pending",
-      "priority": "medium"
+      "employee_id": "EMP218",
+      "name": "Ayesha Khan",
+      "missing_fields": ["emergency_contact"]
     },
     {
-      "type": "unlock_request",
-      "count": 2,
-      "description": "Attendance unlock requests awaiting approval",
-      "action_url": "/attendance?status=unlock_pending",
-      "priority": "medium"
-    },
-    {
-      "type": "employee_onboarding",
-      "count": 4,
-      "description": "New employee setups incomplete",
-      "action_url": "/employees?status=new",
-      "priority": "low"
+      "employee_id": "EMP342",
+      "name": "Zainab Ahmed",
+      "missing_fields": ["bank_account", "emergency_contact"]
     }
   ]
 }
 ```
-
-**Action object fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `type` | String | Category of pending action (used for icons/routing) |
-| `count` | Number | Number of items requiring action |
-| `description` | String | Human-readable description |
-| `action_url` | String | Relative URL to navigate to take action |
-| `priority` | Enum | `"high"`, `"medium"`, or `"low"` - for UI emphasis |
 
 **Example cURL:**
 
@@ -268,7 +298,7 @@ curl -X GET http://localhost:3001/api/dashboard/pending-actions \
 
 ## GET /dashboard/urgent-alerts
 
-Retrieve urgent alerts and warnings that need immediate attention. Requires `alerts:read` permission. Examples include: upcoming contract expirations, medical checkup due dates, probation period endings, etc.
+Retrieve urgent alerts and warnings that need immediate attention. Requires `alerts:read` permission. Includes expiring probation periods, contracts, medical exams, and CNIC validity.
 
 **Authentication:** Required  
 **Permissions:** `alerts:read`
@@ -277,71 +307,50 @@ Retrieve urgent alerts and warnings that need immediate attention. Requires `ale
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `days` | Number (1-365) | Lookahead window in days. Default: 30 days |
+| `days` | Number (1-365) | Lookahead window in days (optional, default based on implementation) |
 
 ### Response Body
 
-**Success (200 OK):**
+Success response returns an array of objects:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `employee_id` | String | Employee code |
+| `name` | String | Employee full name |
+| `type` | String | Alert category: `"probation_end"`, `"contract_expiry"`, `"medical_exam_due"`, `"cnic_expiry"` |
+| `expiry_date` | String | Date when the alert expires (format: `YYYY-MM-DD`) |
+| `days_remaining` | Number | Days until expiry (`expiry_date - CURRENT_DATE`). Can be negative if already overdue |
+
+**Example response:**
+
 ```json
 {
   "success": true,
   "data": [
     {
-      "type": "contract_expiry",
-      "employee_id": "EMP003",
-      "employee_name": "Bilal Ahmed",
-      "title": "Contract Ending Soon",
-      "description": "Employment contract expires in 15 days (2025-05-21)",
-      "action_required": "Renew contract or initiate separation process",
-      "due_date": "2025-05-21",
-      "severity": "high"
-    },
-    {
-      "type": "medical_exam",
-      "employee_id": "EMP007",
-      "employee_name": "Sana Malik",
-      "title": "Medical Exam Due",
-      "description": "Annual medical examination scheduled to be due in 7 days",
-      "action_required": "Schedule medical appointment",
-      "due_date": "2025-05-13",
-      "severity": "medium"
-    },
-    {
+      "employee_id": "EMP042",
+      "name": "Bilal Ahmed",
       "type": "probation_end",
-      "employee_id": "EMP012",
-      "employee_name": "Hassan Raza",
-      "title": "Probation Period Ending",
-      "description": "Probation ends in 21 days. Performance review needed.",
-      "action_required": "Conduct probation review and confirm employment",
-      "due_date": "2025-05-27",
-      "severity": "medium"
+      "expiry_date": "2026-06-15",
+      "days_remaining": 34
     },
     {
-      "type": "passport_expiry",
-      "employee_id": "EMP005",
-      "employee_name": "Zara Ali",
-      "title": "Passport Expiring",
-      "description": "Passport expires in 45 days",
-      "action_required": "Renew passport",
-      "due_date": "2025-06-20",
-      "severity": "low"
+      "employee_id": "EMP089",
+      "name": "Sana Malik",
+      "type": "contract_expiry",
+      "expiry_date": "2026-05-20",
+      "days_remaining": 8
+    },
+    {
+      "employee_id": "EMP156",
+      "name": "Hassan Raza",
+      "type": "medical_exam_due",
+      "expiry_date": "2024-03-01",
+      "days_remaining": -779
     }
   ]
 }
 ```
-
-**Alert object fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `type` | String | Alert category: `contract_expiry`, `medical_exam`, `probation_end`, `passport_expiry`, `visa_expiry`, etc. |
-| `employee_id` | String | Employee code |
-| `employee_name` | String | Employee full name |
-| `title` | String | Short alert title |
-| `description` | String | Detailed explanation with timeline |
-| `action_required` | String | Recommended action to take |
-| `due_date` | Date | When action is due |
-| `severity` | Enum | `"high"`, `"medium"`, or `"low"` - indicates urgency |
 
 **Example cURL:**
 
@@ -356,10 +365,27 @@ curl -X GET "http://localhost:3001/api/dashboard/urgent-alerts?days=60" \
 
 - **Metrics Scope:** `/dashboard/metrics` is for HR/administrators to see organization-wide stats. Regular employees use `/dashboard/me` for their personal overview.
 - **Caching:** These endpoints may involve complex queries. Consider caching data for 5-10 minutes to improve performance.
-- **Pending Actions:** The `/dashboard/pending-actions` endpoint aggregates tasks from various modules (leave, penalties, attendance) into a single to-do list.
-- **Alert Generation:** Urgent alerts are typically generated by scheduled background jobs that scan employee records for upcoming expiry dates (contracts, medical exams, passports, visas, probation periods).
+- **Pending Actions:** The `/dashboard/pending-actions` endpoint shows employees with incomplete mandatory fields (`bank_account`, `emergency_contact`). This helps HR ensure all employee records are complete.
+- **Urgent Alerts:** Urgent alerts are populated by the seed data with types: `probation_end`, `contract_expiry`, `medical_exam_due`, `cnic_expiry`. The `days_remaining` field indicates urgency; negative values mean the alert is overdue.
 - **Permissions:** 
   - `dashboard:read` for metrics
   - `pending_actions:read` for pending actions  
   - `alerts:read` for urgent alerts
-- **Date Handling:** All dates are in `YYYY-MM-DD` format. The `days` parameter in urgent alerts calculates from today's date.
+- **Date Handling:** All dates are in `YYYY-MM-DD` format. The `days` parameter in urgent alerts defines the lookahead window.
+- **Birthday Calculation:** `upcoming_birthdays.days_until` uses `GREATEST(0, calculated_days)` so past birthdays in the current month show `0`.
+
+---
+
+## Seeding
+
+The database seed (`node seeds/master_seed.js`) populates realistic test data:
+
+- **520 employees** across various departments
+- **21 active departments** with hierarchical structure
+- **Pending actions** for employees missing `bank_account` or `emergency_contact` records
+- **Urgent alerts** with various types and expiry dates (including some in the past for testing)
+
+To seed the database:
+```bash
+DATABASE_URL=postgresql://user:pass@localhost:5432/ems_node node seeds/master_seed.js
+```

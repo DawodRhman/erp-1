@@ -7,6 +7,48 @@ Error: `{ "success": false, "error": { "code": "STRING", "message": "..." } }`
 
 ---
 
+## Seeded Demo Data
+
+The database can be populated with comprehensive demo data using the master seed script. This is useful for development, testing, and demonstration purposes.
+
+### Summary of Seeded Records
+
+| Category | Count | Details |
+| :--- | :--- | :--- |
+| **Employees** | 520 | IDs: EMP001–EMP520 |
+| **Departments** | 21 | Hierarchical structure with parent-child relationships |
+| **Designations** | 46 | Job titles and positions |
+| **Employment Types** | 5 | Full-time, Part-time, Contract, Intern, Consultant |
+| **Job Statuses** | 6 | Active, Inactive, On Leave, Probation, Resigned, Retired |
+| **Work Modes** | 4 | Office, Remote, Hybrid, Field |
+| **Work Locations** | 6 | Office branches and locations |
+| **Shifts** | 5 | Morning, Evening, Night, Flex, Weekend |
+| **Leave Types** | 8 | Annual, Sick, Casual, Maternity, Paternity, Unpaid, Compensatory, Emergency |
+| **Allowance Types** | 8 | Various allowance categories |
+| **Permissions** | 42 | Distinct permission keys for RBAC |
+| **Roles** | 11 | super_admin, hr_manager, hr_executive, it_manager, swe_manager, tech_lead, sales_manager, procurement_manager, finance_manager, operations_manager, employee |
+
+### Admin Credentials
+
+For the seeded super administrator account:
+
+- **Email**: `superadmin@esspl.com.pk`
+- **Password**: `SuperAdmin@123!`
+
+### How to Seed
+
+**Prerequisite**: Set the `DATABASE_URL` environment variable to point to your PostgreSQL database.
+
+**Command**:
+
+```bash
+node seeds/master_seed.js
+```
+
+This will truncate existing data (except system configuration and user roles) and repopulate all tables with fresh demo records. The seed script respects foreign key constraints and inserts data in the correct dependency order.
+
+---
+
 ## 1. Authentication (`/auth`)
 
 ### Login

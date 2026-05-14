@@ -7,6 +7,23 @@ Leave management endpoints handle leave applications, approvals, balances, and c
 
 ---
 
+## Leave Types
+
+The following leave types are seeded by default:
+
+- Annual Leave
+- Sick Leave
+- Casual Leave
+- Maternity Leave
+- Paternity Leave
+- Unpaid Leave
+- Compensatory Leave
+- Bereavement Leave
+
+> **Note:** Leave types are configurable via `/api/config/leave-types` and are seeded by default.
+
+---
+
 ## GET /leave-requests
 
 Retrieve all leave requests with optional filtering. Requires `leave:read` permission. This endpoint is typically used by HR/managers to see all requests.

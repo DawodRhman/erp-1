@@ -1321,3 +1321,84 @@ Global facts (applies to every non-public route):
 - **Notes & Facts**:
   - Permission key: `leave:approve`
   - Side effects: restores unused days and updates leave request `end_by_force`.
+
+## Role-Permission Matrix
+
+This matrix documents the role-based access control (RBAC) permissions as seeded in `seeds/master_seed.js`. The seed script creates these roles and assigns permissions as shown below.
+
+### Roles and Their Permissions
+
+| Role | Permissions |
+|------|-------------|
+| super_admin | All permissions (full access) |
+| hr_manager | `config:read`, `config:write`, `employees:read`, `employees:write`, `salary:read`, `salary:write`, `allowances:read`, `allowances:write`, `leave:read`, `leave:write`, `leave:approve`, `leave_capacity:read`, `leave_capacity:write`, `attendance:read`, `attendance:write`, `attendance:submit_ho`, `calendar:read`, `calendar:write`, `notifications:read`, `notifications:write`, `alerts:read`, `pending_actions:read`, `dashboard:read`, `directory:read`, `directory:write`, `penalty_rules:write`, `penalties:propose`, `penalties:review`, `penalties:read_all`, `reports:read` |
+| hr_executive | `config:read`, `employees:read`, `leave:read`, `attendance:read`, `attendance:write`, `calendar:read`, `notifications:read`, `notifications:write`, `pending_actions:read`, `alerts:read`, `directory:read`, `penalties:propose`, `penalties:read_all` |
+| it_manager | `employees:read`, `directory:read`, `calendar:read`, `notifications:read` |
+| swe_manager | `employees:read`, `directory:read`, `calendar:read`, `notifications:read` |
+| tech_lead | `employees:read`, `directory:read`, `calendar:read`, `notifications:read` |
+| sales_manager | `employees:read`, `directory:read`, `dashboard:read` |
+| procurement_manager | `purchasing:read`, `purchasing:write`, `purchasing:approve`, `inventory:read` |
+| finance_manager | `salary:read`, `reports:read`, `dashboard:read` |
+| operations_manager | `attendance:read`, `directory:read`, `dashboard:read` |
+| employee | `leave:read`, `leave:write`, `attendance:read`, `notifications:read`, `calendar:read`, `directory:read` |
+
+### Key Notes
+
+- **super_admin** bypasses all permission checks via `req.user.is_super_admin === true`.
+- The `employee` role has self-service restrictions: can only access own records for employee data, job info, leave balances, and attendance acknowledgment.
+- The `config:manage` permission is a legacy alias and is not actively assigned to any role in the seed; HR roles use `config:read` for configuration read access.
+
+---
+
+## Appendix: Permission Keys
+
+Complete list of all available permission keys and their descriptions from the seed script:
+
+| Permission Key | Description |
+|----------------|-------------|
+| `config:read` | Read system configuration |
+| `config:write` | Write system configuration (includes POST /api/config/:entity) |
+| `config:manage` | Legacy alias - kept for parity with older seeds |
+| `employees:read` | View employee records |
+| `employees:write` | Create / update employees |
+| `salary:read` | Read salary |
+| `salary:write` | Salary revisions |
+| `allowances:read` | Read allowances |
+| `allowances:write` | Manage allowances |
+| `leave:read` | Read leave |
+| `leave:write` | Submit leave |
+| `leave:approve` | Approve leave |
+| `leave_capacity:read` | Read leave capacity |
+| `leave_capacity:write` | Manage leave capacity |
+| `attendance:read` | Read attendance |
+| `attendance:write` | Write attendance |
+| `attendance:submit_ho` | Submit attendance to HO |
+| `attendance:unlock` | Unlock attendance |
+| `calendar:read` | Read calendar |
+| `calendar:write` | Write calendar |
+| `notifications:read` | Read notifications |
+| `notifications:write` | Create notifications |
+| `alerts:read` | Urgent alerts |
+| `pending_actions:read` | Pending actions |
+| `dashboard:read` | Dashboard |
+| `directory:read` | Directory read |
+| `directory:write` | Directory write |
+| `inventory:read` | Inventory read |
+| `inventory:write` | Inventory write |
+| `purchasing:read` | Purchasing read |
+| `purchasing:write` | Purchasing write |
+| `purchasing:approve` | Purchasing approve |
+| `hr:full_access` | HR full access placeholder |
+| `payroll:read` | Payroll read placeholder |
+| `payroll:write` | Payroll write placeholder |
+| `penalty_rules:write` | Penalty rules CRUD |
+| `penalties:propose` | Propose penalties |
+| `penalties:review` | Review penalties |
+| `penalties:read_own` | Own penalties |
+| `penalties:read_all` | All penalties |
+| `reports:read` | Reports |
+
+---
+
+*Note: The seed script `seeds/master_seed.js` creates these roles and assigns permissions as shown.*
+

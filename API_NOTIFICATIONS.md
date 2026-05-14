@@ -216,6 +216,19 @@ curl -X POST http://localhost:3001/api/notifications \
 
 ---
 
+## Permissions
+
+The following permissions control access to notifications endpoints. These are assigned via the master seed (`seeds/master_seed.js`):
+
+| Permission | Description | Roles |
+|-------------|-------------|-------|
+| `notifications:read` | View notifications | HR Manager, HR Executive, IT Manager, Software Engineering Manager, Tech Lead, Employee |
+| `notifications:write` | Create notifications | HR Manager, HR Executive |
+
+**Note:** The seed assigns these role permissions but does not generate sample notifications. Notifications are created dynamically by the system (e.g., leave approvals, penalty assignments) or via the POST endpoint by authorized users.
+
+---
+
 ## Notes
 
 - **Targeting:** Notifications can be targeted to a specific user (`user_id`) or broadcast to all users with a specific `role`. The system uses this to send leave approvals, penalty assignments, etc.

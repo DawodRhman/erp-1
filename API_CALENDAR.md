@@ -241,6 +241,17 @@ curl -X PATCH http://localhost:3001/api/calendar-events/c2d3e4f5-a6b7-8901-cdef-
 
 ---
 
+## Permissions
+
+The Calendar Events API uses the following permission system:
+
+- `calendar:read` – view events. Roles: HR Manager, HR Executive, IT Manager, Software Engineering Manager, Tech Lead, Employee.
+- `calendar:write` – create/update/delete events. Roles: HR Manager only.
+
+*Note: The seed script (`seeds/master_seed.js`) creates these role-permission assignments.*
+
+---
+
 ## Notes
 
 - **Visibility Logic:**

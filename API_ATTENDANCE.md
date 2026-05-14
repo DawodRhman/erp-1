@@ -615,6 +615,30 @@ curl -X GET "http://localhost:3001/api/attendance/report?month=5&year=2025&locat
 
 ---
 
+## Shift Definitions
+
+The system supports the following predefined shifts, seeded from `seeds/master_seed.js`:
+
+| Shift Name | Start Time | End Time | Late After (minutes) |
+|------------|------------|----------|---------------------|
+| Morning Shift | 08:00:00 | 17:00:00 | 15 |
+| Evening Shift | 14:00:00 | 22:00:00 | 15 |
+| Night Shift | 22:00:00 | 06:00:00 | 20 |
+| Field Shift | 09:00:00 | 18:00:00 | 30 |
+| Flexible Shift | 10:00:00 | 19:00:00 | 30 |
+
+---
+
+## Seeded Test Data
+
+The `master_seed.js` script generates the following test data for development and testing:
+
+- **Attendance Records:** Over 45,000 attendance rows generated for all employees covering the period from January 1, 1990 to May 12, 2026.
+- **Shift Definitions:** Five predefined shifts (listed above) are seeded with specific late thresholds.
+- Each employee is assigned shifts and attendance records automatically during seeding.
+
+---
+
 ## Notes
 
 - **Time Format:** Check-in and check-out times must be in `HH:MM` or `HH:MM:SS` format (24-hour time).

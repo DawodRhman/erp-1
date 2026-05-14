@@ -1,7 +1,7 @@
 # Employee Management API
 
 **Base Path:** `/api/employees`  
-**Total Endpoints:** 6
+**Total Endpoints:** 10
 
 Employee management endpoints handle the complete employee lifecycle: onboarding, profile updates, personal/job/emergency/bank/medical information, and credential management.
 
@@ -106,17 +106,18 @@ Retrieve a list of employees with optional filtering and pagination. Only users 
 
 All parameters are optional.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `search` | String | Search in `employee_id`, `name`, or `email` (partial match, case-insensitive) |
-| `department_id` | UUID | Filter by department |
-| `is_active` | Boolean | Filter by active status: `true` or `false` |
-| `page` | Number | Page number for pagination (default: 1) |
-| `limit` | Number | Number of items per page (default: 10, max: 100) |
+| Parameter       | Type    | Description                                                                   |
+| --------------- | ------- | ----------------------------------------------------------------------------- |
+| `search`        | String  | Search in `employee_id`, `name`, or `email` (partial match, case-insensitive) |
+| `department_id` | UUID    | Filter by department                                                          |
+| `is_active`     | Boolean | Filter by active status: `true` or `false`                                    |
+| `page`          | Number  | Page number for pagination (default: 1)                                       |
+| `limit`         | Number  | Number of items per page (default: 10, max: 100)                              |
 
 ### Response Body
 
 **Success (200 OK):**
+
 ```json
 {
   "success": true,
@@ -147,18 +148,18 @@ All parameters are optional.
 
 **List item fields (abbreviated view):**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `employee_id` | String | Employee code |
-| `name` | String | Full name |
-| `email` | String | Work email |
-| `department_id` | UUID | Department reference |
-| `department_name` | String | Resolved department name |
-| `designation_id` | UUID | Designation/position reference |
-| `designation_name` | String | Job title |
-| `phone` | String | Contact phone |
-| `is_active` | Boolean | Employment status |
-| `date_of_joining` | Date | Hire date |
+| Field              | Type    | Description                    |
+| ------------------ | ------- | ------------------------------ |
+| `employee_id`      | String  | Employee code                  |
+| `name`             | String  | Full name                      |
+| `email`            | String  | Work email                     |
+| `department_id`    | UUID    | Department reference           |
+| `department_name`  | String  | Resolved department name       |
+| `designation_id`   | UUID    | Designation/position reference |
+| `designation_name` | String  | Job title                      |
+| `phone`            | String  | Contact phone                  |
+| `is_active`        | Boolean | Employment status              |
+| `date_of_joining`  | Date    | Hire date                      |
 
 **Example cURL:**
 
@@ -178,8 +179,8 @@ Retrieve complete profile of a specific employee, including all nested sections 
 
 ### Path Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Parameter    | Type                         | Description                                                                                  |
+| ------------ | ---------------------------- | -------------------------------------------------------------------------------------------- |
 | `employeeId` | String (employee_id) OR UUID | Employee identifier. Can be the employee code (e.g., "EMP001") or the internal database UUID |
 
 ### Response Body
@@ -198,6 +199,7 @@ Full response structure is shown at the top of this document under "Full Employe
 - `created_at`, `updated_at`
 
 **Error Responses:**
+
 - `404 Not Found`: Employee doesn't exist
 
 **Example cURL:**
@@ -300,104 +302,104 @@ Create a new employee with complete onboarding data. This is the most complex en
 
 #### personalInfo (required)
 
-| Field | Type | Required | Nullable | Validation | Description |
-|-------|------|----------|----------|------------|-------------|
-| `name` | String | Yes | No | Min 2, max 100 | Full name of employee |
-| `father_name` | String | Yes | No | Min 2, max 100 | Father's full name |
-| `cnic` | String | Yes | No | Min 5, max 20 | National ID card number |
-| `date_of_birth` | String | Yes | No | Min 4, max 15 | Date of birth (format flexible, prefer YYYY-MM-DD) |
+| Field           | Type   | Required | Nullable | Validation     | Description                                        |
+| --------------- | ------ | -------- | -------- | -------------- | -------------------------------------------------- |
+| `name`          | String | Yes      | No       | Min 2, max 100 | Full name of employee                              |
+| `father_name`   | String | Yes      | No       | Min 2, max 100 | Father's full name                                 |
+| `cnic`          | String | Yes      | No       | Min 5, max 20  | National ID card number                            |
+| `date_of_birth` | String | Yes      | No       | Min 4, max 15  | Date of birth (format flexible, prefer YYYY-MM-DD) |
 
 #### jobInfo (required)
 
 All ID fields must be valid UUIDs from configuration tables.
 
-| Field | Type | Required | Nullable | Description |
-|-------|------|----------|----------|-------------|
-| `department_id` | UUID | Yes | No | Reference to `config/departments` |
-| `designation_id` | UUID | Yes | No | Reference to `config/designations` |
-| `employment_type_id` | UUID | Yes | No | Reference to `config/employment-types` |
-| `job_status_id` | UUID | Yes | No | Reference to `config/job-statuses` |
-| `work_mode_id` | UUID | Yes | No | Reference to `config/work-modes` |
-| `work_location_id` | UUID | Yes | No | Reference to `config/work-locations` |
-| `shift_id` | UUID | Yes | No | Reference to `config/shifts` |
-| `date_of_joining` | String | Yes | No | First day of employment (YYYY-MM-DD) |
-| `date_of_exit` | String | No | Yes | Termination/resignation date if applicable |
-| `probation_end_date` | String | No | Yes | End of probation period |
-| `contract_end_date` | String | No | Yes | End of contract (for contract employees) |
+| Field                | Type   | Required | Nullable | Description                                |
+| -------------------- | ------ | -------- | -------- | ------------------------------------------ |
+| `department_id`      | UUID   | Yes      | No       | Reference to `config/departments`          |
+| `designation_id`     | UUID   | Yes      | No       | Reference to `config/designations`         |
+| `employment_type_id` | UUID   | Yes      | No       | Reference to `config/employment-types`     |
+| `job_status_id`      | UUID   | Yes      | No       | Reference to `config/job-statuses`         |
+| `work_mode_id`       | UUID   | Yes      | No       | Reference to `config/work-modes`           |
+| `work_location_id`   | UUID   | Yes      | No       | Reference to `config/work-locations`       |
+| `shift_id`           | UUID   | Yes      | No       | Reference to `config/shifts`               |
+| `date_of_joining`    | String | Yes      | No       | First day of employment (YYYY-MM-DD)       |
+| `date_of_exit`       | String | No       | Yes      | Termination/resignation date if applicable |
+| `probation_end_date` | String | No       | Yes      | End of probation period                    |
+| `contract_end_date`  | String | No       | Yes      | End of contract (for contract employees)   |
 
 #### salaryInfo (optional entire object)
 
 If provided, contains:
 
-| Field | Type | Required | Nullable | Description |
-|-------|------|----------|----------|-------------|
-| `base_salary` | Number | No | No | Monthly base salary (must be >= 0) |
+| Field         | Type   | Required | Nullable | Description                        |
+| ------------- | ------ | -------- | -------- | ---------------------------------- |
+| `base_salary` | Number | No       | No       | Monthly base salary (must be >= 0) |
 
 **Note:** The entire `salaryInfo` object is optional. If omitted, salary is not set during onboarding.
 
 #### accountInfo (required)
 
-| Field | Type | Required | Nullable | Validation | Description |
-|-------|------|----------|----------|------------|-------------|
-| `email` | String | Yes | No | Valid email | Work email (must be unique) |
-| `phone` | String | Yes | No | Min 7, max 20 | Primary contact phone number |
-| `role_id` | UUID | No | Yes | Valid UUID or null | Reference to `config/roles` (permissions) |
+| Field     | Type   | Required | Nullable | Validation         | Description                               |
+| --------- | ------ | -------- | -------- | ------------------ | ----------------------------------------- |
+| `email`   | String | Yes      | No       | Valid email        | Work email (must be unique)               |
+| `phone`   | String | Yes      | No       | Min 7, max 20      | Primary contact phone number              |
+| `role_id` | UUID   | No       | Yes      | Valid UUID or null | Reference to `config/roles` (permissions) |
 
 #### emergencyContacts (optional entire object)
 
-| Field | Type | Required | Nullable | Max Length | Description |
-|-------|------|----------|----------|------------|-------------|
-| `contact_1` | String | Yes | No | 20 | Primary emergency phone |
-| `contact_2` | String | No | Yes | 20 | Secondary emergency phone |
-| `perment_address` | String | No | Yes | 300 | Permanent residential address |
-| `postal_address` | String | No | Yes | 300 | Mailing/postal address |
-| `e_contact_1_relation` | Enum | Yes | No | - | Relation of emergency contact 1 (see enum values below) |
-| `e_contact_1_full_name` | String | Yes | No | 150 | Name of emergency contact 1 |
-| `e_contact_1_phone` | String | Yes | No | 20 | Phone of emergency contact 1 |
-| `e_contact_1_phone_country_code` | String | No | Yes | 5 | Country code, default "+92" |
-| `e_contact_1_email` | String | No | Yes | - | Email of emergency contact 1 |
-| `e_contact_2_relation` | Enum | No | Yes | - | Relation of emergency contact 2 (same enum) |
-| `e_contact_2_full_name` | String | No | Yes | 150 | Name of emergency contact 2 |
-| `e_contact_2_phone` | String | No | Yes | 20 | Phone of emergency contact 2 |
-| `e_contact_2_phone_country_code` | String | No | Yes | 5 | Country code, default "+92" |
-| `e_contact_2_email` | String | No | Yes | - | Email of emergency contact 2 |
-| `primary_contact` | Integer | No | Yes | - | Which contact is primary: 1 or 2 (default 1) |
+| Field                            | Type    | Required | Nullable | Max Length | Description                                             |
+| -------------------------------- | ------- | -------- | -------- | ---------- | ------------------------------------------------------- |
+| `contact_1`                      | String  | Yes      | No       | 20         | Primary emergency phone                                 |
+| `contact_2`                      | String  | No       | Yes      | 20         | Secondary emergency phone                               |
+| `perment_address`                | String  | No       | Yes      | 300        | Permanent residential address                           |
+| `postal_address`                 | String  | No       | Yes      | 300        | Mailing/postal address                                  |
+| `e_contact_1_relation`           | Enum    | Yes      | No       | -          | Relation of emergency contact 1 (see enum values below) |
+| `e_contact_1_full_name`          | String  | Yes      | No       | 150        | Name of emergency contact 1                             |
+| `e_contact_1_phone`              | String  | Yes      | No       | 20         | Phone of emergency contact 1                            |
+| `e_contact_1_phone_country_code` | String  | No       | Yes      | 5          | Country code, default "+92"                             |
+| `e_contact_1_email`              | String  | No       | Yes      | -          | Email of emergency contact 1                            |
+| `e_contact_2_relation`           | Enum    | No       | Yes      | -          | Relation of emergency contact 2 (same enum)             |
+| `e_contact_2_full_name`          | String  | No       | Yes      | 150        | Name of emergency contact 2                             |
+| `e_contact_2_phone`              | String  | No       | Yes      | 20         | Phone of emergency contact 2                            |
+| `e_contact_2_phone_country_code` | String  | No       | Yes      | 5          | Country code, default "+92"                             |
+| `e_contact_2_email`              | String  | No       | Yes      | -          | Email of emergency contact 2                            |
+| `primary_contact`                | Integer | No       | Yes      | -          | Which contact is primary: 1 or 2 (default 1)            |
 
 **Enum values for `e_contact_*_relation`:**  
 `"father"`, `"mother"`, `"brother"`, `"sister"`, `"wife"`, `"husband"`, `"son"`, `"daughter"`, `"friend"`, `"neighbor"`, `"other"`
 
 #### bankInfo (optional entire object)
 
-| Field | Type | Required | Nullable | Max Length | Description |
-|-------|------|----------|----------|------------|-------------|
-| `bank_name` | String | Yes | No | 150 | Name of bank (e.g., "Habib Bank Limited") |
-| `branch_name` | String | No | Yes | 150 | Branch name |
-| `branch_code` | String | No | Yes | 20 | Branch code (e.g., "0042") |
-| `iban` | String | Yes | No | 34 | International Bank Account Number |
-| `account_title` | String | Yes | No | 200 | Account holder name (as per bank) |
-| `account_number` | String | No | Yes | 30 | Bank account number |
-| `account_type` | Enum | No | Yes | - | `"current"`, `"savings"`, or `"salary"` |
+| Field            | Type   | Required | Nullable | Max Length | Description                               |
+| ---------------- | ------ | -------- | -------- | ---------- | ----------------------------------------- |
+| `bank_name`      | String | Yes      | No       | 150        | Name of bank (e.g., "Habib Bank Limited") |
+| `branch_name`    | String | No       | Yes      | 150        | Branch name                               |
+| `branch_code`    | String | No       | Yes      | 20         | Branch code (e.g., "0042")                |
+| `iban`           | String | Yes      | No       | 34         | International Bank Account Number         |
+| `account_title`  | String | Yes      | No       | 200        | Account holder name (as per bank)         |
+| `account_number` | String | No       | Yes      | 30         | Bank account number                       |
+| `account_type`   | Enum   | No       | Yes      | -          | `"current"`, `"savings"`, or `"salary"`   |
 
 #### medicalInfo (optional entire object)
 
-| Field | Type | Required | Nullable | Max Length | Description |
-|-------|------|----------|----------|------------|-------------|
-| `blood_group` | Enum | No | Yes | - | `"A+"`, `"A-"`, `"B+"`, `"B-"`, `"AB+"`, `"AB-"`, `"O+"`, `"O-"`, `"unknown"` |
-| `date_of_birth` | String | No | Yes | - | Date of birth (duplicate of personalInfo, for medical records) |
-| `gender` | Enum | No | Yes | - | `"male"`, `"female"`, `"other"` |
-| `height_cm` | Integer | No | Yes | - | Height in centimeters (must be > 0) |
-| `weight_kg` | Integer | No | Yes | - | Weight in kilograms (must be > 0) |
-| `has_disability` | Boolean | No | Yes | - | Whether employee has any disability (default: false) |
-| `disability_type` | String | No | Yes | 100 | Type/category of disability if applicable |
-| `disability_description` | String | No | Yes | - | Detailed description of disability |
-| `has_chronic_condition` | Boolean | No | Yes | - | Whether employee has any chronic medical condition (default: false) |
-| `chronic_condition_notes` | String | No | Yes | - | Details about chronic condition |
-| `has_known_allergies` | Boolean | No | Yes | - | Whether employee has known allergies (default: false) |
-| `allergy_notes` | String | No | Yes | - | Description of allergies |
-| `emergency_medication` | String | No | Yes | - | Medication to be used in emergencies |
-| `fitness_status` | String | No | Yes | 30 | General fitness assessment (e.g., "fit", "needs improvement") |
-| `last_medical_exam_date` | String | No | Yes | - | Date of last medical examination (YYYY-MM-DD) |
-| `next_medical_exam_date` | String | No | Yes | - | Date of next scheduled medical examination |
+| Field                     | Type    | Required | Nullable | Max Length | Description                                                                   |
+| ------------------------- | ------- | -------- | -------- | ---------- | ----------------------------------------------------------------------------- |
+| `blood_group`             | Enum    | No       | Yes      | -          | `"A+"`, `"A-"`, `"B+"`, `"B-"`, `"AB+"`, `"AB-"`, `"O+"`, `"O-"`, `"unknown"` |
+| `date_of_birth`           | String  | No       | Yes      | -          | Date of birth (duplicate of personalInfo, for medical records)                |
+| `gender`                  | Enum    | No       | Yes      | -          | `"male"`, `"female"`, `"other"`                                               |
+| `height_cm`               | Integer | No       | Yes      | -          | Height in centimeters (must be > 0)                                           |
+| `weight_kg`               | Integer | No       | Yes      | -          | Weight in kilograms (must be > 0)                                             |
+| `has_disability`          | Boolean | No       | Yes      | -          | Whether employee has any disability (default: false)                          |
+| `disability_type`         | String  | No       | Yes      | 100        | Type/category of disability if applicable                                     |
+| `disability_description`  | String  | No       | Yes      | -          | Detailed description of disability                                            |
+| `has_chronic_condition`   | Boolean | No       | Yes      | -          | Whether employee has any chronic medical condition (default: false)           |
+| `chronic_condition_notes` | String  | No       | Yes      | -          | Details about chronic condition                                               |
+| `has_known_allergies`     | Boolean | No       | Yes      | -          | Whether employee has known allergies (default: false)                         |
+| `allergy_notes`           | String  | No       | Yes      | -          | Description of allergies                                                      |
+| `emergency_medication`    | String  | No       | Yes      | -          | Medication to be used in emergencies                                          |
+| `fitness_status`          | String  | No       | Yes      | 30         | General fitness assessment (e.g., "fit", "needs improvement")                 |
+| `last_medical_exam_date`  | String  | No       | Yes      | -          | Date of last medical examination (YYYY-MM-DD)                                 |
+| `next_medical_exam_date`  | String  | No       | Yes      | -          | Date of next scheduled medical examination                                    |
 
 ---
 
@@ -482,6 +484,7 @@ This is a comprehensive, realistic payload that can be used for full employee on
 ```
 
 **Minimal payload (only required fields):**
+
 ```json
 {
   "personalInfo": {
@@ -510,6 +513,7 @@ This is a comprehensive, realistic payload that can be used for full employee on
 ### Response Body
 
 **Success (201 Created):**
+
 ```json
 {
   "success": true,
@@ -593,6 +597,7 @@ This is a comprehensive, realistic payload that can be used for full employee on
 ```
 
 **Error Responses:**
+
 - `422 Validation Error`: Any validation failure (missing required fields, invalid email, UUIDs not valid format, etc.)
 - `409 Conflict`: Duplicate `employee_id` or duplicate `email` (unique constraint violation)
 
@@ -649,13 +654,14 @@ Update personal information (nested under `personalInfo`). All fields in `person
 
 ### Path Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Parameter    | Type                         | Description        |
+| ------------ | ---------------------------- | ------------------ |
 | `employeeId` | String (employee_id) or UUID | Employee to update |
 
 ### Request Body
 
 **Schema (all fields optional):**
+
 ```json
 {
   "name": "string (min 2, max 100 chars, optional)",
@@ -666,6 +672,7 @@ Update personal information (nested under `personalInfo`). All fields in `person
 ```
 
 **Example Request:**
+
 ```json
 {
   "name": "Fatima Ali Updated",
@@ -676,6 +683,7 @@ Update personal information (nested under `personalInfo`). All fields in `person
 ### Response Body
 
 **Success (200 OK):**
+
 ```json
 {
   "success": true,
@@ -713,13 +721,14 @@ Update job-related information (nested under `jobInfo`). All standard `jobInfo` 
 
 ### Path Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Parameter    | Type                         | Description        |
+| ------------ | ---------------------------- | ------------------ |
 | `employeeId` | String (employee_id) or UUID | Employee to update |
 
 ### Request Body
 
 **Schema (all fields optional):**
+
 ```json
 {
   "department_id": "UUID or null (optional)",
@@ -738,6 +747,7 @@ Update job-related information (nested under `jobInfo`). All standard `jobInfo` 
 ```
 
 **Example Request:**
+
 ```json
 {
   "department_id": "550e8400-e29b-41d4-a716-446655440002",
@@ -750,6 +760,7 @@ Update job-related information (nested under `jobInfo`). All standard `jobInfo` 
 ### Response Body
 
 **Success (200 OK):**
+
 ```json
 {
   "success": true,
@@ -798,8 +809,8 @@ Update extra information sections: `emergencyContacts`, `bankInfo`, and `medical
 
 ### Path Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Parameter    | Type                         | Description        |
+| ------------ | ---------------------------- | ------------------ |
 | `employeeId` | String (employee_id) or UUID | Employee to update |
 
 ### Request Body
@@ -858,6 +869,7 @@ Update extra information sections: `emergencyContacts`, `bankInfo`, and `medical
 **Important:** At least one of the three top-level keys (`emergencyContacts`, `bankInfo`, `medicalInfo`) must be provided in the request. If all are `null` or omitted, the request will return `400 Bad Request`.
 
 **Example Request (Update Medical Info Only):**
+
 ```json
 {
   "medicalInfo": {
@@ -876,6 +888,7 @@ Update extra information sections: `emergencyContacts`, `bankInfo`, and `medical
 ```
 
 **Example Request (Update Emergency + Bank Info Together):**
+
 ```json
 {
   "emergencyContacts": {
@@ -923,6 +936,7 @@ Returns an object with the updated section(s) only.
 ```
 
 **Error Responses:**
+
 - `400 Bad Request`: No update sections provided (all three are null/missing)
 - `422 Validation Error`: Invalid data within any provided section
 
@@ -955,16 +969,18 @@ Resend login credentials (email with temporary password) to an employee. Typical
 
 ### Path Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Parameter    | Type                         | Description                        |
+| ------------ | ---------------------------- | ---------------------------------- |
 | `employeeId` | String (employee_id) or UUID | Employee to resend credentials for |
 
 ### Request Body
+
 None. Empty body or no body.
 
 ### Response Body
 
 **Success (200 OK):**
+
 ```json
 {
   "success": true,
@@ -978,12 +994,14 @@ None. Empty body or no body.
 ```
 
 **Fields in `data`:**
+
 - `message` (String): Confirmation that credentials were sent
 - `employee_id` (String): Employee code
 - `email` (String): Email address the credentials were sent to
 - `sent_at` (Timestamp): When the email was dispatched
 
 **Error Responses:**
+
 - `404 Not Found`: Employee doesn't exist
 - `404 Not Found`: Employee has no associated user account yet (would need admin to create one)
 - `500 Internal Server Error`: Email service failure
@@ -995,6 +1013,205 @@ None. Empty body or no body.
 ```bash
 curl -X POST http://localhost:3001/api/employees/EMP002/resend-credentials \
   -H "Authorization: Bearer <your_token>"
+```
+
+---
+
+## GET /employees/:employeeId/finance
+
+Retrieve an employee's finance summary and history. Requires `salary:read` permission.
+
+**Authentication:** Required  
+**Permissions:** `salary:read`
+
+### Path Parameters
+
+| Parameter    | Type                         | Description                        |
+| ------------ | ---------------------------- | ---------------------------------- |
+| `employeeId` | String (employee_id) or UUID | Employee to fetch finance data for |
+
+### Request Body
+
+None.
+
+### Response Body
+
+**Success (200 OK):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "employee_id": "EMP002",
+    "current_salary": {
+      "amount": 85000,
+      "currency": "PKR",
+      "effective_from": "2025-01-01"
+    },
+    "revisions": [
+      {
+        "amount": 80000,
+        "currency": "PKR",
+        "effective_from": "2024-01-01",
+        "revision_type": "Increment",
+        "revision_percent": 10,
+        "revision_reason": "Annual increment"
+      }
+    ]
+  }
+}
+```
+
+**Error Responses:**
+
+- `404 Not Found`: Employee doesn't exist
+- `403 Forbidden`: Missing `salary:read` permission
+
+**Example cURL:**
+
+```bash
+curl -X GET http://localhost:3001/api/employees/EMP002/finance \
+  -H "Authorization: Bearer <your_token>"
+```
+
+---
+
+## POST /employees/:employeeId/salary-revision
+
+Create a salary revision for an employee. Requires `salary:write` permission.
+
+**Authentication:** Required  
+**Permissions:** `salary:write`
+
+### Path Parameters
+
+| Parameter    | Type                         | Description                    |
+| ------------ | ---------------------------- | ------------------------------ |
+| `employeeId` | String (employee_id) or UUID | Employee to apply revision for |
+
+### Request Body
+
+**Schema:**
+
+```json
+{
+  "base_salary": "number (>= 0, required)",
+  "currency": "string (3 chars, optional, default: PKR)",
+  "effective_from": "string (date, required)",
+  "revision_type": "enum: Initial | Promotion | Demotion | Increment | Decrement | Correction | Market Adjustment (required)",
+  "revision_percent": "number (>= 0, optional)",
+  "revision_reason": "string (max 500, optional)"
+}
+```
+
+### Response Body
+
+**Success (201 Created):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "e1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "employee_id": "EMP002",
+    "base_salary": 90000,
+    "currency": "PKR",
+    "effective_from": "2025-06-01",
+    "revision_type": "Increment",
+    "revision_percent": 5,
+    "revision_reason": "Annual increment"
+  }
+}
+```
+
+**Error Responses:**
+
+- `404 Not Found`: Employee doesn't exist
+- `403 Forbidden`: Missing `salary:write` permission
+- `422 Validation Error`: Invalid payload
+
+**Example cURL:**
+
+```bash
+curl -X POST http://localhost:3001/api/employees/EMP002/salary-revision \
+  -H "Authorization: Bearer <your_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base_salary": 90000,
+    "currency": "PKR",
+    "effective_from": "2025-06-01",
+    "revision_type": "Increment",
+    "revision_percent": 5,
+    "revision_reason": "Annual increment"
+  }'
+```
+
+---
+
+## PUT /employees/:employeeId/allowances
+
+Update allowance assignments for an employee. Requires `allowances:write` permission.
+
+**Authentication:** Required  
+**Permissions:** `allowances:write`
+
+### Path Parameters
+
+| Parameter    | Type                         | Description                       |
+| ------------ | ---------------------------- | --------------------------------- |
+| `employeeId` | String (employee_id) or UUID | Employee to update allowances for |
+
+### Request Body
+
+**Schema:**
+
+```json
+{
+  "allowances": [
+    {
+      "allowance_type_id": "UUID (required)",
+      "amount": "number (>= 0, required)",
+      "is_percentage": "boolean (optional, default: false)"
+    }
+  ]
+}
+```
+
+### Response Body
+
+**Success (200 OK):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "employee_id": "EMP002",
+    "updated": true
+  }
+}
+```
+
+**Error Responses:**
+
+- `404 Not Found`: Employee doesn't exist
+- `403 Forbidden`: Missing `allowances:write` permission
+- `422 Validation Error`: Invalid payload
+
+**Example cURL:**
+
+```bash
+curl -X PUT http://localhost:3001/api/employees/EMP002/allowances \
+  -H "Authorization: Bearer <your_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "allowances": [
+      {
+        "allowance_type_id": "550e8400-e29b-41d4-a716-446655440010",
+        "amount": 5000,
+        "is_percentage": false
+      }
+    ]
+  }'
 ```
 
 ---
@@ -1028,3 +1245,128 @@ Before creating an employee, ensure these configuration records exist (all are U
 - **Role (optional):** `POST /config/roles` (if setting `accountInfo.role_id`)
 
 Fetch their IDs via `GET /config/:entity` and use those UUIDs in the `jobInfo` section.
+
+---
+
+## Seeded Data Reference
+
+The master seed (`seeds/master_seed.js`) populates the system with standardized reference data. This section documents the seeded configuration values for understanding the available options.
+
+### Employee Count
+
+- **Total seeded employees:** 520
+- **Employee ID format:** `EMP001` through `EMP520`
+- **ID generator:** Sequential 3-digit numbering with leading zeros
+
+### Department Hierarchy
+
+The department structure supports multi-level hierarchy with parent-child relationships.
+
+```
+DEPT-IT (IT)
+├── DEPT-IT-SUP (IT-Support)
+└── DEPT-IT-DEV (IT-Development)
+
+DEPT-SWE (Software Engineering)
+├── DEPT-SWE-FE (Frontend)
+├── DEPT-SWE-BE (Backend)
+├── DEPT-SWE-MOB (Mobile)
+├── DEPT-SWE-QA (QA)
+└── DEPT-SWE-DEVOPS (DevOps)
+
+DEPT-HR (HR)
+
+DEPT-SALES (Sales)
+├── DEPT-SALES-KHI (Sales-Karachi)
+├── DEPT-SALES-LHR (Sales-Lahore)
+└── DEPT-SALES-ISB (Sales-Islamabad)
+
+DEPT-PROC (Procurement)
+
+DEPT-FIN (Finance)
+
+DEPT-OPS (Operations)
+├── DEPT-OPS-FE (Field-Engineering)
+└── DEPT-OPS-INST (Installations)
+
+DEPT-CS (Customer-Support)
+
+DEPT-ADM (Administration)
+```
+
+**Department Codes and Names:**
+
+| Code | Name | Parent |
+|------|------|--------|
+| DEPT-IT | IT | (none) |
+| DEPT-IT-SUP | IT-Support | DEPT-IT |
+| DEPT-IT-DEV | IT-Development | DEPT-IT |
+| DEPT-SWE | Software Engineering | (none) |
+| DEPT-SWE-FE | Frontend | DEPT-SWE |
+| DEPT-SWE-BE | Backend | DEPT-SWE |
+| DEPT-SWE-MOB | Mobile | DEPT-SWE |
+| DEPT-SWE-QA | QA | DEPT-SWE |
+| DEPT-SWE-DEVOPS | DevOps | DEPT-SWE |
+| DEPT-HR | HR | (none) |
+| DEPT-SALES | Sales | (none) |
+| DEPT-SALES-KHI | Sales-Karachi | DEPT-SALES |
+| DEPT-SALES-LHR | Sales-Lahore | DEPT-SALES |
+| DEPT-SALES-ISB | Sales-Islamabad | DEPT-SALES |
+| DEPT-PROC | Procurement | (none) |
+| DEPT-FIN | Finance | (none) |
+| DEPT-OPS | Operations | (none) |
+| DEPT-OPS-FE | Field-Engineering | DEPT-OPS |
+| DEPT-OPS-INST | Installations | DEPT-OPS |
+| DEPT-CS | Customer-Support | (none) |
+| DEPT-ADM | Administration | (none) |
+
+### Designations
+
+**49 seeded job titles:**
+
+CEO, COO, CFO, CTO, General Manager, Deputy General Manager, HR Manager, HR Executive, HR Officer, HR Intern, IT Manager, IT Support Engineer, Network Engineer, System Administrator, Software Engineering Manager, Tech Lead, Principal Engineer, Senior Software Engineer, Software Engineer, Junior Software Engineer, Associate Developer, Frontend Developer, Senior Frontend Developer, Backend Developer, Senior Backend Developer, Mobile Developer, Senior Mobile Developer, DevOps Engineer, Senior DevOps Engineer, QA Engineer, Senior QA Engineer, QA Lead, UI/UX Designer, Sales Manager, Senior Sales Executive, Sales Executive, Sales Intern, Procurement Manager, Procurement Officer, Finance Manager, Finance Officer, Accountant, Operations Manager, Field Engineer, Installation Technician, Team Lead, Customer Support Manager, Support Executive
+
+### Employment Types
+
+- Full-Time
+- Part-Time
+- Contract
+- Internship
+- Probationary
+
+### Job Statuses
+
+- Active
+- Probation
+- On Leave
+- Suspended
+- Terminated
+- Resigned
+
+### Work Modes
+
+- On-Site
+- Remote
+- Hybrid
+- Field
+
+### Work Locations
+
+- Head Office - Karachi
+- Branch Office - Lahore
+- Branch Office - Islamabad
+- Warehouse - Karachi
+- Client Site - Karachi
+- Client Site - Lahore
+
+### Shift Definitions
+
+| Shift Name | Start Time | End Time | Late After (minutes) |
+|------------|------------|----------|---------------------|
+| Morning Shift | 08:00:00 | 17:00:00 | 15 |
+| Evening Shift | 14:00:00 | 22:00:00 | 15 |
+| Night Shift | 22:00:00 | 06:00:00 | 20 |
+| Field Shift | 09:00:00 | 18:00:00 | 30 |
+| Flexible Shift | 10:00:00 | 19:00:00 | 30 |
+
+**Note:** Night Shift spans midnight (22:00 to 06:00 next day).

@@ -7,6 +7,84 @@ The employee directory provides searchable contact information for employees acr
 
 ---
 
+## Seeded Demo Data
+
+The directory can be automatically populated from the `employee_info` table using the seed script (`seeds/master_seed.js`), which creates a comprehensive demo dataset:
+
+- **Total Employees:** 520 employees (IDs: EMP001 through EMP520)
+- **Employee ID Format:** `EMP###` (3-digit sequential numbering)
+
+### Department Hierarchy
+
+The system includes 21 departments organized in a hierarchical structure:
+
+**Top-Level Departments (11):**
+- `DEPT-IT` — IT
+- `DEPT-SWE` — Software Engineering
+- `DEPT-HR` — HR
+- `DEPT-SALES` — Sales
+- `DEPT-PROC` — Procurement
+- `DEPT-FIN` — Finance
+- `DEPT-OPS` — Operations
+- `DEPT-CS` — Customer Support
+- `DEPT-ADM` — Administration
+
+**Sub-Departments (10):**
+- `DEPT-IT-SUP` — IT-Support (parent: IT)
+- `DEPT-IT-DEV` — IT-Development (parent: IT)
+- `DEPT-SWE-FE` — Frontend (parent: Software Engineering)
+- `DEPT-SWE-BE` — Backend (parent: Software Engineering)
+- `DEPT-SWE-MOB` — Mobile (parent: Software Engineering)
+- `DEPT-SWE-QA` — QA (parent: Software Engineering)
+- `DEPT-SWE-DEVOPS` — DevOps (parent: Software Engineering)
+- `DEPT-SALES-KHI` — Sales-Karachi (parent: Sales)
+- `DEPT-SALES-LHR` — Sales-Lahore (parent: Sales)
+- `DEPT-SALES-ISB` — Sales-Islamabad (parent: Sales)
+- `DEPT-OPS-FE` — Field-Engineering (parent: Operations)
+- `DEPT-OPS-INST` — Installations (parent: Operations)
+
+### Available Designations (49 roles)
+
+**Executive & Management:**
+CEO, COO, CFO, CTO, General Manager, Deputy General Manager
+
+**Human Resources:**
+HR Manager, HR Executive, HR Officer, HR Intern
+
+**Information Technology:**
+IT Manager, IT Support Engineer, Network Engineer, System Administrator
+
+**Software Engineering:**
+Software Engineering Manager, Tech Lead, Principal Engineer, Senior Software Engineer, Software Engineer, Junior Software Engineer, Associate Developer
+
+**Specialized Engineering Roles:**
+Frontend Developer, Senior Frontend Developer, Backend Developer, Senior Backend Developer, Mobile Developer, Senior Mobile Developer, DevOps Engineer, Senior DevOps Engineer
+
+**Quality Assurance:**
+QA Engineer, Senior QA Engineer, QA Lead
+
+**Design:**
+UI/UX Designer
+
+**Sales:**
+Sales Manager, Senior Sales Executive, Sales Executive, Sales Intern
+
+**Procurement:**
+Procurement Manager, Procurement Officer
+
+**Finance:**
+Finance Manager, Finance Officer, Accountant
+
+**Operations:**
+Operations Manager, Field Engineer, Installation Technician
+
+**General:**
+Team Lead, Customer Support Manager, Support Executive
+
+---
+
+**Note:** Directory entries can be managed via the provided endpoints. The directory serves as the company-wide contact lookup system, automatically denormalizing data from the `employee_info` table for quick access. Use the `POST` and `PATCH` endpoints to create or update directory entries, linking them to existing employees via `employee_id`.
+
 ## GET /directory
 
 Retrieve directory entries (employee contacts) with optional filtering. Available to all authenticated users with `directory:read` permission.

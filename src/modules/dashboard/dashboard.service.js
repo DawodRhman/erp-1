@@ -100,17 +100,19 @@ export async function getHRMetrics(range = '6m') {
           employee_id,
           name,
           dob AS date_of_birth,
-          (
-            make_date(
-              EXTRACT(YEAR FROM CURRENT_DATE)::int,
-              EXTRACT(MONTH FROM dob)::int,
-              EXTRACT(DAY FROM dob)::int
-            ) - CURRENT_DATE
-          )::int AS days_until
+          GREATEST(
+            0,
+            (
+              make_date(
+                EXTRACT(YEAR FROM CURRENT_DATE)::int,
+                EXTRACT(MONTH FROM dob)::int,
+                EXTRACT(DAY FROM dob)::int
+              ) - CURRENT_DATE
+            )::int
+          ) AS days_until
         FROM employees
         WHERE dob IS NOT NULL
           AND EXTRACT(MONTH FROM dob) = EXTRACT(MONTH FROM CURRENT_DATE)
-          AND EXTRACT(DAY FROM dob) >= EXTRACT(DAY FROM CURRENT_DATE)
         ORDER BY days_until ASC
       `
     ),
@@ -258,19 +260,20 @@ export async function getEmployeeSelfMetrics(employeeId) {
           employee_id,
           name,
           dob AS date_of_birth,
-          (
-            make_date(
-              EXTRACT(YEAR FROM CURRENT_DATE)::int,
-              EXTRACT(MONTH FROM dob)::int,
-              EXTRACT(DAY FROM dob)::int
-            ) - CURRENT_DATE
-          )::int AS days_until
+          GREATEST(
+            0,
+            (
+              make_date(
+                EXTRACT(YEAR FROM CURRENT_DATE)::int,
+                EXTRACT(MONTH FROM dob)::int,
+                EXTRACT(DAY FROM dob)::int
+              ) - CURRENT_DATE
+            )::int
+          ) AS days_until
         FROM employees
         WHERE dob IS NOT NULL
           AND EXTRACT(MONTH FROM dob) = EXTRACT(MONTH FROM CURRENT_DATE)
-          AND EXTRACT(DAY FROM dob) >= EXTRACT(DAY FROM CURRENT_DATE)
         ORDER BY days_until ASC
-        LIMIT 10
       `
     ),
     pool.query(
@@ -282,10 +285,12 @@ export async function getEmployeeSelfMetrics(employeeId) {
           check_out
         FROM public.attendance
         WHERE employee_id = $1
+          AND EXTRACT(YEAR FROM date) = $2
+          AND EXTRACT(MONTH FROM date) = $3
         ORDER BY date DESC
         LIMIT 6
       `,
-      [employeeId]
+      [employeeId, year, month]
     ),
     pool.query(
       `
