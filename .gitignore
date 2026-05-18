@@ -13,6 +13,12 @@ pids
 *.seed
 *.pid.lock
 
+
+
+.postman
+*postman*
+responsee.md
+routes.json
 # Coverage
 coverage
 *.lcov
