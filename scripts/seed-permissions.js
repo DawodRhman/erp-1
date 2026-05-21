@@ -25,6 +25,7 @@ const permissionKeys = [
   'leave:read',
   'leave:write',
   'leave:approve',
+  'employees:self_read',
   'employees:read',
   'employees:write',
   'dashboard:read',

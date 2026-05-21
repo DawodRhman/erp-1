@@ -158,7 +158,7 @@ const ROLE_PERMS = {
     'alerts:read',
   ],
   employee: [
-    'employees:read',
+    'employees:self_read',
     'leave:read',
     'leave:write',
     'attendance:read',
@@ -166,7 +166,7 @@ const ROLE_PERMS = {
     'notifications:read',
   ],
   employee2: [
-    'employees:read',
+    'employees:self_read',
     'leave:read',
     'leave:write',
     'attendance:read',

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { verifyToken } from '../../middleware/auth.js';
-import { requirePermission } from '../../middleware/require-permission.js';
+import { requirePermission, requirePermissionOrSelf } from '../../middleware/require-permission.js';
 import { validate } from '../../middleware/validate.js';
 import {
   createEmployee,
@@ -28,7 +28,7 @@ const router = Router();
 router.use(verifyToken);
 
 router.get('/', requirePermission('employees:read'), getEmployees);
-router.get('/:employeeId', requirePermission('employees:read'), getEmployeeById);
+router.get('/:employeeId', requirePermissionOrSelf('employees:read', 'employees:self_read'), getEmployeeById);
 router.post('/', requirePermission('employees:write'), validate(createEmployeeSchema), createEmployee);
 router.patch(
   '/:employeeId/personal',

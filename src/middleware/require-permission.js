@@ -67,3 +67,46 @@ export function requirePermission(permissionKey) {
   middleware.__perm = { mode: 'all', keys: [permissionKey] };
   return middleware;
 }
+
+export function requirePermissionOrSelf(permissionKey, selfPermissionKey, options = {}) {
+  const { paramKey = 'employeeId' } = options;
+
+  const middleware = async (req, res, next) => {
+    try {
+      const roleId = req.user?.role_id;
+
+      if (!roleId) {
+        return sendError(res, 'UNAUTHORIZED', 'Authentication required.', 401);
+      }
+
+      const roleName = await getRoleName(roleId);
+      if (roleName === 'super_admin') {
+        return next();
+      }
+
+      const permissions = await getPermissionsForRole(roleId);
+      if (permissions.has(permissionKey)) {
+        return next();
+      }
+
+      const requestedEmployeeId = req.params?.[paramKey];
+      const callerEmployeeId = req.user?.employee_id;
+      const canReadSelf =
+        permissions.has(selfPermissionKey) &&
+        requestedEmployeeId &&
+        callerEmployeeId &&
+        requestedEmployeeId === callerEmployeeId;
+
+      if (!canReadSelf) {
+        return sendError(res, 'FORBIDDEN', 'Insufficient permissions.', 403);
+      }
+
+      return next();
+    } catch (error) {
+      return next(error);
+    }
+  };
+
+  middleware.__perm = { mode: 'any', keys: [permissionKey, selfPermissionKey] };
+  return middleware;
+}

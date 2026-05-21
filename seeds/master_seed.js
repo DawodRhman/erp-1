@@ -33,6 +33,7 @@ const PERMISSION_KEYS = [
   ['config:read', 'Read system configuration'],
   ['config:write', 'Write system configuration (includes POST /api/config/:entity)'],
   ['config:manage', 'Legacy alias — kept for parity with older seeds'],
+  ['employees:self_read', 'View own employee profile'],
   ['employees:read', 'View employee records'],
   ['employees:write', 'Create / update employees'],
   ['salary:read', 'Read salary'],
@@ -509,6 +510,7 @@ async function seedViaPool(client) {
   await wireRole('operations_manager', ['attendance:read', 'directory:read', 'dashboard:read']);
 
   await wireRole('employee', [
+    'employees:self_read',
     'leave:read',
     'leave:write',
     'attendance:read',

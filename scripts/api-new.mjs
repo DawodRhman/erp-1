@@ -399,7 +399,7 @@ function listRoutes(router, prefix) {
 // ═══════════════════════════════════════════════════════════════════════════════
 const ALL_PERMS = [
   'config:read','config:write',
-  'employees:read','employees:write',
+  'employees:self_read','employees:read','employees:write',
   'leave:read','leave:write','leave:approve',
   'attendance:read','attendance:write',
   'calendar:read','calendar:write',
@@ -450,7 +450,7 @@ const ROLE_PERMS_MAP = {
     'dashboard:read',
   ],
   employee:     [
-    'employees:read',
+    'employees:self_read',
     'leave:read',
     'leave:write',
     'attendance:read',
@@ -459,7 +459,7 @@ const ROLE_PERMS_MAP = {
     'directory:read',
   ],
   employee2:     [
-    'employees:read',
+    'employees:self_read',
     'leave:read',
     'leave:write',
     'attendance:read',
