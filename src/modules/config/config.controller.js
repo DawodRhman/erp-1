@@ -52,6 +52,11 @@ const entitySchemaMap = {
     field_name: z.string().min(1).max(100),
     is_active: z.boolean().optional(),
   }),
+  roles: z.object({
+    department_id: z.string().uuid().optional().nullable(),
+    role_name: z.string().min(1).max(100),
+    description: z.string().optional().nullable(),
+  }),
 };
 
 function getEntitySchema(entity, isPatch = false) {

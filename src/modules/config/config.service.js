@@ -62,6 +62,14 @@ const entityConfig = {
     createFields: ['field_name', 'is_active'],
     updateFields: ['field_name', 'is_active'],
   },
+  roles: {
+    table: 'roles',
+    createFields: ['department_id', 'role_name', 'description'],
+    updateFields: ['department_id', 'role_name', 'description'],
+    hasIsActive: false,
+    hasUpdatedAt: false,
+    orderBy: 'role_name ASC',
+  },
 };
 
 function getEntityConfig(entity) {
@@ -180,15 +188,18 @@ export async function getEntityRecords(entity, { isSuperAdminCaller }) {
     return getDepartments({ includeInactive: isSuperAdminCaller });
   }
 
-  const { table } = getEntityConfig(entity);
+  const { table, hasIsActive = true, orderBy = 'created_at DESC' } = getEntityConfig(entity);
+  const whereSql = hasIsActive ? 'WHERE ($1::boolean = true OR is_active = true)' : '';
+  const params = hasIsActive ? [isSuperAdminCaller] : [];
+
   const result = await pool.query(
     `
       SELECT *
       FROM public.${table}
-      WHERE ($1::boolean = true OR is_active = true)
-      ORDER BY created_at DESC
+      ${whereSql}
+      ORDER BY ${orderBy}
     `,
-    [isSuperAdminCaller]
+    params
   );
 
   return result.rows;
@@ -228,7 +239,7 @@ export async function updateEntityRecord(entity, id, payload) {
     return updateDepartment(id, payload);
   }
 
-  const { table, updateFields } = getEntityConfig(entity);
+  const { table, updateFields, hasUpdatedAt = true } = getEntityConfig(entity);
   const data = pickFields(payload, updateFields);
 
   const fields = Object.keys(data);
@@ -248,7 +259,7 @@ export async function updateEntityRecord(entity, id, payload) {
   const result = await pool.query(
     `
       UPDATE public.${table}
-      SET ${updates.join(', ')}, updated_at = now()
+      SET ${updates.join(', ')}${hasUpdatedAt ? ', updated_at = now()' : ''}
       WHERE id = $${values.length}
       RETURNING *
     `,
