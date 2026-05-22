@@ -1,7 +1,8 @@
 import jwt from 'jsonwebtoken';
+import pool from '../config/db.js';
 import { sendError } from '../utils/respond.js';
 
-export function verifyToken(req, res, next) {
+export async function verifyToken(req, res, next) {
   // Check both cookie and Authorization header
   let token = req.cookies?.ems_jwt;
   let source = 'cookie';
@@ -22,11 +23,26 @@ export function verifyToken(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userResult = await pool.query(
+      `
+        SELECT id, employee_id, role_id, must_change_password
+        FROM public.users
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [decoded.user_id]
+    );
+
+    if (userResult.rowCount === 0) {
+      return sendError(res, 'UNAUTHORIZED', 'Invalid or expired token.', 401);
+    }
+
+    const currentUser = userResult.rows[0];
     req.user = {
-      user_id: decoded.user_id,
-      employee_id: decoded.employee_id,
-      role_id: decoded.role_id,
-      must_change_password: decoded.must_change_password,
+      user_id: currentUser.id,
+      employee_id: currentUser.employee_id,
+      role_id: currentUser.role_id,
+      must_change_password: currentUser.must_change_password,
     };
 
     const isChangePasswordRoute =

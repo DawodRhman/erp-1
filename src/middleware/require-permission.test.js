@@ -93,4 +93,27 @@ describe('requirePermissionOrSelf', () => {
     expect(next).toHaveBeenCalledTimes(1);
     expect(res.status).not.toHaveBeenCalled();
   });
+
+  it('allows a user with self-read permission through a self-scoped list route', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ role_name: 'employee' }] })
+      .mockResolvedValueOnce({ rows: [{ permission_key: 'employees:self_read' }] });
+
+    const { requirePermissionOrSelf } = await loadMiddleware();
+    const middleware = requirePermissionOrSelf('employees:read', 'employees:self_read', {
+      paramKey: null,
+    });
+    const req = {
+      user: { role_id: 'role-1', employee_id: 'EMP521' },
+      params: {},
+    };
+    const res = mockResponse();
+    const next = vi.fn();
+
+    await middleware(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.permissionScope).toBe('self');
+    expect(res.status).not.toHaveBeenCalled();
+  });
 });

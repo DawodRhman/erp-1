@@ -44,7 +44,7 @@ export function getWeekdaysBetween(startIso, endIso, holidaySet) {
 
 export function pakistanHolidaySet() {
   const h = new Set();
-  for (let y = 1990; y <= 2026; y++) {
+  for (let y = 2020; y <= 2026; y++) {
     h.add(`${y}-02-05`);
     h.add(`${y}-03-23`);
     h.add(`${y}-05-01`);

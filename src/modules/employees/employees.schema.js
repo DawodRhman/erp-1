@@ -92,6 +92,7 @@ const medicalInfoSchema = z.object({
 });
 
 export const createEmployeeSchema = z.object({
+  employee_id: z.string().min(3).max(10),
   personalInfo: personalInfoSchema,
   jobInfo: jobInfoSchema,
   salaryInfo: salaryInfoSchema,

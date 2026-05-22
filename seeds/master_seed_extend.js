@@ -14,6 +14,42 @@ import {
 } from './master_seed_helpers.js';
 
 const TODAY = '2026-05-12';
+const EMPLOYEE_COUNT = 100;
+const HR_EMPLOYEE_COUNT = 13;
+
+const EXECUTIVE_PROFILES = [
+  ['Adeel Rahman', 'Chief Executive Officer', 'adm', '2020-01-06'],
+  ['Saira Iqbal', 'Chief Financial Officer', 'fin', '2020-02-03'],
+  ['Omar Faruqi', 'Chief Operating Officer', 'ops', '2020-03-02'],
+  ['Maham Siddiqui', 'Chief Technology Officer', 'swe', '2020-01-20'],
+  ['Bilal Qureshi', 'Chief Marketing Officer', 'sales', '2020-04-06'],
+  ['Nadia Karim', 'Chief Information Officer', 'it', '2020-05-04'],
+  ['Hina Masood', 'Chief Human Resources Officer', 'hr', '2020-02-17'],
+  ['Taimur Malik', 'Chief Legal Officer', 'adm', '2020-06-01'],
+  ['Zara Shah', 'Chief Data Officer', 'swe', '2021-01-11'],
+  ['Usman Tariq', 'Chief Information Security Officer', 'it', '2021-02-08'],
+  ['Mariam Raza', 'Chief Compliance Officer', 'adm', '2021-03-01'],
+  ['Saad Ahmed', 'Chief Revenue Officer', 'sales', '2020-07-06'],
+  ['Amina Farooq', 'Chief Accounting Officer', 'fin', '2021-04-05'],
+  ['Hamza Khan', 'Chief Product Officer', 'swe', '2020-09-07'],
+  ['Noor Sheikh', 'Chief Strategy Officer', 'adm', '2021-05-03'],
+];
+
+const HR_PROFILES = [
+  ['Hina Masood', 'Chief Human Resources Officer', 'hr', '2020-02-17'],
+  ['Kamran Rafiq', 'HR Manager', 'hr', '2020-08-10'],
+  ['Rabia Aslam', 'HR Executive', 'hr', '2021-01-18'],
+  ['Danish Mehmood', 'HR Officer', 'hr', '2021-06-14'],
+  ['Sadia Malik', 'HR Officer', 'hr', '2022-02-07'],
+  ['Waqas Haider', 'HR Executive', 'hr', '2022-08-15'],
+  ['Laiba Noor', 'HR Officer', 'hr', '2023-01-09'],
+  ['Imran Yousuf', 'HR Executive', 'hr', '2023-07-10'],
+  ['Nimra Hassan', 'HR Officer', 'hr', '2024-01-15'],
+  ['Farhan Abbas', 'HR Executive', 'hr', '2024-06-03'],
+  ['Areeba Latif', 'HR Officer', 'hr', '2025-01-13'],
+  ['Zeeshan Anwar', 'HR Executive', 'hr', '2025-06-16'],
+  ['Iqra Saleem', 'HR Intern', 'hr', '2026-01-05'],
+];
 
 const FIRST_NAMES = [
   'Muhammad', 'Fatima', 'Ali', 'Ayesha', 'Haris', 'Zainab', 'Usman', 'Sana', 'Bilal', 'Noor',
@@ -35,31 +71,51 @@ function pick(arr, rng) {
   return arr[Math.floor(rng() * arr.length)];
 }
 
-function deptSlots520(D) {
-  return [
-    ...Array(22).fill(D.itSup),
-    ...Array(24).fill(D.itDev),
-    ...Array(27).fill(D.sweFe),
-    ...Array(32).fill(D.sweBe),
-    ...Array(14).fill(D.sweMob),
-    ...Array(18).fill(D.sweQa),
-    ...Array(17).fill(D.sweDevOps),
-    ...Array(30).fill(D.salesKhi),
-    ...Array(30).fill(D.salesLhr),
-    ...Array(29).fill(D.salesIsb),
-    ...Array(27).fill(D.hr),
-    ...Array(22).fill(D.proc),
-    ...Array(27).fill(D.fin),
-    ...Array(54).fill(D.opsFe),
-    ...Array(53).fill(D.opsInst),
-    ...Array(54).fill(D.cs),
-    ...Array(40).fill(D.adm),
+function employeeProfiles100(D) {
+  const deptByKey = Object.fromEntries(Object.entries(D));
+  const profiles = [];
+  for (const [name, title, deptKey, joinIso] of EXECUTIVE_PROFILES) {
+    profiles.push({ name, title, deptId: deptByKey[deptKey], joinIso, executive: true });
+  }
+  for (const [name, title, deptKey, joinIso] of HR_PROFILES.slice(1)) {
+    profiles.push({ name, title, deptId: deptByKey[deptKey], joinIso, hr: true });
+  }
+
+  const softwareSlots = [
+    ...Array(6).fill(['sweFe', 'Frontend Developer']),
+    ...Array(8).fill(['sweBe', 'Backend Developer']),
+    ...Array(5).fill(['sweMob', 'Mobile Developer']),
+    ...Array(6).fill(['sweQa', 'QA Engineer']),
+    ...Array(6).fill(['sweDevOps', 'DevOps Engineer']),
+    ...Array(5).fill(['itDev', 'Software Engineer']),
+    ...Array(5).fill(['itSup', 'IT Support Engineer']),
+    ...Array(5).fill(['salesKhi', 'Sales Executive']),
+    ...Array(4).fill(['salesLhr', 'Sales Executive']),
+    ...Array(3).fill(['salesIsb', 'Sales Executive']),
+    ...Array(4).fill(['fin', 'Finance Officer']),
+    ...Array(4).fill(['proc', 'Procurement Officer']),
+    ...Array(4).fill(['opsFe', 'Field Engineer']),
+    ...Array(3).fill(['opsInst', 'Installation Technician']),
+    ...Array(4).fill(['cs', 'Support Executive']),
+    ...Array(1).fill(['adm', 'Team Lead']),
   ];
+
+  for (const [deptKey, title] of softwareSlots) {
+    profiles.push({ title, deptId: deptByKey[deptKey] });
+  }
+  if (profiles.length !== EMPLOYEE_COUNT) {
+    throw new Error(`Seed profile count mismatch: expected ${EMPLOYEE_COUNT}, got ${profiles.length}`);
+  }
+  const hrCount = profiles.filter((p) => p.deptId === D.hr).length;
+  if (hrCount !== HR_EMPLOYEE_COUNT) {
+    throw new Error(`Seed HR count mismatch: expected ${HR_EMPLOYEE_COUNT}, got ${hrCount}`);
+  }
+  return profiles;
 }
 
 function designationForDept(deptId, joinIso, rng, DES, D) {
   const y = parseInt(joinIso.slice(0, 4), 10);
-  const senior = y < 2005;
+  const senior = y <= 2021;
   if (deptId === D.itSup || deptId === D.itDev) return senior ? DES['IT Manager'] : DES['IT Support Engineer'];
   if (deptId === D.sweFe) return senior ? DES['Senior Frontend Developer'] : DES['Frontend Developer'];
   if (deptId === D.sweBe) return senior ? DES['Senior Backend Developer'] : DES['Backend Developer'];
@@ -99,22 +155,22 @@ export async function seedEmployeesAndHR(client, ctx) {
     PROD,
   } = ctx;
 
-  const slots = deptSlots520(D);
+  const profiles = employeeProfiles100(D);
   const productKeys = Object.keys(PROD);
   const holidaySet = pakistanHolidaySet();
   const titleByDesigId = Object.fromEntries(Object.entries(DES).map(([t, id]) => [id, t]));
 
-  const hrManagerEmpId = padEmp(4);
-  const hrExecEmpId = padEmp(5);
+  const hrManagerEmpId = padEmp(16);
+  const hrExecEmpId = padEmp(17);
 
   const joinSpread = (n) => {
     const rng = mulberry32(n * 31337);
     const t = rng();
     if (t < 0.25)
-      return `1990-${String(1 + Math.floor(rng() * 11)).padStart(2, '0')}-${String(1 + Math.floor(rng() * 28)).padStart(2, '0')}`;
+      return `2020-${String(1 + Math.floor(rng() * 11)).padStart(2, '0')}-${String(1 + Math.floor(rng() * 28)).padStart(2, '0')}`;
     if (t < 0.55)
-      return `200${Math.floor(rng() * 10)}-${String(1 + Math.floor(rng() * 11)).padStart(2, '0')}-${String(1 + Math.floor(rng() * 28)).padStart(2, '0')}`;
-    return `201${Math.floor(rng() * 10)}-${String(1 + Math.floor(rng() * 11)).padStart(2, '0')}-${String(1 + Math.floor(rng() * 28)).padStart(2, '0')}`;
+      return `202${Math.floor(rng() * 4)}-${String(1 + Math.floor(rng() * 11)).padStart(2, '0')}-${String(1 + Math.floor(rng() * 28)).padStart(2, '0')}`;
+    return `202${4 + Math.floor(rng() * 3)}-${String(1 + Math.floor(rng() * 11)).padStart(2, '0')}-${String(1 + Math.floor(rng() * 28)).padStart(2, '0')}`;
   };
 
   const empRows = [];
@@ -125,20 +181,20 @@ export async function seedEmployeesAndHR(client, ctx) {
   const salaryRows = [];
   const userMeta = [];
 
-  for (let i = 1; i <= 520; i++) {
+  for (let i = 1; i <= EMPLOYEE_COUNT; i++) {
     const empId = padEmp(i);
     const rng = mulberry32(i * 7919);
-    const deptId = slots[i - 1];
+    const profile = profiles[i - 1];
+    const deptId = profile.deptId;
     const fn = pick(FIRST_NAMES, rng);
     const ln = pick(LAST_NAMES, rng);
-    let name = `${fn} ${ln}`;
-    if (i === 1) name = 'Muhammad Bilal Ahmed';
+    const name = profile.name || `${fn} ${ln}`;
     const father = `${pick(FIRST_NAMES, rng)} ${pick(LAST_NAMES, rng)}`;
     const cnic = `42101-${String(1000000 + i).slice(-7)}-${i % 10}`;
     const dobIso = `${1956 + Math.floor(rng() * 52)}-${String(1 + Math.floor(rng() * 12)).padStart(2, '0')}-${String(1 + Math.floor(rng() * 28)).padStart(2, '0')}`;
-    let joinIso = joinSpread(i);
+    let joinIso = profile.joinIso || joinSpread(i);
     if (joinIso > TODAY) joinIso = TODAY;
-    const designationId = designationForDept(deptId, joinIso, rng, DES, D);
+    const designationId = DES[profile.title] || designationForDept(deptId, joinIso, rng, DES, D);
 
     let empType = ET['Full-Time'];
     const jt = rng();
@@ -155,9 +211,9 @@ export async function seedEmployeesAndHR(client, ctx) {
       probationEnd = addMonths(joinIso, 3);
     }
     if (empType === ET['Contract']) contractEnd = addMonths(joinIso, 6 + Math.floor(rng() * 12));
-    if (i >= 400 && i < 440) {
+    if (i >= 94 && i <= 96) {
       jobStat = rng() < 0.5 ? JS.Terminated : JS.Resigned;
-      exitDate = `202${Math.floor(rng() * 6)}-${String(1 + Math.floor(rng() * 11)).padStart(2, '0')}-${String(1 + Math.floor(rng() * 28)).padStart(2, '0')}`;
+      exitDate = `202${4 + Math.floor(rng() * 2)}-${String(1 + Math.floor(rng() * 11)).padStart(2, '0')}-${String(1 + Math.floor(rng() * 28)).padStart(2, '0')}`;
     }
 
     let wm = WM['On-Site'];
@@ -267,7 +323,12 @@ export async function seedEmployeesAndHR(client, ctx) {
       null,
     ]);
 
-    const baseSalary = 45000 + Math.floor(rng() * 500000);
+    const title = titleByDesigId[designationId] || profile.title || '';
+    const baseSalary = title.startsWith('Chief ')
+      ? 900000 + Math.floor(rng() * 700000)
+      : title.includes('Manager') || title.includes('Lead') || title.includes('Senior')
+        ? 220000 + Math.floor(rng() * 350000)
+        : 85000 + Math.floor(rng() * 260000);
     salaryRows.push([empId, baseSalary, 'PKR', joinIso, null, true, true, 'Initial', null, null]);
 
     let roleId = employeeRoleId;
@@ -275,7 +336,9 @@ export async function seedEmployeesAndHR(client, ctx) {
     else if (empId === hrManagerEmpId) roleId = hrManagerRoleId;
     else if (empId === hrExecEmpId) roleId = hrExecRoleId;
 
-    let emailLocal = `${fn}.${ln}`.toLowerCase().replace(/[^a-z]/g, '') + i;
+    let emailLocal = name.toLowerCase().replace(/[^a-z]+/g, '.').replace(/^\.+|\.+$/g, '');
+    if (emailLocal) emailLocal = `${emailLocal}.${empId.toLowerCase()}`;
+    else emailLocal = empId.toLowerCase();
     let email = `${emailLocal}@esspl.com.pk`;
     if (empId === padEmp(1)) {
       email = 'superadmin@esspl.com.pk';
@@ -291,7 +354,7 @@ export async function seedEmployeesAndHR(client, ctx) {
     ['employee_id', 'name', 'father_name', 'cnic', 'date_of_birth'],
     empRows
   );
-  console.log('  employee_info 520');
+  console.log(`  employee_info ${EMPLOYEE_COUNT}`);
 
   await batchInsert(
     client,
@@ -389,7 +452,7 @@ export async function seedEmployeesAndHR(client, ctx) {
       [u.empId, u.email, pw, u.roleId, u.mustChange, u.pwdChangedAt]
     );
   }
-  console.log('  users 520');
+  console.log(`  users ${EMPLOYEE_COUNT}`);
 
   const userRowsDb = await client.query(`SELECT id, employee_id FROM users`);
   const uidByEmp = Object.fromEntries(userRowsDb.rows.map((r) => [r.employee_id, r.id]));
@@ -415,7 +478,7 @@ export async function seedEmployeesAndHR(client, ctx) {
   }
   console.log('  employee_salary');
 
-  for (let i = 1; i <= 520; i++) {
+  for (let i = 1; i <= EMPLOYEE_COUNT; i++) {
     const rng = mulberry32(i * 4444);
     const empId = padEmp(i);
     const mgr = i <= 40 || rng() < 0.08;
@@ -449,7 +512,7 @@ export async function seedEmployeesAndHR(client, ctx) {
   }
 
   const jhRows = [];
-  for (let i = 1; i <= 520; i++) {
+  for (let i = 1; i <= EMPLOYEE_COUNT; i++) {
     const empId = padEmp(i);
     const ji = jobRows[i - 1];
     jhRows.push([empId, ji[1], ji[2], null, ji[8], null]);
@@ -506,8 +569,8 @@ export async function seedEmployeesAndHR(client, ctx) {
   );
 
   const leaveBalRows = [];
-  for (let i = 1; i <= 520; i++) {
-    if (i >= 400 && i < 440) continue;
+  for (let i = 1; i <= EMPLOYEE_COUNT; i++) {
+    if (i >= 94 && i <= 96) continue;
     const empId = padEmp(i);
     const rng = mulberry32(i * 8888);
     for (const y of policyYears) {
@@ -528,9 +591,9 @@ export async function seedEmployeesAndHR(client, ctx) {
   const lrRows = [];
   for (let k = 0; k < 800; k++) {
     const rng = mulberry32(k * 12345);
-    const empNum = 1 + Math.floor(rng() * 520);
+    const empNum = 1 + Math.floor(rng() * EMPLOYEE_COUNT);
     const empId = padEmp(empNum);
-    const year = 1990 + Math.floor(rng() * 36);
+    const year = 2020 + Math.floor(rng() * 7);
     const month = Math.floor(rng() * 12);
     const day = 1 + Math.floor(rng() * 28);
     const start = new Date(Date.UTC(year, month, day));
@@ -597,10 +660,10 @@ export async function seedEmployeesAndHR(client, ctx) {
   const penRows = [];
   for (let k = 0; k < 150; k++) {
     const rng = mulberry32(k * 54321);
-    const empId = padEmp(1 + Math.floor(rng() * 520));
+    const empId = padEmp(1 + Math.floor(rng() * EMPLOYEE_COUNT));
     const ruleId = ruleIds[Math.floor(rng() * ruleIds.length)];
     const st = rng() < 0.7 ? 'approved' : rng() < 0.9 ? 'pending' : 'rejected';
-    const dt = `201${Math.floor(rng() * 9)}-${String(1 + Math.floor(rng() * 11)).padStart(2, '0')}-15`;
+    const dt = `202${Math.floor(rng() * 7)}-${String(1 + Math.floor(rng() * 11)).padStart(2, '0')}-15`;
     const reviewed = st !== 'pending' ? hrUid : null;
     const reviewedAt = reviewed ? `${dt} 15:00:00+00` : null;
     penRows.push([
@@ -675,7 +738,7 @@ export async function seedEmployeesAndHR(client, ctx) {
   for (let k = 0; k < 80; k++) {
     const rng = mulberry32(k * 22222);
     const open = rng() < 0.5;
-    const empId = padEmp(1 + Math.floor(rng() * 520));
+    const empId = padEmp(1 + Math.floor(rng() * EMPLOYEE_COUNT));
     const exp = open
       ? `2026-0${1 + Math.floor(rng() * 4)}-${String(10 + Math.floor(rng() * 18)).padStart(2, '0')}`
       : `2024-06-01`;
@@ -699,7 +762,7 @@ export async function seedEmployeesAndHR(client, ctx) {
     const rng = mulberry32(k * 33333);
     const open = rng() < 0.4;
     paRows.push([
-      padEmp(1 + Math.floor(rng() * 520)),
+      padEmp(1 + Math.floor(rng() * EMPLOYEE_COUNT)),
       JSON.stringify(['bank_account', 'emergency_contact']),
       open ? 'open' : 'resolved',
       open ? null : hrExecUid,
@@ -714,7 +777,7 @@ export async function seedEmployeesAndHR(client, ctx) {
   }
 
   const dirRows = [];
-  for (let i = 1; i <= 520; i++) {
+  for (let i = 1; i <= EMPLOYEE_COUNT; i++) {
     const ji = jobRows[i - 1];
     const rng = mulberry32(i * 666);
     dirRows.push([
@@ -875,7 +938,7 @@ export async function seedEmployeesAndHR(client, ctx) {
       dep,
       st,
       st === 'APPROVED' ? hrUid : null,
-      st === 'APPROVED' ? '2018-06-01' : null,
+      st === 'APPROVED' ? '2024-06-01' : null,
       st === 'REJECTED' ? 'Budget constraints' : null,
     ]);
   }
@@ -1140,8 +1203,8 @@ export async function seedEmployeesAndHR(client, ctx) {
   };
 
   const attRows = [];
-  for (let i = 1; i <= 520; i++) {
-    if (i >= 400 && i < 440) continue;
+  for (let i = 1; i <= EMPLOYEE_COUNT; i++) {
+    if (i >= 94 && i <= 96) continue;
     const empId = padEmp(i);
     const ji = jobRows[i - 1];
     const shiftId = ji[7];

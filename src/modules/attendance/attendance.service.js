@@ -17,13 +17,13 @@ async function userHasPermissionByUserId(userId, permissionKey) {
   return result.rowCount > 0;
 }
 
-async function isSuperAdmin(roleId) {
+async function getRoleName(roleId) {
   const result = await pool.query(
     `SELECT role_name FROM public.roles WHERE id = $1 LIMIT 1`,
     [roleId]
   );
 
-  return result.rows[0]?.role_name === 'super_admin';
+  return result.rows[0]?.role_name || null;
 }
 
 function computeLateMinutes(checkIn, shiftStart, lateAfterMinutes) {
@@ -42,10 +42,102 @@ function computeLateMinutes(checkIn, shiftStart, lateAfterMinutes) {
   return Math.floor((checkInDate.getTime() - lateThreshold.getTime()) / 60000);
 }
 
-export async function getAttendanceSheet(date, locationId, callerEmployeeId, roleId) {
-  const superAdmin = await isSuperAdmin(roleId);
+function mapAttendanceRows(rows, date) {
+  return rows.map((row) => {
+    const synthetic = !row.attendance_id;
+    const isOnLeave = Boolean(row.leave_id);
 
-  if (!superAdmin) {
+    const status = isOnLeave
+      ? 'on_leave'
+      : row.status || 'absent';
+
+    const notes = isOnLeave ? 'On approved leave' : row.notes;
+
+    return {
+      attendance_id: row.attendance_id,
+      employee_id: row.employee_id,
+      name: row.name,
+      designation: row.designation,
+      shift: {
+        id: row.shift_id,
+        name: row.shift_name,
+        expected_in: row.start_time,
+        expected_out: row.end_time,
+        late_after_minutes: row.late_after_minutes,
+      },
+      date: row.date || date,
+      check_in: row.check_in,
+      check_out: row.check_out,
+      status,
+      notes,
+      ack: row.ack || false,
+      state: row.state || 'draft',
+      late_by_minutes: computeLateMinutes(row.check_in, row.start_time, row.late_after_minutes),
+      read_only_notes: isOnLeave,
+      synthetic,
+    };
+  });
+}
+
+async function getEmployeeAttendanceSheet(date, employeeId) {
+  const result = await pool.query(
+    `
+      SELECT
+        ei.employee_id,
+        ei.name,
+        d.title AS designation,
+        ji.work_location_id,
+        ji.shift_id,
+        s.name AS shift_name,
+        s.start_time,
+        s.end_time,
+        s.late_after_minutes,
+        a.id AS attendance_id,
+        a.date,
+        a.check_in,
+        a.check_out,
+        a.status,
+        a.notes,
+        a.ack,
+        a.state,
+        lr.id AS leave_id
+      FROM public.job_info ji
+      JOIN public.employee_info ei ON ei.employee_id = ji.employee_id
+      LEFT JOIN public.designations d ON d.id = ji.designation_id
+      LEFT JOIN public.shifts s ON s.id = ji.shift_id
+      LEFT JOIN public.attendance a
+        ON a.employee_id = ji.employee_id
+       AND a.date = $1
+      LEFT JOIN public.leave_requests lr
+        ON lr.employee_id = ji.employee_id
+       AND lr.status = 'approved'
+       AND $1::date BETWEEN lr.start_date AND COALESCE(lr.end_by_force, lr.end_date)
+      WHERE ji.employee_id = $2
+      LIMIT 1
+    `,
+    [date, employeeId]
+  );
+
+  if (result.rowCount === 0) {
+    throw new AppError(404, 'NOT_FOUND', 'Employee attendance context not found.');
+  }
+
+  return {
+    date,
+    location_id: result.rows[0].work_location_id,
+    rows: mapAttendanceRows(result.rows, date),
+  };
+}
+
+export async function getAttendanceSheet(date, locationId, callerEmployeeId, roleId) {
+  const selectedDate = date || new Date().toISOString().slice(0, 10);
+  const roleName = await getRoleName(roleId);
+
+  if (roleName === 'employee') {
+    return getEmployeeAttendanceSheet(selectedDate, callerEmployeeId);
+  }
+
+  if (roleName !== 'super_admin') {
     const callerLocation = await pool.query(
       `SELECT work_location_id FROM public.job_info WHERE employee_id = $1 LIMIT 1`,
       [callerEmployeeId]
@@ -90,48 +182,13 @@ export async function getAttendanceSheet(date, locationId, callerEmployeeId, rol
       WHERE ji.work_location_id = $2
       ORDER BY ei.employee_id ASC
     `,
-    [date, locationId]
+    [selectedDate, locationId]
   );
 
-  const rows = employeesResult.rows.map((row) => {
-    const synthetic = !row.attendance_id;
-    const isOnLeave = Boolean(row.leave_id);
-
-    const status = isOnLeave
-      ? 'on_leave'
-      : row.status || 'absent';
-
-    const notes = isOnLeave ? 'On approved leave' : row.notes;
-
-    return {
-      attendance_id: row.attendance_id,
-      employee_id: row.employee_id,
-      name: row.name,
-      designation: row.designation,
-      shift: {
-        id: row.shift_id,
-        name: row.shift_name,
-        expected_in: row.start_time,
-        expected_out: row.end_time,
-        late_after_minutes: row.late_after_minutes,
-      },
-      date: row.date || date,
-      check_in: row.check_in,
-      check_out: row.check_out,
-      status,
-      notes,
-      ack: row.ack || false,
-      state: row.state || 'draft',
-      late_by_minutes: computeLateMinutes(row.check_in, row.start_time, row.late_after_minutes),
-      read_only_notes: isOnLeave,
-      synthetic,
-    };
-  });
-
   return {
-    date,
+    date: selectedDate,
     location_id: locationId,
-    rows,
+    rows: mapAttendanceRows(employeesResult.rows, selectedDate),
   };
 }
 
@@ -362,7 +419,19 @@ export async function approveUnlock(date, locationId, unlockedByUserId, unlockRe
   return { unlocked_count: result.rowCount };
 }
 
-export async function getMonthlyReport(year, month, locationId, filters = {}) {
+export async function getMonthlyReport(
+  year,
+  month,
+  locationId,
+  filters = {},
+  callerEmployeeId = null,
+  roleId = null
+) {
+  const roleName = roleId ? await getRoleName(roleId) : null;
+  const effectiveFilters = {
+    ...filters,
+    employee_id: roleName === 'employee' ? callerEmployeeId : filters.employee_id,
+  };
   const params = [year, month];
   const whereExtra = [];
 
@@ -371,13 +440,13 @@ export async function getMonthlyReport(year, month, locationId, filters = {}) {
     whereExtra.push(`ji.work_location_id = $${params.length}`);
   }
 
-  if (filters.employee_id) {
-    params.push(filters.employee_id);
+  if (effectiveFilters.employee_id) {
+    params.push(effectiveFilters.employee_id);
     whereExtra.push(`ei.employee_id = $${params.length}`);
   }
 
-  if (filters.department_id) {
-    params.push(filters.department_id);
+  if (effectiveFilters.department_id) {
+    params.push(effectiveFilters.department_id);
     whereExtra.push(`ji.department_id = $${params.length}`);
   }
 

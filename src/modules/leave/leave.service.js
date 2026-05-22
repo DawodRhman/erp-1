@@ -30,6 +30,15 @@ async function getEmployeeContext(employeeId) {
   return result.rows[0];
 }
 
+export async function getRoleName(roleId) {
+  const result = await pool.query(
+    `SELECT role_name FROM public.roles WHERE id = $1 LIMIT 1`,
+    [roleId]
+  );
+
+  return result.rows[0]?.role_name || null;
+}
+
 export async function getLeaveBalances(employeeId) {
   const year = new Date().getFullYear();
 
@@ -562,7 +571,7 @@ export async function earlyReturn(leaveId, hrUserId) {
   }
 }
 
-export async function getLeaveCalendar({ month, year, department_id, branch_id }) {
+export async function getLeaveCalendar({ month, year, department_id, branch_id, employee_id }) {
   const params = [year, month];
   const filters = [];
 
@@ -574,6 +583,11 @@ export async function getLeaveCalendar({ month, year, department_id, branch_id }
   if (branch_id) {
     params.push(branch_id);
     filters.push(`ji.work_location_id = $${params.length}`);
+  }
+
+  if (employee_id) {
+    params.push(employee_id);
+    filters.push(`lr.employee_id = $${params.length}`);
   }
 
   const result = await pool.query(

@@ -95,7 +95,9 @@ export async function getMonthlyReport(req, res, next) {
       {
         employee_id: req.query.employee_id,
         department_id: req.query.department_id,
-      }
+      },
+      req.user.employee_id,
+      req.user.role_id
     );
     return sendSuccess(res, result, 200);
   } catch (error) {

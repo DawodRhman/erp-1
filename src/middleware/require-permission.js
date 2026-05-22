@@ -86,6 +86,7 @@ export function requirePermissionOrSelf(permissionKey, selfPermissionKey, option
 
       const permissions = await getPermissionsForRole(roleId);
       if (permissions.has(permissionKey)) {
+        req.permissionScope = 'all';
         return next();
       }
 
@@ -93,14 +94,14 @@ export function requirePermissionOrSelf(permissionKey, selfPermissionKey, option
       const callerEmployeeId = req.user?.employee_id;
       const canReadSelf =
         permissions.has(selfPermissionKey) &&
-        requestedEmployeeId &&
         callerEmployeeId &&
-        requestedEmployeeId === callerEmployeeId;
+        (paramKey === null || (requestedEmployeeId && requestedEmployeeId === callerEmployeeId));
 
       if (!canReadSelf) {
         return sendError(res, 'FORBIDDEN', 'Insufficient permissions.', 403);
       }
 
+      req.permissionScope = 'self';
       return next();
     } catch (error) {
       return next(error);

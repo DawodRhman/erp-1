@@ -2,14 +2,17 @@ import pool from '../../config/db.js';
 import { AppError } from '../../utils/errors.js';
 import { generateTempPassword, hashPassword } from '../auth/auth.service.js';
 
-function nextEmployeeCodeFromMax(maxEmployeeId) {
-  const current = Number((maxEmployeeId || 'EMP000').replace('EMP', '')) || 0;
-  const next = current + 1;
-  return `EMP${String(next).padStart(3, '0')}`;
-}
-
 export async function createEmployee(data, createdByUserId) {
-  const { personalInfo, jobInfo, accountInfo, emergencyContacts, bankInfo, medicalInfo, salaryInfo, allowances } = data;
+  const { employee_id: employeeId, personalInfo, jobInfo, accountInfo, emergencyContacts, bankInfo, medicalInfo, salaryInfo, allowances } = data;
+
+  const duplicateEmployeeId = await pool.query(
+    `SELECT 1 FROM public.employee_info WHERE employee_id = $1 LIMIT 1`,
+    [employeeId]
+  );
+
+  if (duplicateEmployeeId.rowCount > 0) {
+    throw new AppError(409, 'DUPLICATE_EMPLOYEE_ID', 'Employee ID already exists.');
+  }
 
   const duplicateCnic = await pool.query(
     `SELECT 1 FROM public.employee_info WHERE cnic = $1 LIMIT 1`,
@@ -32,11 +35,6 @@ export async function createEmployee(data, createdByUserId) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-
-    const maxEmployeeResult = await client.query(
-      `SELECT MAX(employee_id) AS max_employee_id FROM public.employee_info`
-    );
-    const employeeId = nextEmployeeCodeFromMax(maxEmployeeResult.rows[0]?.max_employee_id);
 
     const employeeInsert = await client.query(
       `

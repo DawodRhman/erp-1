@@ -12,6 +12,11 @@ export async function createEmployee(req, res, next) {
 
 export async function getEmployees(req, res, next) {
   try {
+    if (req.permissionScope === 'self') {
+      const result = await employeesService.getEmployeeById(req.user.employee_id);
+      return sendSuccess(res, result, 200);
+    }
+
     const result = await employeesService.getEmployees({
       search: req.query.search,
       department_id: req.query.department_id,

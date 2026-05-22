@@ -27,7 +27,11 @@ const router = Router();
 
 router.use(verifyToken);
 
-router.get('/', requirePermission('employees:read'), getEmployees);
+router.get(
+  '/',
+  requirePermissionOrSelf('employees:read', 'employees:self_read', { paramKey: null }),
+  getEmployees
+);
 router.get('/:employeeId', requirePermissionOrSelf('employees:read', 'employees:self_read'), getEmployeeById);
 router.post('/', requirePermission('employees:write'), validate(createEmployeeSchema), createEmployee);
 router.patch(

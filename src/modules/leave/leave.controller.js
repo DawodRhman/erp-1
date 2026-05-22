@@ -3,6 +3,12 @@ import * as leaveService from './leave.service.js';
 
 export async function getLeaveRequests(req, res, next) {
   try {
+    const roleName = await leaveService.getRoleName(req.user.role_id);
+    if (roleName === 'employee') {
+      const result = await leaveService.getMyLeaveRequests(req.user.employee_id);
+      return sendSuccess(res, result, 200);
+    }
+
     const result = await leaveService.getLeaveRequests({
       status: req.query.status,
       employee_id: req.query.employee_id,
@@ -67,6 +73,12 @@ export async function earlyReturn(req, res, next) {
 
 export async function getLeaveBalances(req, res, next) {
   try {
+    const roleName = await leaveService.getRoleName(req.user.role_id);
+    if (roleName === 'employee') {
+      const result = await leaveService.getLeaveBalances(req.user.employee_id);
+      return sendSuccess(res, result, 200);
+    }
+
     const result = await leaveService.getLeaveBalancesAll({
       department_id: req.query.department_id,
       location_id: req.query.location_id,
@@ -90,11 +102,13 @@ export async function getMyLeaveBalances(req, res, next) {
 
 export async function getLeaveCalendar(req, res, next) {
   try {
+    const roleName = await leaveService.getRoleName(req.user.role_id);
     const result = await leaveService.getLeaveCalendar({
       month: Number(req.query.month || new Date().getMonth() + 1),
       year: Number(req.query.year || new Date().getFullYear()),
       department_id: req.query.department_id,
       branch_id: req.query.branch_id,
+      employee_id: roleName === 'employee' ? req.user.employee_id : undefined,
     });
     return sendSuccess(res, result, 200);
   } catch (error) {
