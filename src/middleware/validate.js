@@ -60,7 +60,7 @@ export function validateQuery(zodSchema) {
       });
     }
 
-    req.query = result.data;
+    req.validatedQuery = result.data;
     return next();
   };
   return middleware;

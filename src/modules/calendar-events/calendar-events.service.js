@@ -9,7 +9,7 @@ async function getRoleName(roleId) {
   return result.rows[0]?.role_name || null;
 }
 
-export async function getCalendarEvents({ from, to, roleId }) {
+export async function getCalendarEvents({ from, to, type, visibility, search, sort, order, roleId }) {
   const roleName = await getRoleName(roleId);
 
   const filters = [];
@@ -25,18 +25,38 @@ export async function getCalendarEvents({ from, to, roleId }) {
     filters.push(`date <= $${params.length}`);
   }
 
+  if (type) {
+    params.push(type);
+    filters.push(`type = $${params.length}`);
+  }
+
+  if (visibility) {
+    params.push(visibility);
+    filters.push(`visibility = $${params.length}`);
+  }
+
+  if (search) {
+    params.push(`%${search}%`);
+    filters.push(`title ILIKE $${params.length}`);
+  }
+
   if (roleName === 'employee') {
     filters.push(`visibility IN ('all', 'employee')`);
   }
 
   const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
 
+  // Whitelist sort columns to prevent SQL injection
+  const allowedSortColumns = { date: 'date', title: 'title', type: 'type', created_at: 'created_at' };
+  const sortColumn = allowedSortColumns[sort] || 'date';
+  const sortOrder = order === 'desc' ? 'DESC' : 'ASC';
+
   const result = await pool.query(
     `
       SELECT *
       FROM public.calendar_events
       ${whereClause}
-      ORDER BY date ASC, created_at DESC
+      ORDER BY ${sortColumn} ${sortOrder}, created_at DESC
     `,
     params
   );

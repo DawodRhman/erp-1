@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { verifyToken } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/require-permission.js';
-import { validateParams } from '../../middleware/validate.js';
+import { validateParams, validateQuery } from '../../middleware/validate.js';
+import { calendarEventQuerySchema } from '../../schemas/calendar-event.schema.js';
 import {
   getCalendarEvents,
   createCalendarEvent,
@@ -17,7 +18,7 @@ const uuidParamSchema = z.object({
 
 router.use(verifyToken);
 
-router.get('/', getCalendarEvents);
+router.get('/', validateQuery(calendarEventQuerySchema), getCalendarEvents);
 router.post('/', requirePermission('calendar:write'), createCalendarEvent);
 router.patch('/:id', requirePermission('calendar:write'), validateParams(uuidParamSchema), updateCalendarEvent);
 

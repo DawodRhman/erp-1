@@ -3,9 +3,19 @@ import { z } from 'zod'
 const visibilitySchema = z.enum(['all', 'hr', 'employee'])
 
 export const calendarEventQuerySchema = z.object({
-    from: z.string().date(),
-    to: z.string().date(),
-}).refine((data) => data.from <= data.to, {
+    from: z.string().date().optional(),
+    to: z.string().date().optional(),
+    year: z.coerce.number().int().min(2000).max(2100).optional(),
+    type: z.string().trim().min(1).max(50).optional(),
+    visibility: visibilitySchema.optional(),
+    search: z.string().trim().max(255).optional(),
+    all: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+    sort: z.enum(['date', 'title', 'type', 'created_at']).default('date'),
+    order: z.enum(['asc', 'desc']).default('asc'),
+}).refine((data) => {
+    if (data.from && data.to) return data.from <= data.to;
+    return true;
+}, {
     message: 'From date must be before or equal to to date.',
     path: ['to'],
 })

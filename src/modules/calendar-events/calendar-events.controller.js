@@ -13,9 +13,33 @@ const eventPatchSchema = eventBodySchema.partial();
 
 export async function getCalendarEvents(req, res, next) {
   try {
+    const query = req.validatedQuery || req.query;
+    const { from, to, year, type, visibility, search, sort, order, all } = query;
+    const includeAll = all === true || all === 'true';
+
+    // Resolve date range: explicit from/to > year shortcut > all events > current year default
+    let resolvedFrom = from;
+    let resolvedTo = to;
+
+    if (!from && !to) {
+      if (year) {
+        resolvedFrom = `${year}-01-01`;
+        resolvedTo = `${year}-12-31`;
+      } else if (!includeAll) {
+        const currentYear = new Date().getFullYear();
+        resolvedFrom = `${currentYear}-01-01`;
+        resolvedTo = `${currentYear}-12-31`;
+      }
+    }
+
     const result = await calendarEventsService.getCalendarEvents({
-      from: req.query.from,
-      to: req.query.to,
+      from: resolvedFrom,
+      to: resolvedTo,
+      type,
+      visibility,
+      search,
+      sort: sort || 'date',
+      order: order || 'asc',
       roleId: req.user.role_id,
     });
     return sendSuccess(res, result, 200);
