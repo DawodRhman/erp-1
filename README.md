@@ -67,14 +67,12 @@ npm install
 ### Environment Variables
 
 ```env
-PORT=3000
-DB_USER=your_db_user
-DB_PASSWORD=your_db_password
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=ems_db
+DATABASE_URL=postgres://postgres:1234@localhost:5432/erp
+PORT=3001
 JWT_SECRET=your_jwt_secret
-BCRYPT_SALT_ROUNDS=10
+JWT_EXPIRES_IN=8h
+NODE_ENV=development
+DB_SSL=false
 ```
 
 ## Running the Server

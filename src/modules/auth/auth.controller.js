@@ -25,6 +25,26 @@ function signToken(payload) {
   });
 }
 
+function isHttpsRequest(req) {
+  const forwardedProto = req.get?.('x-forwarded-proto') || req.headers?.['x-forwarded-proto'];
+  return (
+    req.secure === true ||
+    String(forwardedProto || '').split(',')[0].trim() === 'https' ||
+    process.env.NODE_ENV === 'production'
+  );
+}
+
+function authCookieOptions(req, httpOnly) {
+  const secure = isHttpsRequest(req);
+
+  return {
+    httpOnly,
+    sameSite: secure ? 'none' : 'lax',
+    path: '/',
+    secure,
+  };
+}
+
 export async function login(req, res, next) {
   try {
     const user = await authService.login(req.body.email, req.body.password);
@@ -38,19 +58,9 @@ export async function login(req, res, next) {
 
     const token = signToken(payload);
 
-    res.cookie('ems_jwt', token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      path: '/',
-      secure: process.env.NODE_ENV === 'production',
-    });
+    res.cookie('ems_jwt', token, authCookieOptions(req, true));
 
-    res.cookie('ems_csrf', randomUUID(), {
-      httpOnly: false,
-      sameSite: 'lax',
-      path: '/',
-      secure: process.env.NODE_ENV === 'production',
-    });
+    res.cookie('ems_csrf', randomUUID(), authCookieOptions(req, false));
 
     return sendSuccess(
       res,
@@ -71,8 +81,8 @@ export async function login(req, res, next) {
 }
 
 export function logout(req, res) {
-  res.clearCookie('ems_jwt', { path: '/' });
-  res.clearCookie('ems_csrf', { path: '/' });
+  res.clearCookie('ems_jwt', authCookieOptions(req, true));
+  res.clearCookie('ems_csrf', authCookieOptions(req, false));
   return sendSuccess(res, null, 200);
 }
 
@@ -106,12 +116,7 @@ export async function changePassword(req, res, next) {
 
     const token = signToken(newPayload);
 
-    res.cookie('ems_jwt', token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      path: '/',
-      secure: process.env.NODE_ENV === 'production',
-    });
+    res.cookie('ems_jwt', token, authCookieOptions(req, true));
 
     return sendSuccess(res, { message: 'Password changed.' }, 200);
   } catch (error) {

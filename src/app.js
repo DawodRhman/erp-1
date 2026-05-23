@@ -17,6 +17,8 @@ import pool from './config/db.js';
 
 const app = express();
 
+app.set('trust proxy', 1);
+
 const debugMiddleware = (req, res, next) => {
 	console.log('[DEBUG] Request:', req.method, req.url, 'cookies:', Object.keys(req.cookies || {}), 'auth:', req.headers.authorization ? 'present' : 'none');
 	next();
