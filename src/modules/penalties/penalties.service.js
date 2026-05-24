@@ -25,6 +25,14 @@ export async function createPenaltyRule({ name, amount_pkr, type, created_by }) 
     throw new AppError(400, 'BAD_REQUEST', 'Invalid penalty rule type.');
   }
 
+  const duplicate = await pool.query(
+    `SELECT 1 FROM public.penalty_rules WHERE lower(name) = lower($1) LIMIT 1`,
+    [name]
+  );
+  if (duplicate.rowCount > 0) {
+    throw new AppError(409, 'CONFLICT', 'Penalty rule already exists.');
+  }
+
   const result = await pool.query(
     `
       INSERT INTO public.penalty_rules (name, amount_pkr, type, created_by, is_active)
@@ -94,12 +102,13 @@ export async function proposePenalty({ employee_id, rule_id, date, reason, propo
         reason,
         status,
         proposed_by,
-        submitted_to_ho_at
+        submitted_to_ho_at,
+        applied_amount_pkr
       )
-      VALUES ($1, $2, $3, $4, 'pending', $5, now())
+      VALUES ($1, $2, $3, $4, 'pending', $5, now(), $6)
       RETURNING *
     `,
-    [employee_id, rule_id, date, reason || null, proposed_by]
+    [employee_id, rule_id, date, reason || null, proposed_by, rule.rows[0].amount_pkr]
   );
 
   const employee = await pool.query(
@@ -124,6 +133,19 @@ export async function proposePenalty({ employee_id, rule_id, date, reason, propo
 }
 
 export async function approvePenalty(penaltyId, reviewedByUserId) {
+  const existing = await pool.query(
+    `SELECT id, status FROM public.employee_penalties WHERE id = $1 LIMIT 1`,
+    [penaltyId]
+  );
+
+  if (existing.rowCount === 0) {
+    throw new AppError(404, 'NOT_FOUND', 'Penalty not found.');
+  }
+
+  if (existing.rows[0].status !== 'pending') {
+    throw new AppError(409, 'INVALID_STATE', 'Only pending penalties can be approved.');
+  }
+
   const result = await pool.query(
     `
       UPDATE public.employee_penalties
@@ -136,10 +158,6 @@ export async function approvePenalty(penaltyId, reviewedByUserId) {
     `,
     [penaltyId, reviewedByUserId]
   );
-
-  if (result.rowCount === 0) {
-    throw new AppError(404, 'NOT_FOUND', 'Penalty not found.');
-  }
 
   await pool.query(
     `
@@ -155,6 +173,19 @@ export async function approvePenalty(penaltyId, reviewedByUserId) {
 }
 
 export async function rejectPenalty(penaltyId, reviewedByUserId, reviewNote) {
+  const existing = await pool.query(
+    `SELECT id, status FROM public.employee_penalties WHERE id = $1 LIMIT 1`,
+    [penaltyId]
+  );
+
+  if (existing.rowCount === 0) {
+    throw new AppError(404, 'NOT_FOUND', 'Penalty not found.');
+  }
+
+  if (existing.rows[0].status !== 'pending') {
+    throw new AppError(409, 'INVALID_STATE', 'Only pending penalties can be rejected.');
+  }
+
   const result = await pool.query(
     `
       UPDATE public.employee_penalties
@@ -168,10 +199,6 @@ export async function rejectPenalty(penaltyId, reviewedByUserId, reviewNote) {
     `,
     [penaltyId, reviewedByUserId, reviewNote || null]
   );
-
-  if (result.rowCount === 0) {
-    throw new AppError(404, 'NOT_FOUND', 'Penalty not found.');
-  }
 
   if (result.rows[0].proposed_by) {
     await pool.query(
@@ -204,6 +231,10 @@ export async function acknowledgeEmployeePenalty(penaltyId, employeeId) {
 
   if (penalty.status !== 'approved') {
     throw new AppError(409, 'INVALID_STATE', 'Penalty must be approved before acknowledgement.');
+  }
+
+  if (penalty.employee_ack) {
+    return penalty;
   }
 
   const updated = await pool.query(
@@ -240,7 +271,7 @@ export async function listPenalties(filters = {}) {
       SELECT
         ep.*,
         pr.name AS rule_name,
-        pr.amount_pkr,
+        COALESCE(ep.applied_amount_pkr, pr.amount_pkr) AS amount_pkr,
         pr.type,
         ei.name AS employee_name
       FROM public.employee_penalties ep
@@ -261,7 +292,7 @@ export async function listMyPenalties(employeeId) {
       SELECT
         ep.*,
         pr.name AS rule_name,
-        pr.amount_pkr,
+        COALESCE(ep.applied_amount_pkr, pr.amount_pkr) AS amount_pkr,
         pr.type,
         proposer_emp.name AS proposed_by_name,
         reviewer_emp.name AS reviewed_by_name

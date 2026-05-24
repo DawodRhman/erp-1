@@ -650,12 +650,14 @@ export async function seedEmployeesAndHR(client, ctx) {
     ['Attendance Shortage', 2, 'percentage'],
   ];
   const ruleIds = [];
+  const ruleAmountById = {};
   for (const [n, amt, typ] of rules) {
     const r = await client.query(
       `INSERT INTO penalty_rules (name, amount_pkr, type, is_active, created_by) VALUES ($1,$2,$3,true,$4) RETURNING id`,
       [n, amt, typ, hrUid]
     );
     ruleIds.push(r.rows[0].id);
+    ruleAmountById[r.rows[0].id] = amt;
   }
 
   const penRows = [];
@@ -680,11 +682,12 @@ export async function seedEmployeesAndHR(client, ctx) {
       'Processed per HR policy',
       st === 'approved',
       st === 'approved' ? `${dt} 16:00:00+00` : null,
+      ruleAmountById[ruleId],
     ]);
   }
   await batchInsert(
     client,
-    `INSERT INTO employee_penalties (employee_id, rule_id, date, reason, status, proposed_by, submitted_to_ho_at, reviewed_by, reviewed_at, review_note, employee_ack, employee_acked_at)`,
+    `INSERT INTO employee_penalties (employee_id, rule_id, date, reason, status, proposed_by, submitted_to_ho_at, reviewed_by, reviewed_at, review_note, employee_ack, employee_acked_at, applied_amount_pkr)`,
     [
       'employee_id',
       'rule_id',
@@ -698,6 +701,7 @@ export async function seedEmployeesAndHR(client, ctx) {
       'review_note',
       'employee_ack',
       'employee_acked_at',
+      'applied_amount_pkr',
     ],
     penRows
   );

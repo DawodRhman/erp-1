@@ -219,7 +219,7 @@ export async function getEmployeeSelfMetrics(employeeId) {
           ep.id,
           ep.employee_id,
           pr.name AS rule_name,
-          pr.amount_pkr,
+          COALESCE(ep.applied_amount_pkr, pr.amount_pkr) AS amount_pkr,
           ep.reason,
           ep.submitted_to_ho_at,
           ep.reviewed_at,
