@@ -250,101 +250,98 @@ async function seedViaPool(client) {
   };
 
   const D = {};
-  D.it = await insDept('DEPT-IT', 'IT');
-  D.itSup = await insDept('DEPT-IT-SUP', 'IT-Support', D.it);
-  D.itDev = await insDept('DEPT-IT-DEV', 'IT-Development', D.it);
+  D.adm = await insDept('DEPT-ADM', 'Administration');
   D.swe = await insDept('DEPT-SWE', 'Software Engineering');
-  D.sweFe = await insDept('DEPT-SWE-FE', 'Frontend', D.swe);
-  D.sweBe = await insDept('DEPT-SWE-BE', 'Backend', D.swe);
-  D.sweMob = await insDept('DEPT-SWE-MOB', 'Mobile', D.swe);
-  D.sweQa = await insDept('DEPT-SWE-QA', 'QA', D.swe);
+  D.sweFe = await insDept('DEPT-SWE-FE', 'Frontend Engineering', D.swe);
+  D.sweBe = await insDept('DEPT-SWE-BE', 'Backend Engineering', D.swe);
+  D.sweMob = await insDept('DEPT-SWE-MOB', 'Mobile Engineering', D.swe);
+  D.sweQa = await insDept('DEPT-SWE-QA', 'Software QA', D.swe);
   D.sweDevOps = await insDept('DEPT-SWE-DEVOPS', 'DevOps', D.swe);
-  D.hr = await insDept('DEPT-HR', 'HR');
-  D.sales = await insDept('DEPT-SALES', 'Sales');
-  D.salesKhi = await insDept('DEPT-SALES-KHI', 'Sales-Karachi', D.sales);
-  D.salesLhr = await insDept('DEPT-SALES-LHR', 'Sales-Lahore', D.sales);
-  D.salesIsb = await insDept('DEPT-SALES-ISB', 'Sales-Islamabad', D.sales);
-  D.proc = await insDept('DEPT-PROC', 'Procurement');
+  D.strategic = await insDept('DEPT-STRAT', 'Strategic Function');
+  D.hr = await insDept('DEPT-HR', 'Human Resources');
   D.fin = await insDept('DEPT-FIN', 'Finance');
   D.ops = await insDept('DEPT-OPS', 'Operations');
-  D.opsFe = await insDept('DEPT-OPS-FE', 'Field-Engineering', D.ops);
+  D.opsFe = await insDept('DEPT-OPS-FE', 'Field Engineering', D.ops);
   D.opsInst = await insDept('DEPT-OPS-INST', 'Installations', D.ops);
-  D.cs = await insDept('DEPT-CS', 'Customer-Support');
-  D.adm = await insDept('DEPT-ADM', 'Administration');
+  D.marketing = await insDept('DEPT-MKT', 'Marketing');
+  D.it = await insDept('DEPT-IT', 'Information Technology');
+  D.itSup = await insDept('DEPT-IT-SUP', 'IT Support', D.it);
+  D.itDev = await insDept('DEPT-IT-DEV', 'IT Development', D.it);
+  D.sales = await insDept('DEPT-SALES', 'Sales');
+  D.salesKhi = await insDept('DEPT-SALES-KHI', 'Sales Karachi', D.sales);
+  D.salesLhr = await insDept('DEPT-SALES-LHR', 'Sales Lahore', D.sales);
+  D.salesIsb = await insDept('DEPT-SALES-ISB', 'Sales Islamabad', D.sales);
+  D.cs = await insDept('DEPT-CS', 'Customer Service');
+  D.rnd = await insDept('DEPT-RND', 'Research and Development');
+  D.legal = await insDept('DEPT-LEGAL', 'Legal');
+  D.proc = await insDept('DEPT-PROC', 'Procurement');
+  D.general = await insDept('DEPT-GM', 'General Management');
+  D.logistics = await insDept('DEPT-LOG', 'Logistics Distribution');
+  D.qa = await insDept('DEPT-QA', 'QA');
+  D.qualityInspection = await insDept('DEPT-QI', 'Quality Inspector');
+  D.pr = await insDept('DEPT-PR', 'PR/Public Relations');
+  D.facility = await insDept('DEPT-FM', 'Facility Management');
+  D.dataAnalytics = await insDept('DEPT-DABI', 'Data Analytics and Business Intelligence');
+  D.businessDevelopment = await insDept('DEPT-BD', 'Business Development');
+  D.engineering = await insDept('DEPT-ENG', 'Engineering');
+  D.security = await insDept('DEPT-SEC', 'Security');
+  D.hse = await insDept('DEPT-HSE', 'Health Safety and Environment/HSE');
   console.log('  Departments seeded');
 
   // ── Designations ──────────────────────────────────────────────────────────
-  const designationTitles = [
-    'Chief Executive Officer',
-    'Chief Financial Officer',
-    'Chief Operating Officer',
-    'Chief Technology Officer',
-    'Chief Marketing Officer',
-    'Chief Information Officer',
-    'Chief Human Resources Officer',
-    'Chief Legal Officer',
-    'Chief Data Officer',
-    'Chief Information Security Officer',
-    'Chief Compliance Officer',
-    'Chief Revenue Officer',
-    'Chief Accounting Officer',
-    'Chief Product Officer',
-    'Chief Strategy Officer',
-    'General Manager',
-    'Deputy General Manager',
-    'HR Manager',
-    'HR Executive',
-    'HR Officer',
-    'HR Intern',
-    'IT Manager',
-    'IT Support Engineer',
-    'Network Engineer',
-    'System Administrator',
-    'Software Engineering Manager',
-    'Tech Lead',
-    'Principal Engineer',
-    'Senior Software Engineer',
-    'Software Engineer',
-    'Junior Software Engineer',
-    'Associate Developer',
-    'Frontend Developer',
-    'Senior Frontend Developer',
-    'Backend Developer',
-    'Senior Backend Developer',
-    'Mobile Developer',
-    'Senior Mobile Developer',
-    'DevOps Engineer',
-    'Senior DevOps Engineer',
-    'QA Engineer',
-    'Senior QA Engineer',
-    'QA Lead',
-    'UI/UX Designer',
-    'Sales Manager',
-    'Senior Sales Executive',
-    'Sales Executive',
-    'Sales Intern',
-    'Procurement Manager',
-    'Procurement Officer',
-    'Finance Manager',
-    'Finance Officer',
-    'Accountant',
-    'Operations Manager',
-    'Field Engineer',
-    'Installation Technician',
-    'Team Lead',
-    'Customer Support Manager',
-    'Support Executive',
-  ];
-
+  const DESIGNATIONS_BY_DEPT = {
+    adm: ['Administration Manager', 'Office Administrator', 'Admin Officer', 'Front Desk Officer'],
+    swe: ['Chief Technology Officer', 'Chief Product Officer', 'Software Engineering Manager', 'Tech Lead', 'Principal Engineer', 'Senior Software Engineer', 'Software Engineer', 'Junior Software Engineer', 'Associate Developer', 'UI/UX Designer'],
+    sweFe: ['Senior Frontend Developer', 'Frontend Developer'],
+    sweBe: ['Senior Backend Developer', 'Backend Developer'],
+    sweMob: ['Senior Mobile Developer', 'Mobile Developer'],
+    sweQa: ['Senior QA Engineer', 'QA Engineer', 'QA Lead'],
+    sweDevOps: ['Senior DevOps Engineer', 'DevOps Engineer'],
+    strategic: ['Chief Strategy Officer', 'Strategy Manager', 'Strategy Analyst'],
+    hr: ['Chief Human Resources Officer', 'HR Manager', 'HR Executive', 'HR Officer', 'HR Intern'],
+    fin: ['Chief Financial Officer', 'Chief Accounting Officer', 'Finance Manager', 'Finance Officer', 'Accountant'],
+    ops: ['Chief Operating Officer', 'Operations Manager', 'Operations Coordinator'],
+    opsFe: ['Field Engineer', 'Senior Field Engineer'],
+    opsInst: ['Installation Supervisor', 'Installation Technician'],
+    marketing: ['Chief Marketing Officer', 'Marketing Manager', 'Digital Marketing Specialist', 'Content Marketing Executive'],
+    it: ['Chief Information Officer', 'IT Manager', 'Network Engineer', 'System Administrator'],
+    itSup: ['IT Support Engineer', 'Helpdesk Analyst'],
+    itDev: ['Senior IT Systems Developer', 'IT Systems Developer'],
+    sales: ['Chief Revenue Officer', 'Sales Manager', 'Senior Sales Executive', 'Sales Executive', 'Sales Intern'],
+    salesKhi: ['Karachi Sales Executive'],
+    salesLhr: ['Lahore Sales Executive'],
+    salesIsb: ['Islamabad Sales Executive'],
+    cs: ['Customer Support Manager', 'Support Executive', 'Customer Success Executive'],
+    rnd: ['R&D Manager', 'Research Analyst', 'Product Research Engineer'],
+    legal: ['Chief Legal Officer', 'Chief Compliance Officer', 'Legal Manager', 'Legal Counsel', 'Compliance Officer'],
+    proc: ['Procurement Manager', 'Procurement Officer', 'Vendor Relations Officer'],
+    general: ['Chief Executive Officer', 'General Manager', 'Deputy General Manager', 'Team Lead'],
+    logistics: ['Logistics Manager', 'Distribution Coordinator', 'Warehouse Supervisor'],
+    qa: ['QA Manager', 'Quality Assurance Analyst', 'Test Coordinator'],
+    qualityInspection: ['Quality Inspector', 'Senior Quality Inspector', 'Inspection Supervisor'],
+    pr: ['PR Manager', 'Public Relations Officer', 'Corporate Communications Executive'],
+    facility: ['Facility Manager', 'Maintenance Supervisor', 'Facilities Officer'],
+    dataAnalytics: ['Chief Data Officer', 'Data Analytics Manager', 'Business Intelligence Analyst', 'Data Analyst'],
+    businessDevelopment: ['Business Development Manager', 'Partnerships Executive', 'Market Development Officer'],
+    engineering: ['Engineering Manager', 'Project Engineer', 'Site Engineer'],
+    security: ['Chief Information Security Officer', 'Security Manager', 'Security Officer', 'Security Supervisor'],
+    hse: ['HSE Manager', 'HSE Officer', 'Safety Inspector'],
+  };
   const DES = {};
-  for (const t of designationTitles) {
-    const r = await client.query(
-      `INSERT INTO designations (title, is_active) VALUES ($1, true) ON CONFLICT (title) DO UPDATE SET title = EXCLUDED.title RETURNING id`,
-      [t]
-    );
-    DES[t] = r.rows[0].id;
+  for (const [deptKey, titles] of Object.entries(DESIGNATIONS_BY_DEPT)) {
+    for (const t of titles) {
+      const r = await client.query(
+        `INSERT INTO designations (title, department_id, is_active)
+         VALUES ($1, $2, true)
+         ON CONFLICT (title) DO UPDATE
+         SET department_id = EXCLUDED.department_id, is_active = true
+         RETURNING id`,
+        [t, D[deptKey]]
+      );
+      DES[t] = r.rows[0].id;
+    }
   }
-  console.log(`  Designations seeded (${designationTitles.length})`);
+  console.log(`  Designations seeded (${Object.keys(DES).length})`);
 
   // ── Employment types, job statuses, work modes, locations, shifts ────────
   const empTypes = ['Full-Time', 'Part-Time', 'Contract', 'Internship', 'Probationary'];

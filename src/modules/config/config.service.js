@@ -9,8 +9,8 @@ const entityConfig = {
   },
   designations: {
     table: 'designations',
-    createFields: ['title', 'is_active'],
-    updateFields: ['title', 'is_active'],
+    createFields: ['title', 'department_id', 'is_active'],
+    updateFields: ['title', 'department_id', 'is_active'],
   },
   'employment-types': {
     table: 'employment_types',
@@ -183,14 +183,26 @@ export async function updateDepartment(id, data) {
   return result.rows[0];
 }
 
-export async function getEntityRecords(entity, { isSuperAdminCaller }) {
+export async function getEntityRecords(entity, { isSuperAdminCaller, filters = {} }) {
   if (entity === 'departments') {
     return getDepartments({ includeInactive: isSuperAdminCaller });
   }
 
   const { table, hasIsActive = true, orderBy = 'created_at DESC' } = getEntityConfig(entity);
-  const whereSql = hasIsActive ? 'WHERE ($1::boolean = true OR is_active = true)' : '';
-  const params = hasIsActive ? [isSuperAdminCaller] : [];
+  const whereParts = [];
+  const params = [];
+
+  if (hasIsActive) {
+    params.push(isSuperAdminCaller);
+    whereParts.push(`($${params.length}::boolean = true OR is_active = true)`);
+  }
+
+  if (entity === 'designations' && filters.department_id) {
+    params.push(filters.department_id);
+    whereParts.push(`department_id = $${params.length}`);
+  }
+
+  const whereSql = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 
   const result = await pool.query(
     `

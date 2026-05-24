@@ -22,17 +22,17 @@ const EXECUTIVE_PROFILES = [
   ['Saira Iqbal', 'Chief Financial Officer', 'fin', '2020-02-03'],
   ['Omar Faruqi', 'Chief Operating Officer', 'ops', '2020-03-02'],
   ['Maham Siddiqui', 'Chief Technology Officer', 'swe', '2020-01-20'],
-  ['Bilal Qureshi', 'Chief Marketing Officer', 'sales', '2020-04-06'],
+  ['Bilal Qureshi', 'Chief Marketing Officer', 'marketing', '2020-04-06'],
   ['Nadia Karim', 'Chief Information Officer', 'it', '2020-05-04'],
   ['Hina Masood', 'Chief Human Resources Officer', 'hr', '2020-02-17'],
-  ['Taimur Malik', 'Chief Legal Officer', 'adm', '2020-06-01'],
-  ['Zara Shah', 'Chief Data Officer', 'swe', '2021-01-11'],
-  ['Usman Tariq', 'Chief Information Security Officer', 'it', '2021-02-08'],
-  ['Mariam Raza', 'Chief Compliance Officer', 'adm', '2021-03-01'],
+  ['Taimur Malik', 'Chief Legal Officer', 'legal', '2020-06-01'],
+  ['Zara Shah', 'Chief Data Officer', 'dataAnalytics', '2021-01-11'],
+  ['Usman Tariq', 'Chief Information Security Officer', 'security', '2021-02-08'],
+  ['Mariam Raza', 'Chief Compliance Officer', 'legal', '2021-03-01'],
   ['Saad Ahmed', 'Chief Revenue Officer', 'sales', '2020-07-06'],
   ['Amina Farooq', 'Chief Accounting Officer', 'fin', '2021-04-05'],
   ['Hamza Khan', 'Chief Product Officer', 'swe', '2020-09-07'],
-  ['Noor Sheikh', 'Chief Strategy Officer', 'adm', '2021-05-03'],
+  ['Noor Sheikh', 'Chief Strategy Officer', 'strategic', '2021-05-03'],
 ];
 
 const HR_PROFILES = [
@@ -87,7 +87,7 @@ function employeeProfiles100(D) {
     ...Array(5).fill(['sweMob', 'Mobile Developer']),
     ...Array(6).fill(['sweQa', 'QA Engineer']),
     ...Array(6).fill(['sweDevOps', 'DevOps Engineer']),
-    ...Array(5).fill(['itDev', 'Software Engineer']),
+    ...Array(5).fill(['itDev', 'IT Systems Developer']),
     ...Array(5).fill(['itSup', 'IT Support Engineer']),
     ...Array(5).fill(['salesKhi', 'Sales Executive']),
     ...Array(4).fill(['salesLhr', 'Sales Executive']),
@@ -116,7 +116,8 @@ function employeeProfiles100(D) {
 function designationForDept(deptId, joinIso, rng, DES, D) {
   const y = parseInt(joinIso.slice(0, 4), 10);
   const senior = y <= 2021;
-  if (deptId === D.itSup || deptId === D.itDev) return senior ? DES['IT Manager'] : DES['IT Support Engineer'];
+  if (deptId === D.itSup) return senior ? DES['IT Manager'] : DES['IT Support Engineer'];
+  if (deptId === D.itDev) return senior ? DES['Senior IT Systems Developer'] : DES['IT Systems Developer'];
   if (deptId === D.sweFe) return senior ? DES['Senior Frontend Developer'] : DES['Frontend Developer'];
   if (deptId === D.sweBe) return senior ? DES['Senior Backend Developer'] : DES['Backend Developer'];
   if (deptId === D.sweMob) return senior ? DES['Senior Mobile Developer'] : DES['Mobile Developer'];

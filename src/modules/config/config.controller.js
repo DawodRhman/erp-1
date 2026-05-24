@@ -9,6 +9,9 @@ import {
 } from './config.service.js';
 
 const idSchema = z.object({ id: z.string().uuid() });
+const configQuerySchema = z.object({
+  department_id: z.string().uuid().optional(),
+});
 
 const entitySchemaMap = {
   departments: z.object({
@@ -17,7 +20,11 @@ const entitySchemaMap = {
     parent_department_id: z.string().uuid().nullable().optional(),
     is_active: z.boolean().optional(),
   }),
-  designations: z.object({ title: z.string().min(1), is_active: z.boolean().optional() }),
+  designations: z.object({
+    title: z.string().min(1),
+    department_id: z.string().uuid(),
+    is_active: z.boolean().optional(),
+  }),
   'employment-types': z.object({ type_name: z.string().min(1), is_active: z.boolean().optional() }),
   'job-statuses': z.object({ status_name: z.string().min(1), is_active: z.boolean().optional() }),
   'work-modes': z.object({ mode_name: z.string().min(1), is_active: z.boolean().optional() }),
@@ -69,9 +76,22 @@ function getEntitySchema(entity, isPatch = false) {
 
 export async function getConfigEntity(req, res, next) {
   try {
+    const queryParse = configQuerySchema.safeParse(req.query);
+    if (!queryParse.success) {
+      return res.status(422).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Validation failed.',
+          details: queryParse.error.issues,
+        },
+      });
+    }
+
     const superAdmin = await isSuperAdmin(req.user.role_id);
     const records = await getEntityRecords(req.params.entity, {
       isSuperAdminCaller: superAdmin,
+      filters: queryParse.data,
     });
     return sendSuccess(res, records, 200);
   } catch (error) {
