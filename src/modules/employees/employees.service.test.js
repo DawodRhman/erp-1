@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const query = vi.hoisted(() => vi.fn());
 const clientQuery = vi.hoisted(() => vi.fn());
 const release = vi.hoisted(() => vi.fn());
+const initializeBalances = vi.hoisted(() => vi.fn());
 
 vi.mock('../../config/db.js', () => ({
   default: {
@@ -14,6 +15,10 @@ vi.mock('../../config/db.js', () => ({
 vi.mock('../auth/auth.service.js', () => ({
   generateTempPassword: () => 'TempPass123!',
   hashPassword: vi.fn(() => Promise.resolve('hashed-password')),
+}));
+
+vi.mock('../leave/leave.service.js', () => ({
+  initializeBalances,
 }));
 
 async function loadService() {
@@ -53,6 +58,8 @@ describe('createEmployee', () => {
     query.mockReset();
     clientQuery.mockReset();
     release.mockReset();
+    initializeBalances.mockReset();
+    initializeBalances.mockResolvedValue([]);
   });
 
   it('uses the frontend-provided employee_id instead of generating the next id', async () => {
@@ -86,5 +93,50 @@ describe('createEmployee', () => {
     expect(employeeInsertCall[1][0]).toBe('EMP764');
     expect(result.employee.employee_id).toBe('EMP764');
     expect(clientQuery.mock.calls.some(([sql]) => sql.includes('MAX(employee_id)'))).toBe(false);
+  });
+
+  it('initializes joining-year leave balances inside employee creation', async () => {
+    query
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] });
+
+    clientQuery
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        rows: [{ employee_id: 'EMP764', name: 'Frontend Employee' }],
+      })
+      .mockResolvedValue({});
+
+    const { createEmployee } = await loadService();
+    await createEmployee(employeePayload('EMP764'), 'creator-user-id');
+
+    expect(initializeBalances).toHaveBeenCalledWith('EMP764', 2026, { db: expect.any(Object) });
+  });
+
+  it('initializes current-year balances when an existing employee is entered with a historical joining date', async () => {
+    query
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] });
+
+    clientQuery
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        rows: [{ employee_id: 'EMP474', name: 'Existing Employee' }],
+      })
+      .mockResolvedValue({});
+
+    const payload = employeePayload('EMP474');
+    payload.jobInfo.date_of_joining = '1985-09-16';
+
+    const { createEmployee } = await loadService();
+    await createEmployee(payload, 'creator-user-id');
+
+    expect(initializeBalances).toHaveBeenCalledWith(
+      'EMP474',
+      new Date().getUTCFullYear(),
+      { db: expect.any(Object) }
+    );
   });
 });

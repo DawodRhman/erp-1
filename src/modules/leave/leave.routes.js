@@ -12,6 +12,7 @@ import {
   earlyReturn,
   getLeaveBalances,
   getMyLeaveBalances,
+  initializeYearlyLeaveBalances,
   getLeaveCalendar,
 } from './leave.controller.js';
 
@@ -32,6 +33,10 @@ const rejectSchema = z.object({
   reason: z.string().min(2),
 });
 
+const initializeYearSchema = z.object({
+  year: z.number().int().min(2020).max(2100),
+});
+
 router.use(verifyToken);
 
 router.get('/', requirePermission('leave:read'), getLeaveRequests);
@@ -48,6 +53,12 @@ router.patch(
 router.patch('/:id/early-return', requirePermission('leave:approve'), validateParams(uuidParamSchema), earlyReturn);
 router.get('/balances', requirePermission('leave:read'), getLeaveBalances);
 router.get('/balances/mine', getMyLeaveBalances);
+router.post(
+  '/balances/initialize-year',
+  requirePermission('leave:approve'),
+  validate(initializeYearSchema),
+  initializeYearlyLeaveBalances
+);
 router.get('/calendar', requirePermission('leave:read'), getLeaveCalendar);
 
 export default router;

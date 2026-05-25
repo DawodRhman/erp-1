@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const getRoleName = vi.hoisted(() => vi.fn());
 const getMyLeaveRequests = vi.hoisted(() => vi.fn());
 const getLeaveRequestsService = vi.hoisted(() => vi.fn());
+const initializeYearlyBalances = vi.hoisted(() => vi.fn());
 
 vi.mock('./leave.service.js', () => ({
   getRoleName,
   getMyLeaveRequests,
   getLeaveRequests: getLeaveRequestsService,
+  initializeYearlyBalances,
 }));
 
 function mockResponse() {
@@ -25,6 +27,7 @@ describe('leave controller self-service', () => {
     getRoleName.mockReset();
     getMyLeaveRequests.mockReset();
     getLeaveRequestsService.mockReset();
+    initializeYearlyBalances.mockReset();
   });
 
   it('forces employee role leave list requests to the caller', async () => {
@@ -46,6 +49,27 @@ describe('leave controller self-service', () => {
     expect(res.json).toHaveBeenCalledWith({
       success: true,
       data: [{ id: 'leave-1', employee_id: 'EMP521' }],
+    });
+  });
+
+  it('initializes all employee balances for an approved leave year', async () => {
+    initializeYearlyBalances.mockResolvedValueOnce({
+      year: 2027,
+      employees_processed: 100,
+      balances_created: 600,
+    });
+
+    const { initializeYearlyLeaveBalances } = await import('./leave.controller.js');
+    const req = { body: { year: 2027 } };
+    const res = mockResponse();
+    const next = vi.fn();
+
+    await initializeYearlyLeaveBalances(req, res, next);
+
+    expect(initializeYearlyBalances).toHaveBeenCalledWith(2027);
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: { year: 2027, employees_processed: 100, balances_created: 600 },
     });
   });
 });

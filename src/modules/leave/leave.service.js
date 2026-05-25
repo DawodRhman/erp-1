@@ -11,10 +11,29 @@ function toIsoDateString(date) {
   return new Date(date).toISOString().slice(0, 10);
 }
 
-async function getEmployeeContext(employeeId) {
-  const result = await pool.query(
+function toUtcDate(date) {
+  const value = typeof date === 'string' ? date.slice(0, 10) : toIsoDateString(date);
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+export function calculateProratedBalance(daysAllowed, joiningDate, year) {
+  const entitlement = Number(daysAllowed);
+  const firstDay = new Date(Date.UTC(year, 0, 1));
+  const lastDay = new Date(Date.UTC(year, 11, 31));
+  const joined = toUtcDate(joiningDate);
+
+  if (joined > lastDay) return 0;
+  if (joined <= firstDay) return entitlement;
+
+  const daysInYear = Math.round((lastDay - firstDay) / 86400000) + 1;
+  const remainingDays = Math.round((lastDay - joined) / 86400000) + 1;
+  return Math.round((remainingDays / daysInYear) * entitlement);
+}
+
+async function getEmployeeContext(employeeId, db = pool) {
+  const result = await db.query(
     `
-      SELECT ei.employee_id, ei.name, ji.department_id, ji.work_location_id, ji.shift_id
+      SELECT ei.employee_id, ei.name, ji.department_id, ji.work_location_id, ji.shift_id, ji.date_of_joining
       FROM public.employee_info ei
       JOIN public.job_info ji ON ji.employee_id = ei.employee_id
       WHERE ei.employee_id = $1
@@ -155,23 +174,28 @@ export async function getLeaveBalancesAll({ department_id, location_id, shift_id
   return rows.rows;
 }
 
-export async function initializeBalances(employeeId, year) {
-  const employee = await getEmployeeContext(employeeId);
+export async function initializeBalances(employeeId, year, { db = pool } = {}) {
+  const employee = await getEmployeeContext(employeeId, db);
 
-  const policies = await pool.query(
+  const policies = await db.query(
     `
-      SELECT leave_type_id, days_allowed
+      SELECT DISTINCT ON (leave_type_id)
+        leave_type_id,
+        days_allowed,
+        department_id
       FROM public.leave_policies
-      WHERE department_id = $1
+      WHERE (department_id = $1 OR department_id IS NULL)
         AND year = $2
         AND is_active = true
+      ORDER BY leave_type_id, (department_id IS NOT NULL) DESC
     `,
     [employee.department_id, year]
   );
 
   const created = [];
   for (const policy of policies.rows) {
-    const insert = await pool.query(
+    const balance = calculateProratedBalance(policy.days_allowed, employee.date_of_joining, year);
+    const insert = await db.query(
       `
         INSERT INTO public.leave_balances (
           employee_id,
@@ -185,7 +209,7 @@ export async function initializeBalances(employeeId, year) {
         DO NOTHING
         RETURNING *
       `,
-      [employeeId, policy.leave_type_id, year, policy.days_allowed]
+      [employeeId, policy.leave_type_id, year, balance]
     );
 
     if (insert.rowCount > 0) {
@@ -194,6 +218,31 @@ export async function initializeBalances(employeeId, year) {
   }
 
   return created;
+}
+
+export async function initializeYearlyBalances(year, { db = pool } = {}) {
+  const employees = await db.query(
+    `
+      SELECT employee_id
+      FROM public.job_info
+      WHERE date_of_joining <= make_date($1, 12, 31)
+        AND (date_of_exit IS NULL OR date_of_exit >= make_date($1, 1, 1))
+      ORDER BY employee_id ASC
+    `,
+    [year]
+  );
+
+  let balancesCreated = 0;
+  for (const employee of employees.rows) {
+    const created = await initializeBalances(employee.employee_id, year, { db });
+    balancesCreated += created.length;
+  }
+
+  return {
+    year,
+    employees_processed: employees.rows.length,
+    balances_created: balancesCreated,
+  };
 }
 
 export async function checkCapacity(employeeId, startDate, endDate) {
@@ -313,6 +362,10 @@ export async function submitLeaveRequest(employeeId, data) {
 
   const requestedDays = daysBetweenInclusive(data.start_date, data.end_date);
   const year = new Date(data.start_date).getFullYear();
+
+  if (year < new Date().getFullYear()) {
+    throw new AppError(409, 'EXPIRED_LEAVE_YEAR', 'Leave balance from a previous year cannot be used for a new request.');
+  }
 
   const balanceResult = await pool.query(
     `

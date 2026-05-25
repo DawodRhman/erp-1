@@ -12,7 +12,8 @@
     "db:rollback": "node-pg-migrate down",
     "db:check": "node-pg-migrate up --dry-run",
     "db:fake": "node-pg-migrate up --fake",
-    "db:seed": "node seeds/master_seed.js"
+    "db:seed": "node seeds/master_seed.js",
+    "leave:rollover": "node scripts/initialize-yearly-leave-balances.js"
   },
   "keywords": [],
   "author": "",

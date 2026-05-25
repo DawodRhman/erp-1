@@ -100,6 +100,15 @@ export async function getMyLeaveBalances(req, res, next) {
   }
 }
 
+export async function initializeYearlyLeaveBalances(req, res, next) {
+  try {
+    const result = await leaveService.initializeYearlyBalances(req.body.year);
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function getLeaveCalendar(req, res, next) {
   try {
     const roleName = await leaveService.getRoleName(req.user.role_id);

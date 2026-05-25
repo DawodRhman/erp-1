@@ -1,6 +1,7 @@
 import pool from '../../config/db.js';
 import { AppError } from '../../utils/errors.js';
 import { generateTempPassword, hashPassword } from '../auth/auth.service.js';
+import { initializeBalances } from '../leave/leave.service.js';
 
 export async function createEmployee(data, createdByUserId) {
   const { employee_id: employeeId, personalInfo, jobInfo, accountInfo, emergencyContacts, bankInfo, medicalInfo, salaryInfo, allowances } = data;
@@ -305,6 +306,10 @@ export async function createEmployee(data, createdByUserId) {
         );
       }
     }
+
+    const joiningYear = new Date(jobInfo.date_of_joining).getUTCFullYear();
+    const entitlementYear = Math.max(joiningYear, new Date().getUTCFullYear());
+    await initializeBalances(employeeId, entitlementYear, { db: client });
 
     await client.query('COMMIT');
 

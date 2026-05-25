@@ -543,12 +543,31 @@ export async function seedEmployeesAndHR(client, ctx) {
     'Bereavement Leave': 3,
   };
 
+  const departmentPolicyOverrides = [
+    [D.adm, 'Annual Leave', 20],
+    [D.strategic, 'Annual Leave', 20],
+    [D.sweFe, 'Annual Leave', 18],
+    [D.sweBe, 'Annual Leave', 18],
+    [D.sweMob, 'Annual Leave', 18],
+    [D.sweQa, 'Annual Leave', 18],
+    [D.sweDevOps, 'Annual Leave', 18],
+    [D.hse, 'Sick Leave', 14],
+  ];
+
+  const overrideDays = new Map(
+    departmentPolicyOverrides.map(([departmentId, leaveName, days]) => [
+      `${departmentId}:${leaveName}`,
+      days,
+    ])
+  );
+
   const polRows = [];
-  for (const did of deptIds) {
-    for (const y of policyYears) {
-      for (const nk of ltKeys) {
-        polRows.push([did, LT[nk], daysMap[nk] ?? 10, y, true]);
-      }
+  for (const y of policyYears) {
+    for (const nk of ltKeys) {
+      polRows.push([null, LT[nk], daysMap[nk] ?? 10, y, true]);
+    }
+    for (const [departmentId, leaveName, days] of departmentPolicyOverrides) {
+      polRows.push([departmentId, LT[leaveName], days, y, true]);
     }
   }
   await batchInsert(
@@ -573,10 +592,11 @@ export async function seedEmployeesAndHR(client, ctx) {
   for (let i = 1; i <= EMPLOYEE_COUNT; i++) {
     if (i >= 94 && i <= 96) continue;
     const empId = padEmp(i);
+    const departmentId = profiles[i - 1].deptId;
     const rng = mulberry32(i * 8888);
     for (const y of policyYears) {
       for (const nk of ltKeys) {
-        const allowed = daysMap[nk] ?? 10;
+        const allowed = overrideDays.get(`${departmentId}:${nk}`) ?? daysMap[nk] ?? 10;
         const used = Math.min(allowed, Math.floor(rng() * (allowed + 1)));
         leaveBalRows.push([empId, LT[nk], y, allowed, used]);
       }

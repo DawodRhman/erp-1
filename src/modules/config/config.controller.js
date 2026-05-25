@@ -38,7 +38,7 @@ const entitySchemaMap = {
   }),
   'leave-types': z.object({ name: z.string().min(1), is_active: z.boolean().optional() }),
   'leave-policies': z.object({
-    department_id: z.string().uuid(),
+    department_id: z.string().uuid().nullable().optional(),
     leave_type_id: z.string().uuid(),
     days_allowed: z.number().int().nonnegative(),
     year: z.number().int().min(2000),
