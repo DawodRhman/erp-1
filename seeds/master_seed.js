@@ -56,6 +56,8 @@ const PERMISSION_KEYS = [
   ['dashboard:read', 'Dashboard'],
   ['directory:read', 'Directory read'],
   ['directory:write', 'Directory write'],
+  ['announcements:read', 'Announcements read'],
+  ['announcements:write', 'Announcements write'],
   ['inventory:read', 'Inventory read'],
   ['inventory:write', 'Inventory write'],
   ['purchasing:read', 'Purchasing read'],
@@ -484,6 +486,8 @@ async function seedViaPool(client) {
     'dashboard:read',
     'directory:read',
     'directory:write',
+    'announcements:read',
+    'announcements:write',
     'penalty_rules:write',
     'penalties:propose',
     'penalties:review',
@@ -504,6 +508,7 @@ async function seedViaPool(client) {
     'alerts:read',
     'dashboard:read',
     'directory:read',
+    'announcements:read',
     'penalties:propose',
     'penalties:read_all',
   ]);
@@ -524,6 +529,7 @@ async function seedViaPool(client) {
     'notifications:read',
     'calendar:read',
     'directory:read',
+    'announcements:read',
     'penalties:read_own',
   ]);
 
