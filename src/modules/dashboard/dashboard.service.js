@@ -4,6 +4,12 @@ function monthRange(range) {
   return range === '12m' ? 12 : 6;
 }
 
+function percent(numerator, denominator) {
+  const top = Number(numerator || 0);
+  const bottom = Number(denominator || 0);
+  return bottom > 0 ? Number(((top / bottom) * 100).toFixed(1)) : 0;
+}
+
 export async function getHRMetrics(range = '6m') {
   const months = monthRange(range);
 
@@ -18,6 +24,8 @@ export async function getHRMetrics(range = '6m') {
     upcomingBirthdays,
     pendingActions,
     urgentAlerts,
+    attendanceKpis,
+    leaveUtilization,
   ] = await Promise.all([
     pool.query(`SELECT COUNT(*)::int AS total FROM public.employee_info`),
     pool.query(
@@ -143,10 +151,32 @@ export async function getHRMetrics(range = '6m') {
         ORDER BY ua.expiry_date ASC
       `
     ),
+    pool.query(
+      `
+        SELECT
+          COUNT(*) FILTER (WHERE status IN ('present', 'late', 'half_day'))::int AS attended,
+          COUNT(*) FILTER (WHERE status = 'present')::int AS on_time,
+          COUNT(*) FILTER (WHERE status IN ('present', 'late', 'half_day', 'absent'))::int AS attendance_records
+        FROM public.attendance
+        WHERE date >= date_trunc('month', CURRENT_DATE)::date
+          AND date <= CURRENT_DATE
+      `
+    ),
+    pool.query(
+      `
+        SELECT
+          COALESCE(SUM(used), 0)::numeric AS used,
+          COALESCE(SUM(balance), 0)::numeric AS allocated
+        FROM public.leave_balances
+        WHERE year = EXTRACT(YEAR FROM CURRENT_DATE)::int
+      `
+    ),
   ]);
 
   const totalEmployeesValue = totalEmployees.rows[0]?.total || 0;
   const presentTodayValue = presentToday.rows[0]?.total || 0;
+  const attendanceKpiRow = attendanceKpis.rows[0] || {};
+  const leaveUtilizationRow = leaveUtilization.rows[0] || {};
 
   return {
     total_employees: totalEmployeesValue,
@@ -157,6 +187,20 @@ export async function getHRMetrics(range = '6m') {
       totalEmployeesValue > 0
         ? Number(((presentTodayValue / totalEmployeesValue) * 100).toFixed(1))
         : 0,
+    attendance_rate_percent: percent(
+      attendanceKpiRow.attended,
+      attendanceKpiRow.attendance_records
+    ),
+    on_time_percent: percent(attendanceKpiRow.on_time, attendanceKpiRow.attended),
+    leave_utilization_percent: percent(
+      leaveUtilizationRow.used,
+      leaveUtilizationRow.allocated
+    ),
+    kpi_periods: {
+      attendance_rate: 'month_to_date',
+      on_time_rate: 'month_to_date',
+      leave_utilization: 'current_leave_year',
+    },
     on_leave_today: onLeaveToday.rows[0]?.total || 0,
     penalties_this_month: { coming_soon: true, count: 0, amount_pkr: 0 },
     attendance_trend: attendanceTrend.rows,

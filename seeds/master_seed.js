@@ -502,6 +502,7 @@ async function seedViaPool(client) {
     'notifications:write',
     'pending_actions:read',
     'alerts:read',
+    'dashboard:read',
     'directory:read',
     'penalties:propose',
     'penalties:read_all',
