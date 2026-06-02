@@ -9,8 +9,14 @@ import {
 } from './config.service.js';
 
 const idSchema = z.object({ id: z.string().uuid() });
+const booleanQuerySchema = z.preprocess((value) => {
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  return value;
+}, z.boolean().optional());
 const configQuerySchema = z.object({
   department_id: z.string().uuid().optional(),
+  include_inactive: booleanQuerySchema,
 });
 
 const entitySchemaMap = {
@@ -91,6 +97,7 @@ export async function getConfigEntity(req, res, next) {
     const superAdmin = await isSuperAdmin(req.user.role_id);
     const records = await getEntityRecords(req.params.entity, {
       isSuperAdminCaller: superAdmin,
+      includeInactive: queryParse.data.include_inactive === true,
       filters: queryParse.data,
     });
     return sendSuccess(res, records, 200);

@@ -1,5 +1,17 @@
 import { sendError } from '../utils/respond.js';
 
+function normalizeValidationDetails(issues) {
+  return issues.map((issue) => {
+    const path = issue.path || [];
+    return {
+      ...issue,
+      field: path.length ? String(path[path.length - 1]) : undefined,
+      path,
+      message: issue.message,
+    };
+  });
+}
+
 export function validate(zodSchema) {
   const middleware = (req, res, next) => {
     const result = zodSchema.safeParse(req.body);
@@ -10,7 +22,7 @@ export function validate(zodSchema) {
         error: {
           code: 'VALIDATION_ERROR',
           message: 'Validation failed.',
-          details: result.error.issues,
+          details: normalizeValidationDetails(result.error.issues),
         },
       });
     }
@@ -34,7 +46,7 @@ export function validateParams(zodSchema) {
         error: {
           code: 'VALIDATION_ERROR',
           message: 'Path parameter validation failed.',
-          details: result.error.issues,
+          details: normalizeValidationDetails(result.error.issues),
         },
       });
     }
@@ -55,7 +67,7 @@ export function validateQuery(zodSchema) {
         error: {
           code: 'VALIDATION_ERROR',
           message: 'Query parameter validation failed.',
-          details: result.error.issues,
+          details: normalizeValidationDetails(result.error.issues),
         },
       });
     }

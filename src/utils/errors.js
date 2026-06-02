@@ -1,9 +1,10 @@
 export class AppError extends Error {
-  constructor(statusCode, code, message) {
+  constructor(statusCode, code, message, details) {
     super(message);
     this.name = 'AppError';
     this.statusCode = statusCode;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -14,6 +15,7 @@ export function errorHandler(err, req, res, next) {
       error: {
         code: err.code,
         message: err.message,
+        ...(err.details ? { details: err.details } : {}),
       },
     });
   }

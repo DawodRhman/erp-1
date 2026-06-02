@@ -176,6 +176,7 @@ export async function seedEmployeesAndHR(client, ctx) {
 
   const empRows = [];
   const jobRows = [];
+  const employeeContactRows = [];
   const ecRows = [];
   const bankRows = [];
   const medRows = [];
@@ -255,12 +256,32 @@ export async function seedEmployeesAndHR(client, ctx) {
 
     const phone = `03${Math.floor(rng() * 10)}${String(Math.floor(rng() * 100000000)).padStart(8, '0')}`;
     const hasEc2 = rng() < 0.58;
-    ecRows.push([
+    const permanentStreet = `House ${10 + i}, Block ${1 + (i % 8)}, Gulshan-e-Iqbal`;
+    const postalStreet = i % 5 === 0 ? `Plot ${i}, DHA Phase ${1 + (i % 6)}` : permanentStreet;
+    const permanentCity = 'Karachi';
+    const postalCity = i % 5 === 0 ? 'Lahore' : permanentCity;
+    employeeContactRows.push([
       empId,
       phone,
       rng() < 0.3 ? phone : null,
-      `House ${10 + i}, Block ${1 + (i % 8)}, Gulshan-e-Iqbal, Karachi`,
-      i % 5 === 0 ? `Plot ${i}, DHA Phase ${1 + (i % 6)}, Lahore` : `House ${10 + i}, Block ${1 + (i % 8)}, Gulshan-e-Iqbal, Karachi`,
+      'Pakistan',
+      'Sindh',
+      'Karachi',
+      permanentCity,
+      'Gulshan-e-Iqbal',
+      permanentStreet,
+      '75300',
+      'Pakistan',
+      i % 5 === 0 ? 'Punjab' : 'Sindh',
+      postalCity,
+      postalCity,
+      i % 5 === 0 ? 'DHA' : 'Gulshan-e-Iqbal',
+      postalStreet,
+      i % 5 === 0 ? '54000' : '75300',
+      i % 5 !== 0,
+    ]);
+    ecRows.push([
+      empId,
       rng() < 0.5 ? 'father' : rng() < 0.75 ? 'mother' : 'wife',
       `${pick(FIRST_NAMES, rng)} ${pick(LAST_NAMES, rng)}`,
       phone,
@@ -379,13 +400,35 @@ export async function seedEmployeesAndHR(client, ctx) {
 
   await batchInsert(
     client,
-    `INSERT INTO emergency_contacts (employee_id, contact_1, contact_2, perment_address, postal_address, e_contact_1_relation, e_contact_1_full_name, e_contact_1_phone, e_contact_1_phone_country_code, e_contact_1_email, e_contact_2_relation, e_contact_2_full_name, e_contact_2_phone, e_contact_2_phone_country_code, e_contact_2_email, primary_contact)`,
+    `INSERT INTO employee_contacts (employee_id, primary_phone, alternate_phone, permanent_country, permanent_province, permanent_district, permanent_city, permanent_town, permanent_street, permanent_postal_code, postal_country, postal_province, postal_district, postal_city, postal_town, postal_street, postal_postal_code, same_as_permanent)`,
     [
       'employee_id',
-      'contact_1',
-      'contact_2',
-      'perment_address',
-      'postal_address',
+      'primary_phone',
+      'alternate_phone',
+      'permanent_country',
+      'permanent_province',
+      'permanent_district',
+      'permanent_city',
+      'permanent_town',
+      'permanent_street',
+      'permanent_postal_code',
+      'postal_country',
+      'postal_province',
+      'postal_district',
+      'postal_city',
+      'postal_town',
+      'postal_street',
+      'postal_postal_code',
+      'same_as_permanent',
+    ],
+    employeeContactRows
+  );
+
+  await batchInsert(
+    client,
+    `INSERT INTO emergency_contacts (employee_id, e_contact_1_relation, e_contact_1_full_name, e_contact_1_phone, e_contact_1_phone_country_code, e_contact_1_email, e_contact_2_relation, e_contact_2_full_name, e_contact_2_phone, e_contact_2_phone_country_code, e_contact_2_email, primary_contact)`,
+    [
+      'employee_id',
       'e_contact_1_relation',
       'e_contact_1_full_name',
       'e_contact_1_phone',
@@ -810,7 +853,7 @@ export async function seedEmployeesAndHR(client, ctx) {
       empRows[i - 1][1],
       userMeta[i - 1].email,
       `ext-${100 + i}`,
-      ecRows[i - 1][7],
+      employeeContactRows[i - 1][1],
       i <= 35 || rng() < 0.06,
       titleByDesigId[ji[2]],
       ji[1],

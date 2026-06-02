@@ -6,6 +6,8 @@ const announcementSchema = z.object({
   title: z.string().min(1).max(255),
   body: z.string().min(1),
   audience: z.enum(['all', 'hr', 'employee']).default('all'),
+  target_department_id: z.string().uuid().nullable().optional(),
+  target_designation_id: z.string().uuid().nullable().optional(),
   is_active: z.boolean().optional(),
 });
 
@@ -20,6 +22,7 @@ export async function getAnnouncements(req, res, next) {
       activeOnly,
       roleName,
       all: includeAll,
+      employeeId: req.user.employee_id,
     });
     return sendSuccess(res, result, 200);
   } catch (error) {

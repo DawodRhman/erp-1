@@ -105,7 +105,7 @@ export async function getDepartments({ includeInactive = false } = {}) {
       SELECT *
       FROM public.departments
       WHERE ($1::boolean = true OR is_active = true)
-      ORDER BY department_name ASC
+      ORDER BY is_active DESC, department_name ASC
     `,
     [includeInactive]
   );
@@ -183,9 +183,11 @@ export async function updateDepartment(id, data) {
   return result.rows[0];
 }
 
-export async function getEntityRecords(entity, { isSuperAdminCaller, filters = {} }) {
+export async function getEntityRecords(entity, { isSuperAdminCaller, includeInactive = false, filters = {} }) {
+  const shouldIncludeInactive = Boolean(isSuperAdminCaller || includeInactive);
+
   if (entity === 'departments') {
-    return getDepartments({ includeInactive: isSuperAdminCaller });
+    return getDepartments({ includeInactive: shouldIncludeInactive });
   }
 
   const { table, hasIsActive = true, orderBy = 'created_at DESC' } = getEntityConfig(entity);
@@ -193,7 +195,7 @@ export async function getEntityRecords(entity, { isSuperAdminCaller, filters = {
   const params = [];
 
   if (hasIsActive) {
-    params.push(isSuperAdminCaller);
+    params.push(shouldIncludeInactive);
     whereParts.push(`($${params.length}::boolean = true OR is_active = true)`);
   }
 
@@ -209,7 +211,7 @@ export async function getEntityRecords(entity, { isSuperAdminCaller, filters = {
       SELECT *
       FROM public.${table}
       ${whereSql}
-      ORDER BY ${orderBy}
+      ORDER BY ${hasIsActive ? 'is_active DESC, ' : ''}${orderBy}
     `,
     params
   );

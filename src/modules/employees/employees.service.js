@@ -3,8 +3,35 @@ import { AppError } from '../../utils/errors.js';
 import { generateTempPassword, hashPassword } from '../auth/auth.service.js';
 import { initializeBalances } from '../leave/leave.service.js';
 
+function contactFromPayload(employeeContact, emergencyContacts, accountInfo) {
+  const permanent = employeeContact?.permanent_address || {};
+  const postal = employeeContact?.same_as_permanent
+    ? permanent
+    : (employeeContact?.postal_address || {});
+
+  return {
+    primary_phone: employeeContact?.primary_phone || emergencyContacts?.contact_1 || accountInfo?.phone,
+    alternate_phone: employeeContact?.alternate_phone || emergencyContacts?.contact_2 || null,
+    same_as_permanent: Boolean(employeeContact?.same_as_permanent),
+    permanent_country: permanent.country || 'Pakistan',
+    permanent_province: permanent.province || null,
+    permanent_district: permanent.district || null,
+    permanent_city: permanent.city || null,
+    permanent_town: permanent.town || null,
+    permanent_street: permanent.street || null,
+    permanent_postal_code: permanent.postal_code || null,
+    postal_country: postal.country || permanent.country || 'Pakistan',
+    postal_province: postal.province || null,
+    postal_district: postal.district || null,
+    postal_city: postal.city || null,
+    postal_town: postal.town || null,
+    postal_street: postal.street || null,
+    postal_postal_code: postal.postal_code || null,
+  };
+}
+
 export async function createEmployee(data, createdByUserId) {
-  const { employee_id: employeeId, personalInfo, jobInfo, accountInfo, emergencyContacts, bankInfo, medicalInfo, salaryInfo, allowances } = data;
+  const { employee_id: employeeId, personalInfo, jobInfo, accountInfo, employeeContact, emergencyContacts, bankInfo, medicalInfo, salaryInfo, allowances } = data;
 
   const duplicateEmployeeId = await pool.query(
     `SELECT 1 FROM public.employee_info WHERE employee_id = $1 LIMIT 1`,
@@ -12,7 +39,13 @@ export async function createEmployee(data, createdByUserId) {
   );
 
   if (duplicateEmployeeId.rowCount > 0) {
-    throw new AppError(409, 'DUPLICATE_EMPLOYEE_ID', 'Employee ID already exists.');
+    throw new AppError(409, 'DUPLICATE_EMPLOYEE_ID', 'Employee ID already exists.', [
+      {
+        field: 'employee_id',
+        path: ['employee_id'],
+        message: 'Employee ID already exists.',
+      },
+    ]);
   }
 
   const duplicateCnic = await pool.query(
@@ -21,7 +54,13 @@ export async function createEmployee(data, createdByUserId) {
   );
 
   if (duplicateCnic.rowCount > 0) {
-    throw new AppError(409, 'DUPLICATE_CNIC', 'CNIC already exists.');
+    throw new AppError(409, 'DUPLICATE_CNIC', 'CNIC already exists.', [
+      {
+        field: 'cnic',
+        path: ['personalInfo', 'cnic'],
+        message: 'CNIC number already exists.',
+      },
+    ]);
   }
 
   const duplicateEmail = await pool.query(
@@ -30,7 +69,13 @@ export async function createEmployee(data, createdByUserId) {
   );
 
   if (duplicateEmail.rowCount > 0) {
-    throw new AppError(409, 'DUPLICATE_EMAIL', 'Email already exists.');
+    throw new AppError(409, 'DUPLICATE_EMAIL', 'Email already exists.', [
+      {
+        field: 'email',
+        path: ['accountInfo', 'email'],
+        message: 'An account with this email already exists.',
+      },
+    ]);
   }
 
   const client = await pool.connect();
@@ -92,15 +137,60 @@ export async function createEmployee(data, createdByUserId) {
       ]
     );
 
+    const contact = contactFromPayload(employeeContact, emergencyContacts, accountInfo);
+    if (contact.primary_phone) {
+      await client.query(
+        `
+          INSERT INTO public.employee_contacts (
+            employee_id,
+            primary_phone,
+            alternate_phone,
+            permanent_country,
+            permanent_province,
+            permanent_district,
+            permanent_city,
+            permanent_town,
+            permanent_street,
+            permanent_postal_code,
+            postal_country,
+            postal_province,
+            postal_district,
+            postal_city,
+            postal_town,
+            postal_street,
+            postal_postal_code,
+            same_as_permanent
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        `,
+        [
+          employeeId,
+          contact.primary_phone,
+          contact.alternate_phone,
+          contact.permanent_country,
+          contact.permanent_province,
+          contact.permanent_district,
+          contact.permanent_city,
+          contact.permanent_town,
+          contact.permanent_street,
+          contact.permanent_postal_code,
+          contact.postal_country,
+          contact.postal_province,
+          contact.postal_district,
+          contact.postal_city,
+          contact.postal_town,
+          contact.postal_street,
+          contact.postal_postal_code,
+          contact.same_as_permanent,
+        ]
+      );
+    }
+
     if (emergencyContacts) {
       await client.query(
         `
           INSERT INTO public.emergency_contacts (
             employee_id,
-            contact_1,
-            contact_2,
-            perment_address,
-            postal_address,
             e_contact_1_relation,
             e_contact_1_full_name,
             e_contact_1_phone,
@@ -113,14 +203,10 @@ export async function createEmployee(data, createdByUserId) {
             e_contact_2_email,
             primary_contact
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         `,
         [
           employeeId,
-          emergencyContacts.contact_1 || accountInfo.phone,
-          emergencyContacts.contact_2 || null,
-          emergencyContacts.perment_address || null,
-          emergencyContacts.postal_address || null,
           emergencyContacts.e_contact_1_relation,
           emergencyContacts.e_contact_1_full_name,
           emergencyContacts.e_contact_1_phone,
@@ -425,8 +511,11 @@ export async function getEmployeeById(employeeId) {
         s.start_time AS shift_start_time,
         s.end_time AS shift_end_time,
         s.late_after_minutes,
+        -- Employee Contact
+        empc.primary_phone, empc.alternate_phone, empc.same_as_permanent,
+        empc.permanent_country, empc.permanent_province, empc.permanent_district, empc.permanent_city, empc.permanent_town, empc.permanent_street, empc.permanent_postal_code,
+        empc.postal_country, empc.postal_province, empc.postal_district, empc.postal_city, empc.postal_town, empc.postal_street, empc.postal_postal_code,
         -- Emergency Contacts
-        ec.contact_1, ec.contact_2, ec.perment_address, ec.postal_address,
         ec.e_contact_1_relation, ec.e_contact_1_full_name, ec.e_contact_1_phone, ec.e_contact_1_phone_country_code, ec.e_contact_1_email,
         ec.e_contact_2_relation, ec.e_contact_2_full_name, ec.e_contact_2_phone, ec.e_contact_2_phone_country_code, ec.e_contact_2_email,
         ec.primary_contact,
@@ -445,6 +534,7 @@ export async function getEmployeeById(employeeId) {
       LEFT JOIN public.work_modes wm ON wm.id = ji.work_mode_id
       LEFT JOIN public.work_locations wl ON wl.id = ji.work_location_id
       LEFT JOIN public.shifts s ON s.id = ji.shift_id
+      LEFT JOIN public.employee_contacts empc ON empc.employee_id = ei.employee_id
       LEFT JOIN public.emergency_contacts ec ON ec.employee_id = ei.employee_id
       LEFT JOIN public.employee_bank_accounts eba ON eba.employee_id = ei.employee_id
       LEFT JOIN public.employee_medical em ON em.employee_id = ei.employee_id
@@ -491,11 +581,35 @@ export async function getEmployeeById(employeeId) {
       revision_reason: salaryResult.rows[0].revision_reason
     } : null,
     allowances: allowancesResult.rows,
-    emergencyContacts: row.contact_1 ? {
-      contact_1: row.contact_1,
-      contact_2: row.contact_2,
-      perment_address: row.perment_address,
-      postal_address: row.postal_address,
+    employeeContact: row.primary_phone ? {
+      primary_phone: row.primary_phone,
+      alternate_phone: row.alternate_phone,
+      same_as_permanent: row.same_as_permanent,
+      permanent_address: {
+        country: row.permanent_country,
+        province: row.permanent_province,
+        district: row.permanent_district,
+        city: row.permanent_city,
+        town: row.permanent_town,
+        street: row.permanent_street,
+        postal_code: row.permanent_postal_code,
+      },
+      postal_address: {
+        country: row.postal_country,
+        province: row.postal_province,
+        district: row.postal_district,
+        city: row.postal_city,
+        town: row.postal_town,
+        street: row.postal_street,
+        postal_code: row.postal_postal_code,
+      },
+      // Legacy aliases during frontend transition.
+      contact_1: row.primary_phone,
+      contact_2: row.alternate_phone,
+      perment_address: [row.permanent_street, row.permanent_town, row.permanent_city, row.permanent_district, row.permanent_province, row.permanent_country, row.permanent_postal_code].filter(Boolean).join(', '),
+      postal_address: [row.postal_street, row.postal_town, row.postal_city, row.postal_district, row.postal_province, row.postal_country, row.postal_postal_code].filter(Boolean).join(', '),
+    } : null,
+    emergencyContacts: row.e_contact_1_phone ? {
       e_contact_1_relation: row.e_contact_1_relation,
       e_contact_1_full_name: row.e_contact_1_full_name,
       e_contact_1_phone: row.e_contact_1_phone,
@@ -540,7 +654,9 @@ export async function getEmployeeById(employeeId) {
 
   // Remove flat properties that are now in nested objects
   const fieldsToRemove = [
-    'contact_1', 'contact_2', 'perment_address', 'postal_address',
+    'primary_phone', 'alternate_phone', 'same_as_permanent',
+    'permanent_country', 'permanent_province', 'permanent_district', 'permanent_city', 'permanent_town', 'permanent_street', 'permanent_postal_code',
+    'postal_country', 'postal_province', 'postal_district', 'postal_city', 'postal_town', 'postal_street', 'postal_postal_code',
     'e_contact_1_relation', 'e_contact_1_full_name', 'e_contact_1_phone', 'e_contact_1_phone_country_code', 'e_contact_1_email',
     'e_contact_2_relation', 'e_contact_2_full_name', 'e_contact_2_phone', 'e_contact_2_phone_country_code', 'e_contact_2_email',
     'primary_contact',
@@ -714,10 +830,6 @@ export async function updateEmergencyContacts(employeeId, data) {
     `
       INSERT INTO public.emergency_contacts (
         employee_id,
-        contact_1,
-        contact_2,
-        perment_address,
-        postal_address,
         e_contact_1_relation,
         e_contact_1_full_name,
         e_contact_1_phone,
@@ -730,13 +842,9 @@ export async function updateEmergencyContacts(employeeId, data) {
         e_contact_2_email,
         primary_contact
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       ON CONFLICT (employee_id)
       DO UPDATE SET
-        contact_1 = COALESCE(EXCLUDED.contact_1, emergency_contacts.contact_1),
-        contact_2 = COALESCE(EXCLUDED.contact_2, emergency_contacts.contact_2),
-        perment_address = COALESCE(EXCLUDED.perment_address, emergency_contacts.perment_address),
-        postal_address = COALESCE(EXCLUDED.postal_address, emergency_contacts.postal_address),
         e_contact_1_relation = COALESCE(EXCLUDED.e_contact_1_relation, emergency_contacts.e_contact_1_relation),
         e_contact_1_full_name = COALESCE(EXCLUDED.e_contact_1_full_name, emergency_contacts.e_contact_1_full_name),
         e_contact_1_phone = COALESCE(EXCLUDED.e_contact_1_phone, emergency_contacts.e_contact_1_phone),
@@ -753,10 +861,6 @@ export async function updateEmergencyContacts(employeeId, data) {
     `,
     [
       employeeId,
-      data.contact_1 || null,
-      data.contact_2 || null,
-      data.perment_address || null,
-      data.postal_address || null,
       data.e_contact_1_relation || null,
       data.e_contact_1_full_name || null,
       data.e_contact_1_phone || null,
@@ -768,6 +872,78 @@ export async function updateEmergencyContacts(employeeId, data) {
       data.e_contact_2_phone_country_code || null,
       data.e_contact_2_email || null,
       data.primary_contact || null,
+    ]
+  );
+
+  return result.rows[0];
+}
+
+export async function updateEmployeeContact(employeeId, data) {
+  const contact = contactFromPayload(data, null, {});
+  const result = await pool.query(
+    `
+      INSERT INTO public.employee_contacts (
+        employee_id,
+        primary_phone,
+        alternate_phone,
+        permanent_country,
+        permanent_province,
+        permanent_district,
+        permanent_city,
+        permanent_town,
+        permanent_street,
+        permanent_postal_code,
+        postal_country,
+        postal_province,
+        postal_district,
+        postal_city,
+        postal_town,
+        postal_street,
+        postal_postal_code,
+        same_as_permanent
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      ON CONFLICT (employee_id)
+      DO UPDATE SET
+        primary_phone = COALESCE(EXCLUDED.primary_phone, employee_contacts.primary_phone),
+        alternate_phone = COALESCE(EXCLUDED.alternate_phone, employee_contacts.alternate_phone),
+        permanent_country = COALESCE(EXCLUDED.permanent_country, employee_contacts.permanent_country),
+        permanent_province = COALESCE(EXCLUDED.permanent_province, employee_contacts.permanent_province),
+        permanent_district = COALESCE(EXCLUDED.permanent_district, employee_contacts.permanent_district),
+        permanent_city = COALESCE(EXCLUDED.permanent_city, employee_contacts.permanent_city),
+        permanent_town = COALESCE(EXCLUDED.permanent_town, employee_contacts.permanent_town),
+        permanent_street = COALESCE(EXCLUDED.permanent_street, employee_contacts.permanent_street),
+        permanent_postal_code = COALESCE(EXCLUDED.permanent_postal_code, employee_contacts.permanent_postal_code),
+        postal_country = COALESCE(EXCLUDED.postal_country, employee_contacts.postal_country),
+        postal_province = COALESCE(EXCLUDED.postal_province, employee_contacts.postal_province),
+        postal_district = COALESCE(EXCLUDED.postal_district, employee_contacts.postal_district),
+        postal_city = COALESCE(EXCLUDED.postal_city, employee_contacts.postal_city),
+        postal_town = COALESCE(EXCLUDED.postal_town, employee_contacts.postal_town),
+        postal_street = COALESCE(EXCLUDED.postal_street, employee_contacts.postal_street),
+        postal_postal_code = COALESCE(EXCLUDED.postal_postal_code, employee_contacts.postal_postal_code),
+        same_as_permanent = EXCLUDED.same_as_permanent,
+        updated_at = now()
+      RETURNING *
+    `,
+    [
+      employeeId,
+      contact.primary_phone,
+      contact.alternate_phone,
+      contact.permanent_country,
+      contact.permanent_province,
+      contact.permanent_district,
+      contact.permanent_city,
+      contact.permanent_town,
+      contact.permanent_street,
+      contact.permanent_postal_code,
+      contact.postal_country,
+      contact.postal_province,
+      contact.postal_district,
+      contact.postal_city,
+      contact.postal_town,
+      contact.postal_street,
+      contact.postal_postal_code,
+      contact.same_as_permanent,
     ]
   );
 
@@ -886,9 +1062,9 @@ export async function updateMedicalInfo(employeeId, data) {
 export async function resendCredentials(employeeId) {
   const userResult = await pool.query(
     `
-      SELECT u.id, ec.contact_1
+      SELECT u.id, empc.primary_phone
       FROM public.users u
-      LEFT JOIN public.emergency_contacts ec ON ec.employee_id = u.employee_id
+      LEFT JOIN public.employee_contacts empc ON empc.employee_id = u.employee_id
       WHERE u.employee_id = $1
       LIMIT 1
     `,
@@ -916,7 +1092,7 @@ export async function resendCredentials(employeeId) {
 
   return {
     tempPassword,
-    whatsappPhone: userResult.rows[0]?.contact_1 || null,
+    whatsappPhone: userResult.rows[0]?.primary_phone || null,
   };
 }
 

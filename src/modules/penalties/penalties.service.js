@@ -6,15 +6,16 @@ async function getRoleName(roleId) {
   return result.rows[0]?.role_name || null;
 }
 
-export async function getPenaltyRules(isSuperAdmin) {
+export async function getPenaltyRules(isSuperAdmin, includeInactive = false) {
+  const shouldIncludeInactive = Boolean(isSuperAdmin || includeInactive);
   const result = await pool.query(
     `
       SELECT *
       FROM public.penalty_rules
       WHERE ($1::boolean = true OR is_active = true)
-      ORDER BY created_at DESC
+      ORDER BY is_active DESC, created_at DESC
     `,
-    [isSuperAdmin]
+    [shouldIncludeInactive]
   );
 
   return result.rows;

@@ -147,13 +147,13 @@ export async function autoPopulateFromEmployee(employeeId) {
         ei.employee_id,
         ei.name,
         u.email,
-        ec.contact_1 AS phone_mobile,
+        empc.primary_phone AS phone_mobile,
         ji.department_id,
         ji.work_location_id AS branch_id,
         d.title AS role_title
       FROM public.employee_info ei
       LEFT JOIN public.users u ON u.employee_id = ei.employee_id
-      LEFT JOIN public.emergency_contacts ec ON ec.employee_id = ei.employee_id
+      LEFT JOIN public.employee_contacts empc ON empc.employee_id = ei.employee_id
       LEFT JOIN public.job_info ji ON ji.employee_id = ei.employee_id
       LEFT JOIN public.designations d ON d.id = ji.designation_id
       WHERE ei.employee_id = $1
