@@ -50,6 +50,36 @@ function employeePayload(employeeId = 'EMP764') {
       phone: '03000000000',
       role_id: null,
     },
+    employeeContact: {
+      primary_phone: '03000000000',
+      alternate_phone: '03111111111',
+      same_as_permanent: false,
+      permanent_address: {
+        country: 'Pakistan',
+        province: 'Punjab',
+        district: 'Lahore',
+        city: 'Lahore',
+        town: 'Gulberg',
+        street: 'House 12, Main Boulevard',
+        postal_code: '54000',
+      },
+      postal_address: {
+        country: 'Pakistan',
+        province: 'Punjab',
+        district: 'Lahore',
+        city: 'Lahore',
+        town: 'Model Town',
+        street: 'Office 4',
+        postal_code: '54700',
+      },
+    },
+    emergencyContacts: {
+      e_contact_1_relation: 'father',
+      e_contact_1_full_name: 'Emergency Person',
+      e_contact_1_phone: '03222222222',
+      e_contact_1_phone_country_code: '+92',
+      primary_contact: 1,
+    },
   };
 }
 
@@ -114,6 +144,38 @@ describe('createEmployee', () => {
     expect(initializeBalances).toHaveBeenCalledWith('EMP764', 2026, { db: expect.any(Object) });
   });
 
+  it('stores employee contact in employee_contacts and keeps emergency_contacts emergency-only', async () => {
+    query
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] });
+
+    clientQuery
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        rows: [{ employee_id: 'EMP764', name: 'Frontend Employee' }],
+      })
+      .mockResolvedValue({});
+
+    const { createEmployee } = await loadService();
+    await createEmployee(employeePayload('EMP764'), 'creator-user-id');
+
+    const employeeContactCall = clientQuery.mock.calls.find(([sql]) =>
+      sql.includes('INSERT INTO public.employee_contacts')
+    );
+    const emergencyContactCall = clientQuery.mock.calls.find(([sql]) =>
+      sql.includes('INSERT INTO public.emergency_contacts')
+    );
+
+    expect(employeeContactCall).toBeTruthy();
+    expect(employeeContactCall[1]).toEqual(
+      expect.arrayContaining(['EMP764', '03000000000', '03111111111', 'Pakistan', 'Punjab', 'Lahore'])
+    );
+    expect(emergencyContactCall[0]).not.toMatch(/\bcontact_1\b/);
+    expect(emergencyContactCall[0]).not.toMatch(/\bcontact_2\b/);
+    expect(emergencyContactCall[0]).not.toContain('perment_address');
+  });
+
   it('initializes current-year balances when an existing employee is entered with a historical joining date', async () => {
     query
       .mockResolvedValueOnce({ rowCount: 0, rows: [] })
@@ -138,5 +200,64 @@ describe('createEmployee', () => {
       new Date().getUTCFullYear(),
       { db: expect.any(Object) }
     );
+  });
+
+  it('returns frontend-mappable duplicate employee id details', async () => {
+    query.mockResolvedValueOnce({ rowCount: 1, rows: [{ employee_id: 'EMP764' }] });
+
+    const { createEmployee } = await loadService();
+
+    await expect(createEmployee(employeePayload('EMP764'), 'creator-user-id')).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'DUPLICATE_EMPLOYEE_ID',
+      details: [
+        {
+          field: 'employee_id',
+          path: ['employee_id'],
+          message: 'Employee ID already exists.',
+        },
+      ],
+    });
+  });
+
+  it('returns frontend-mappable duplicate cnic details', async () => {
+    query
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnic: '42101-9999999-1' }] });
+
+    const { createEmployee } = await loadService();
+
+    await expect(createEmployee(employeePayload('EMP764'), 'creator-user-id')).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'DUPLICATE_CNIC',
+      details: [
+        {
+          field: 'cnic',
+          path: ['personalInfo', 'cnic'],
+          message: 'CNIC number already exists.',
+        },
+      ],
+    });
+  });
+
+  it('returns frontend-mappable duplicate email details', async () => {
+    query
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ email: 'frontend.employee@example.com' }] });
+
+    const { createEmployee } = await loadService();
+
+    await expect(createEmployee(employeePayload('EMP764'), 'creator-user-id')).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'DUPLICATE_EMAIL',
+      details: [
+        {
+          field: 'email',
+          path: ['accountInfo', 'email'],
+          message: 'An account with this email already exists.',
+        },
+      ],
+    });
   });
 });

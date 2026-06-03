@@ -119,6 +119,7 @@ async function truncateAll(client) {
       users,
       employee_job_history,
       job_info,
+      employee_contacts,
       emergency_contacts,
       employee_bank_accounts,
       employee_medical,

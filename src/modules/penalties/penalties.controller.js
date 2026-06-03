@@ -24,7 +24,7 @@ export async function getPenaltyRules(req, res, next) {
   try {
     const roleName = await penaltiesService.roleInfo(req.user.role_id);
     const isSuperAdmin = roleName === 'super_admin';
-    const result = await penaltiesService.getPenaltyRules(isSuperAdmin);
+    const result = await penaltiesService.getPenaltyRules(isSuperAdmin, req.query.include_inactive === 'true');
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);

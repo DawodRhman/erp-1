@@ -105,4 +105,15 @@ describe('leave balance entitlement initialization', () => {
     });
     expect(query).toHaveBeenCalledTimes(1);
   });
+
+  it('selects a readable reviewer label when the reviewer has no employee profile', async () => {
+    query.mockResolvedValueOnce({ rows: [] });
+
+    const { getLeaveRequests } = await loadService();
+    await getLeaveRequests();
+
+    expect(query.mock.calls[0][0]).toContain('COALESCE(reviewer_emp.name');
+    expect(query.mock.calls[0][0]).toContain('reviewer_user.email');
+    expect(query.mock.calls[0][0]).not.toContain('reviewer_emp.name AS reviewed_by_name');
+  });
 });

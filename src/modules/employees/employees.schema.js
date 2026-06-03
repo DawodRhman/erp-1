@@ -1,12 +1,27 @@
 import { z } from 'zod';
 
 const phoneSchema = z.string().min(7).max(20);
+const pakistanProvinceSchema = z.enum([
+  'Punjab',
+  'Sindh',
+  'Khyber Pakhtunkhwa',
+  'Balochistan',
+  'Islamabad Capital Territory',
+  'Gilgit-Baltistan',
+  'Azad Jammu and Kashmir',
+]);
+const dateStringSchema = z.string().min(4).max(15).refine((value) => {
+  const year = Number(String(value).slice(0, 4));
+  return Number.isFinite(year) && year >= 1900;
+}, {
+  message: 'Date of birth cannot be before year 1900.',
+});
 
 const personalInfoSchema = z.object({
-  name: z.string().min(2).max(100),
-  father_name: z.string().min(2).max(100),
-  cnic: z.string().min(5).max(20),
-  date_of_birth: z.string().min(4).max(15),
+  name: z.string().min(2, 'Full name is mandatory.').max(100),
+  father_name: z.string().min(2, 'Father name is mandatory.').max(100),
+  cnic: z.string().min(5, 'CNIC number is mandatory.').max(20),
+  date_of_birth: dateStringSchema,
 });
 
 const jobInfoSchema = z.object({
@@ -38,11 +53,35 @@ const accountInfoSchema = z.object({
   role_id: z.string().uuid().optional().nullable(),
 });
 
+const employeeAddressSchema = z.object({
+  country: z.literal('Pakistan').default('Pakistan'),
+  province: pakistanProvinceSchema,
+  district: z.string().min(1, 'District is mandatory.').max(100).optional().nullable(),
+  city: z.string().min(1, 'City is mandatory.').max(100),
+  town: z.string().max(100).optional().nullable(),
+  street: z.string().max(255).optional().nullable(),
+  postal_code: z.string().max(20).optional().nullable(),
+});
+
+const employeeContactBaseSchema = z.object({
+  primary_phone: phoneSchema,
+  alternate_phone: phoneSchema.optional().nullable(),
+  same_as_permanent: z.boolean().default(false),
+  permanent_address: employeeAddressSchema,
+  postal_address: employeeAddressSchema.optional().nullable(),
+});
+
+const employeeContactSchema = employeeContactBaseSchema.superRefine((value, ctx) => {
+  if (!value.same_as_permanent && !value.postal_address) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['postal_address'],
+      message: 'Postal address is mandatory unless it is same as permanent address.',
+    });
+  }
+});
+
 const emergencyContactsSchema = z.object({
-  contact_1: phoneSchema,
-  contact_2: phoneSchema.optional().nullable(),
-  perment_address: z.string().max(300).optional().nullable(),
-  postal_address: z.string().max(300).optional().nullable(),
   e_contact_1_relation: z.enum(['father', 'mother', 'brother', 'sister', 'wife', 'husband', 'son', 'daughter', 'friend', 'neighbor', 'other']),
   e_contact_1_full_name: z.string().min(2).max(150),
   e_contact_1_phone: phoneSchema,
@@ -97,6 +136,7 @@ export const createEmployeeSchema = z.object({
   jobInfo: jobInfoSchema,
   salaryInfo: salaryInfoSchema,
   accountInfo: accountInfoSchema,
+  employeeContact: employeeContactSchema.optional(),
   emergencyContacts: emergencyContactsSchema.optional(),
   bankInfo: bankInfoSchema.optional(),
   medicalInfo: medicalInfoSchema.optional(),
@@ -110,10 +150,12 @@ export const updateJobInfoSchema = jobInfoSchema.partial().extend({
 });
 
 export const updateEmergencyContactsSchema = emergencyContactsSchema.partial();
+export const updateEmployeeContactSchema = employeeContactBaseSchema.partial();
 export const updateBankInfoSchema = bankInfoSchema.partial();
 export const updateMedicalInfoSchema = medicalInfoSchema.partial();
 
 export const updateExtraInfoSchema = z.object({
+  employeeContact: updateEmployeeContactSchema.optional(),
   emergencyContacts: updateEmergencyContactsSchema.optional(),
   bankInfo: updateBankInfoSchema.optional(),
   medicalInfo: updateMedicalInfoSchema.optional(),

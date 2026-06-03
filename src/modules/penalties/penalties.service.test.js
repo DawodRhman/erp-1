@@ -104,4 +104,20 @@ describe('penalties service', () => {
 
     expect(query.mock.calls[0][0]).toContain('COALESCE(ep.applied_amount_pkr, pr.amount_pkr) AS amount_pkr');
   });
+
+  it('can include inactive penalty rules for configuration management and orders active rules first', async () => {
+    query.mockResolvedValueOnce({
+      rows: [
+        { id: 'active-rule', name: 'Late Arrival', is_active: true },
+        { id: 'inactive-rule', name: 'Old Rule', is_active: false },
+      ],
+    });
+
+    const { getPenaltyRules } = await import('./penalties.service.js');
+    const records = await getPenaltyRules(false, true);
+
+    expect(records).toHaveLength(2);
+    expect(query.mock.calls[0][0]).toContain('ORDER BY is_active DESC');
+    expect(query.mock.calls[0][1]).toEqual([true]);
+  });
 });

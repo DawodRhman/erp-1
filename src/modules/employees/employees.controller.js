@@ -63,9 +63,12 @@ export async function updateJobInfo(req, res, next) {
 
 export async function updateExtraInfo(req, res, next) {
   try {
-    const { emergencyContacts, bankInfo, medicalInfo } = req.body;
+    const { employeeContact, emergencyContacts, bankInfo, medicalInfo } = req.body;
     const results = {};
 
+    if (employeeContact) {
+      results.employeeContact = await employeesService.updateEmployeeContact(req.params.employeeId, employeeContact);
+    }
     if (emergencyContacts) {
       results.emergencyContacts = await employeesService.updateEmergencyContacts(req.params.employeeId, emergencyContacts);
     }

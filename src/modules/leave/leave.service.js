@@ -106,12 +106,19 @@ export async function getLeaveRequests({ status, employee_id, department_id } = 
         lr.*,
         ei.name AS employee_name,
         lt.name AS leave_type,
+        lt.name AS leave_type_name,
+        COALESCE(lr.end_by_force, lr.end_date) AS effective_end_date,
+        GREATEST(1, (COALESCE(lr.end_by_force, lr.end_date)::date - lr.start_date::date + 1))::int AS total_days,
+        lr.rejection_reason AS review_note,
+        COALESCE(reviewer_emp.name, reviewer_user.email) AS reviewed_by_name,
         d.department_name
       FROM public.leave_requests lr
       JOIN public.employee_info ei ON ei.employee_id = lr.employee_id
       JOIN public.job_info ji ON ji.employee_id = lr.employee_id
       LEFT JOIN public.departments d ON d.id = ji.department_id
       JOIN public.leave_types lt ON lt.id = lr.leave_type_id
+      LEFT JOIN public.users reviewer_user ON reviewer_user.id = lr.reviewed_by
+      LEFT JOIN public.employee_info reviewer_emp ON reviewer_emp.employee_id = reviewer_user.employee_id
       ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}
       ORDER BY lr.created_at DESC
     `,

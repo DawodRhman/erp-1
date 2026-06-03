@@ -74,4 +74,24 @@ describe('config service', () => {
       '11111111-1111-4111-8111-111111111111',
     ]);
   });
+
+  it('can include inactive config records for management screens and orders active records first', async () => {
+    query.mockResolvedValueOnce({
+      rows: [
+        { id: 'active-id', type_name: 'Full-time', is_active: true },
+        { id: 'inactive-id', type_name: 'Legacy Contract', is_active: false },
+      ],
+    });
+
+    const { getEntityRecords } = await import('./config.service.js');
+    const records = await getEntityRecords('employment-types', {
+      isSuperAdminCaller: false,
+      includeInactive: true,
+    });
+
+    expect(records).toHaveLength(2);
+    expect(query.mock.calls[0][0]).toContain('($1::boolean = true OR is_active = true)');
+    expect(query.mock.calls[0][0]).toContain('ORDER BY is_active DESC');
+    expect(query.mock.calls[0][1]).toEqual([true]);
+  });
 });
