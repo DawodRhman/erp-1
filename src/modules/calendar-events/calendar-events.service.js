@@ -19,7 +19,7 @@ function resolveDateRange(payload) {
   return { startDate, endDate };
 }
 
-export async function getCalendarEvents({ from, to, type, visibility, search, sort, order, roleId, employeeId }) {
+export async function getCalendarEvents({ from, to, type, search, sort, order, roleId, employeeId }) {
   const roleName = await getRoleName(roleId);
 
   const filters = [];
@@ -44,18 +44,12 @@ export async function getCalendarEvents({ from, to, type, visibility, search, so
     filters.push(`ce.type = $${params.length}`);
   }
 
-  if (visibility) {
-    params.push(visibility);
-    filters.push(`ce.visibility = $${params.length}`);
-  }
-
   if (search) {
     params.push(`%${search}%`);
     filters.push(`ce.title ILIKE $${params.length}`);
   }
 
   if (roleName === 'employee') {
-    filters.push(`ce.visibility IN ('all', 'employee')`);
     if (employeeId) {
       params.push(employeeId);
       viewerJoin = `LEFT JOIN public.job_info viewer_job ON viewer_job.employee_id = $${params.length}`;
@@ -116,16 +110,15 @@ export async function createCalendarEvent(payload, userId) {
         start_date,
         end_date,
         title,
-        visibility,
         target_department_ids,
         target_designation_ids,
         created_by,
         updated_by
       )
-      VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, $8)
+      VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $7)
       RETURNING *
     `,
-    [payload.type, startDate, endDate, payload.title, payload.visibility, departmentIds, designationIds, userId]
+    [payload.type, startDate, endDate, payload.title, departmentIds, designationIds, userId]
   );
 
   return result.rows[0];
@@ -155,7 +148,7 @@ export async function updateCalendarEvent(id, payload, userId) {
     normalizedPayload.end_date = payload.start_date || payload.date;
   }
 
-  for (const key of ['type', 'date', 'start_date', 'end_date', 'title', 'visibility', 'target_department_ids', 'target_designation_ids']) {
+  for (const key of ['type', 'date', 'start_date', 'end_date', 'title', 'target_department_ids', 'target_designation_ids']) {
     if (Object.prototype.hasOwnProperty.call(normalizedPayload, key)) {
       values.push(normalizedPayload[key]);
       fields.push(`${key} = $${values.length}`);

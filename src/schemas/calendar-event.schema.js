@@ -1,13 +1,10 @@
 import { z } from 'zod'
 
-const visibilitySchema = z.enum(['all', 'hr', 'employee'])
-
 export const calendarEventQuerySchema = z.object({
     from: z.string().date().optional(),
     to: z.string().date().optional(),
     year: z.coerce.number().int().min(2000).max(2100).optional(),
     type: z.string().trim().min(1).max(50).optional(),
-    visibility: visibilitySchema.optional(),
     search: z.string().trim().max(255).optional(),
     all: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
     sort: z.enum(['date', 'title', 'type', 'created_at']).default('date'),
@@ -30,7 +27,6 @@ export const createCalendarEventSchema = z.object({
     start_date: z.string().date().optional(),
     end_date: z.string().date().optional(),
     title: z.string().trim().min(1).max(255),
-    visibility: visibilitySchema.default('all'),
     target_department_ids: z.array(z.string().uuid()).optional(),
     target_designation_ids: z.array(z.string().uuid()).optional(),
 }).refine((data) => data.date || data.start_date, {
@@ -51,7 +47,6 @@ export const updateCalendarEventSchema = z.object({
     start_date: z.string().date().optional(),
     end_date: z.string().date().optional(),
     title: z.string().trim().min(1).max(255).optional(),
-    visibility: visibilitySchema.optional(),
     target_department_ids: z.array(z.string().uuid()).optional(),
     target_designation_ids: z.array(z.string().uuid()).optional(),
 }).refine((data) => Object.keys(data).length > 0, {

@@ -38,7 +38,6 @@ describe('calendar events controller queries', () => {
       from: undefined,
       to: undefined,
       type: undefined,
-      visibility: undefined,
       search: undefined,
       sort: 'date',
       order: 'asc',

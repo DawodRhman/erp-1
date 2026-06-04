@@ -21,15 +21,16 @@ describe('announcements service', () => {
 
     expect(records).toEqual([{ id: 'announcement-id', title: 'Office timing', is_active: true }]);
     expect(query.mock.calls[0][0]).toContain('a.is_active = true');
+    expect(query.mock.calls[0][0]).toContain('a.expiry_date IS NULL OR a.expiry_date >= CURRENT_DATE');
   });
 
-  it('creates announcements with audience and author metadata', async () => {
+  it('creates announcements with author metadata and expiry_date', async () => {
     query.mockResolvedValueOnce({
       rows: [{
         id: 'announcement-id',
         title: 'Office timing',
         body: 'Friday timing update',
-        audience: 'all',
+        expiry_date: '2026-07-01',
         target_department_id: 'department-id',
         target_designation_id: 'designation-id',
         created_by: 'user-id',
@@ -41,7 +42,7 @@ describe('announcements service', () => {
     const created = await createAnnouncement({
       title: 'Office timing',
       body: 'Friday timing update',
-      audience: 'all',
+      expiry_date: '2026-07-01',
       target_department_id: 'department-id',
       target_designation_id: 'designation-id',
       is_active: true,
@@ -53,7 +54,7 @@ describe('announcements service', () => {
     expect(query.mock.calls[0][1]).toEqual([
       'Office timing',
       'Friday timing update',
-      'all',
+      '2026-07-01',
       ['department-id'],
       ['designation-id'],
       true,
@@ -75,7 +76,6 @@ describe('announcements service', () => {
     const created = await createAnnouncement({
       title: 'Department notice',
       body: 'Visible to selected teams',
-      audience: 'employee',
       target_department_ids: ['department-a', 'department-b'],
       target_designation_ids: ['designation-a'],
       is_active: true,
@@ -88,7 +88,7 @@ describe('announcements service', () => {
     expect(query.mock.calls[0][1]).toEqual([
       'Department notice',
       'Visible to selected teams',
-      'employee',
+      null,
       ['department-a', 'department-b'],
       ['designation-a'],
       true,

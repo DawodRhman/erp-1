@@ -5,7 +5,7 @@ import * as announcementsService from './announcements.service.js';
 const announcementSchema = z.object({
   title: z.string().min(1).max(255),
   body: z.string().min(1),
-  audience: z.enum(['all', 'hr', 'employee']).default('all'),
+  expiry_date: z.string().date().nullable().optional(),
   target_department_id: z.string().uuid().nullable().optional(),
   target_designation_id: z.string().uuid().nullable().optional(),
   target_department_ids: z.array(z.string().uuid()).optional(),

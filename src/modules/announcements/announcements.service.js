@@ -1,11 +1,6 @@
 import pool from '../../config/db.js';
 import { AppError } from '../../utils/errors.js';
 
-function audienceFilterForRole(roleName) {
-  if (roleName === 'employee') return `a.audience IN ('all', 'employee')`;
-  return `a.audience IN ('all', 'hr', 'employee')`;
-}
-
 function normalizeTargetIds(value, fallback) {
   const source = Array.isArray(value) ? value : fallback ? [fallback] : [];
   return [...new Set(source.filter(Boolean))];
@@ -21,7 +16,7 @@ export async function listAnnouncements({ activeOnly = true, roleName = 'employe
   }
 
   if (!all) {
-    filters.push(audienceFilterForRole(roleName));
+    filters.push('(a.expiry_date IS NULL OR a.expiry_date >= CURRENT_DATE)');
   }
 
   if (shouldScopeToEmployeeTargets) {
@@ -72,7 +67,7 @@ export async function listAnnouncements({ activeOnly = true, roleName = 'employe
 export async function createAnnouncement({
   title,
   body,
-  audience,
+  expiry_date,
   target_department_id,
   target_designation_id,
   target_department_ids,
@@ -87,7 +82,7 @@ export async function createAnnouncement({
       INSERT INTO public.announcements (
         title,
         body,
-        audience,
+        expiry_date,
         target_department_ids,
         target_designation_ids,
         is_active,
@@ -97,7 +92,7 @@ export async function createAnnouncement({
       VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
       RETURNING *
     `,
-    [title, body, audience, departmentIds, designationIds, is_active ?? true, userId]
+    [title, body, expiry_date || null, departmentIds, designationIds, is_active ?? true, userId]
   );
 
   return result.rows[0];
@@ -123,7 +118,7 @@ export async function updateAnnouncement(id, payload, userId) {
     delete normalizedPayload.target_designation_id;
   }
 
-  for (const key of ['title', 'body', 'audience', 'target_department_ids', 'target_designation_ids', 'is_active']) {
+  for (const key of ['title', 'body', 'expiry_date', 'target_department_ids', 'target_designation_ids', 'is_active']) {
     if (Object.prototype.hasOwnProperty.call(normalizedPayload, key)) {
       values.push(normalizedPayload[key]);
       fields.push(`${key} = $${values.length}`);

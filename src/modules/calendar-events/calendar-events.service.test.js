@@ -43,7 +43,6 @@ describe('calendar events service', () => {
       start_date: '2026-06-15',
       end_date: '2026-06-18',
       type: 'meeting',
-      visibility: 'employee',
       target_department_ids: ['department-a'],
       target_designation_ids: ['designation-a', 'designation-b'],
     }, 'user-id');
@@ -56,7 +55,6 @@ describe('calendar events service', () => {
       '2026-06-15',
       '2026-06-18',
       'Team briefing',
-      'employee',
       ['department-a'],
       ['designation-a', 'designation-b'],
       'user-id',

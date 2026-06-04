@@ -8,7 +8,6 @@ const eventBaseSchema = z.object({
   start_date: z.string().min(8).optional(),
   end_date: z.string().min(8).optional(),
   title: z.string().min(1),
-  visibility: z.enum(['all', 'hr', 'employee']),
   target_department_ids: z.array(z.string().uuid()).optional(),
   target_designation_ids: z.array(z.string().uuid()).optional(),
 });
@@ -35,7 +34,7 @@ const eventPatchSchema = eventBaseSchema.partial().refine(validateDateRange, {
 export async function getCalendarEvents(req, res, next) {
   try {
     const query = req.validatedQuery || req.query;
-    const { from, to, year, type, visibility, search, sort, order, all } = query;
+    const { from, to, year, type, search, sort, order, all } = query;
     const includeAll = all === true || all === 'true';
 
     // Resolve date range: explicit from/to > year shortcut > all events > current year default
@@ -57,7 +56,6 @@ export async function getCalendarEvents(req, res, next) {
       from: resolvedFrom,
       to: resolvedTo,
       type,
-      visibility,
       search,
       sort: sort || 'date',
       order: order || 'asc',

@@ -184,4 +184,36 @@ describe('createEmployeeSchema', () => {
       })
     );
   });
+
+  it('validates bank info details including IBAN and account number constraints', () => {
+    const payload = validPayload();
+    payload.bankInfo = {
+      bank_name: 'Habib Bank Limited',
+      branch_name: 'Main Branch',
+      branch_code: '0123',
+      iban: 'PK00XXXX0000000000000000', // 24 chars
+      account_title: 'John Doe',
+      account_number: '123456789012345678901234567890', // 30 chars
+      account_type: 'current',
+    };
+
+    const result = createEmployeeSchema.safeParse(payload);
+    expect(result.success).toBe(true);
+
+    // Test invalid IBAN (less than 10 characters)
+    payload.bankInfo.iban = 'PK00';
+    const resultMinIban = createEmployeeSchema.safeParse(payload);
+    expect(resultMinIban.success).toBe(false);
+
+    // Test invalid IBAN (more than 34 characters)
+    payload.bankInfo.iban = 'PK00XXXX00000000000000000000000000000'; // 37 chars
+    const resultMaxIban = createEmployeeSchema.safeParse(payload);
+    expect(resultMaxIban.success).toBe(false);
+
+    // Test invalid account number (more than 30 characters)
+    payload.bankInfo.iban = 'PK00XXXX0000000000000000'; // reset to valid
+    payload.bankInfo.account_number = '1234567890123456789012345678901'; // 31 chars
+    const resultMaxAccount = createEmployeeSchema.safeParse(payload);
+    expect(resultMaxAccount.success).toBe(false);
+  });
 });
