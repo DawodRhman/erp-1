@@ -40,7 +40,8 @@ describe('calendar events service', () => {
     const { createCalendarEvent } = await import('./calendar-events.service.js');
     const event = await createCalendarEvent({
       title: 'Team briefing',
-      date: '2026-06-15',
+      start_date: '2026-06-15',
+      end_date: '2026-06-18',
       type: 'meeting',
       visibility: 'employee',
       target_department_ids: ['department-a'],
@@ -53,11 +54,32 @@ describe('calendar events service', () => {
     expect(query.mock.calls[0][1]).toEqual([
       'meeting',
       '2026-06-15',
+      '2026-06-18',
       'Team briefing',
       'employee',
       ['department-a'],
       ['designation-a', 'designation-b'],
       'user-id',
     ]);
+  });
+
+  it('lists calendar events whose date ranges overlap the requested range', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ role_name: 'hr_manager' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'event-id', title: 'Quarter training' }] });
+
+    const { getCalendarEvents } = await import('./calendar-events.service.js');
+    await getCalendarEvents({
+      from: '2026-06-01',
+      to: '2026-06-30',
+      roleId: 'hr-role',
+      sort: 'date',
+      order: 'asc',
+    });
+
+    expect(query.mock.calls[1][0]).toContain('ce.start_date <= $');
+    expect(query.mock.calls[1][0]).toContain('ce.end_date >= $');
+    expect(query.mock.calls[1][0]).not.toContain('ce.date >=');
+    expect(query.mock.calls[1][1]).toEqual(['2026-06-30', '2026-06-01']);
   });
 });

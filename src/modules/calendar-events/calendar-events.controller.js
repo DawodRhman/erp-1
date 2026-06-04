@@ -2,14 +2,35 @@ import { z } from 'zod';
 import { sendSuccess } from '../../utils/respond.js';
 import * as calendarEventsService from './calendar-events.service.js';
 
-const eventBodySchema = z.object({
+const eventBaseSchema = z.object({
   type: z.string().min(1),
-  date: z.string().min(8),
+  date: z.string().min(8).optional(),
+  start_date: z.string().min(8).optional(),
+  end_date: z.string().min(8).optional(),
   title: z.string().min(1),
   visibility: z.enum(['all', 'hr', 'employee']),
+  target_department_ids: z.array(z.string().uuid()).optional(),
+  target_designation_ids: z.array(z.string().uuid()).optional(),
 });
 
-const eventPatchSchema = eventBodySchema.partial();
+function validateDateRange(data) {
+  const startDate = data.start_date || data.date;
+  const endDate = data.end_date || startDate;
+  return !startDate || !endDate || endDate >= startDate;
+}
+
+const eventBodySchema = eventBaseSchema.refine((data) => data.date || data.start_date, {
+  message: 'Start date is mandatory.',
+  path: ['start_date'],
+}).refine(validateDateRange, {
+  message: 'To date cannot be before from date.',
+  path: ['end_date'],
+});
+
+const eventPatchSchema = eventBaseSchema.partial().refine(validateDateRange, {
+  message: 'To date cannot be before from date.',
+  path: ['end_date'],
+});
 
 export async function getCalendarEvents(req, res, next) {
   try {
@@ -41,6 +62,7 @@ export async function getCalendarEvents(req, res, next) {
       sort: sort || 'date',
       order: order || 'asc',
       roleId: req.user.role_id,
+      employeeId: req.user.employee_id,
     });
     return sendSuccess(res, result, 200);
   } catch (error) {

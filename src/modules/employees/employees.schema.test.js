@@ -90,16 +90,16 @@ describe('createEmployeeSchema', () => {
     expect(result.data.employeeContact.permanent_address.city).toBe('Lahore');
   });
 
-  it('validates employee contact phone and Pakistan address fields', () => {
+  it('validates employee contact phone and mandatory Pakistan city fields', () => {
     const payload = validPayload();
     payload.employeeContact = {
       primary_phone: '123',
       same_as_permanent: false,
-      permanent_address: {
-        country: 'Pakistan',
-        province: 'Atlantis',
-        city: '',
-      },
+        permanent_address: {
+          country: 'Pakistan',
+          province: 'Custom Province',
+          city: '',
+        },
     };
 
     const result = createEmployeeSchema.safeParse(payload);
@@ -111,12 +111,77 @@ describe('createEmployeeSchema', () => {
           path: ['employeeContact', 'primary_phone'],
         }),
         expect.objectContaining({
-          path: ['employeeContact', 'permanent_address', 'province'],
-        }),
-        expect.objectContaining({
           path: ['employeeContact', 'permanent_address', 'city'],
         }),
       ])
+    );
+  });
+
+  it('accepts custom Pakistan provinces added by HR', () => {
+    const payload = validPayload();
+    payload.employeeContact = {
+      primary_phone: '03000000000',
+      same_as_permanent: true,
+      permanent_address: {
+        country: 'Pakistan',
+        province: 'Custom Province',
+        city: 'Custom City',
+      },
+    };
+
+    const result = createEmployeeSchema.safeParse(payload);
+
+    expect(result.success).toBe(true);
+  });
+
+  it('trims and null-normalizes employee address text fields', () => {
+    const payload = validPayload();
+    payload.employeeContact = {
+      primary_phone: '03000000000',
+      same_as_permanent: true,
+      permanent_address: {
+        country: 'Pakistan',
+        province: '  Punjab  ',
+        district: '   ',
+        city: '  Lahore  ',
+        town: '  Gulberg  ',
+        street: '  Main Boulevard  ',
+        postal_code: '  54000  ',
+      },
+    };
+
+    const result = createEmployeeSchema.safeParse(payload);
+
+    expect(result.success).toBe(true);
+    expect(result.data.employeeContact.permanent_address).toMatchObject({
+      province: 'Punjab',
+      district: null,
+      city: 'Lahore',
+      town: 'Gulberg',
+      street: 'Main Boulevard',
+      postal_code: '54000',
+    });
+  });
+
+  it('rejects non-Pakistan employee address countries', () => {
+    const payload = validPayload();
+    payload.employeeContact = {
+      primary_phone: '03000000000',
+      same_as_permanent: true,
+      permanent_address: {
+        country: 'United Arab Emirates',
+        province: 'Punjab',
+        city: 'Lahore',
+      },
+    };
+
+    const result = createEmployeeSchema.safeParse(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toContainEqual(
+      expect.objectContaining({
+        path: ['employeeContact', 'permanent_address', 'country'],
+      })
     );
   });
 });

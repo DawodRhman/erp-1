@@ -1,15 +1,21 @@
 import { z } from 'zod';
 
 const phoneSchema = z.string().min(7).max(20);
-const pakistanProvinceSchema = z.enum([
-  'Punjab',
-  'Sindh',
-  'Khyber Pakhtunkhwa',
-  'Balochistan',
-  'Islamabad Capital Territory',
-  'Gilgit-Baltistan',
-  'Azad Jammu and Kashmir',
-]);
+const trimmedRequiredString = (message, max = 100) =>
+  z.preprocess(
+    (value) => (typeof value === 'string' ? value.trim() : value),
+    z.string().min(1, message).max(max)
+  );
+const trimmedOptionalString = (max = 100) =>
+  z.preprocess((value) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed || null;
+  }, z.string().max(max).nullable().optional());
+const pakistanCountrySchema = z.preprocess(
+  (value) => (typeof value === 'string' ? value.trim() : value),
+  z.literal('Pakistan')
+).default('Pakistan');
 const dateStringSchema = z.string().min(4).max(15).refine((value) => {
   const year = Number(String(value).slice(0, 4));
   return Number.isFinite(year) && year >= 1900;
@@ -54,13 +60,13 @@ const accountInfoSchema = z.object({
 });
 
 const employeeAddressSchema = z.object({
-  country: z.literal('Pakistan').default('Pakistan'),
-  province: pakistanProvinceSchema,
-  district: z.string().min(1, 'District is mandatory.').max(100).optional().nullable(),
-  city: z.string().min(1, 'City is mandatory.').max(100),
-  town: z.string().max(100).optional().nullable(),
-  street: z.string().max(255).optional().nullable(),
-  postal_code: z.string().max(20).optional().nullable(),
+  country: pakistanCountrySchema,
+  province: trimmedRequiredString('Province is mandatory.', 100),
+  district: trimmedOptionalString(100),
+  city: trimmedRequiredString('City is mandatory.', 100),
+  town: trimmedOptionalString(100),
+  street: trimmedOptionalString(255),
+  postal_code: trimmedOptionalString(20),
 });
 
 const employeeContactBaseSchema = z.object({

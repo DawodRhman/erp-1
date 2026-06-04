@@ -43,6 +43,7 @@ describe('calendar events controller queries', () => {
       sort: 'date',
       order: 'asc',
       roleId: 'role-1',
+      employeeId: undefined,
     });
     expect(res.json).toHaveBeenCalledWith({
       success: true,

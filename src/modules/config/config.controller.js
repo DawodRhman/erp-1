@@ -14,10 +14,50 @@ const booleanQuerySchema = z.preprocess((value) => {
   if (value === false || value === 'false') return false;
   return value;
 }, z.boolean().optional());
+const trimmedString = (max) =>
+  z.preprocess(
+    (value) => (typeof value === 'string' ? value.trim() : value),
+    z.string().min(1).max(max)
+  );
+const optionalTrimmedString = (max) =>
+  z.preprocess((value) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed || undefined;
+  }, z.string().min(1).max(max).optional());
+const pakistanCountrySchema = z.preprocess(
+  (value) => (typeof value === 'string' ? value.trim() : value),
+  z.literal('Pakistan')
+);
 const configQuerySchema = z.object({
   department_id: z.string().uuid().optional(),
+  kind: z.enum(['province', 'district', 'city', 'town']).optional(),
+  country: pakistanCountrySchema.optional(),
+  province: optionalTrimmedString(100),
   include_inactive: booleanQuerySchema,
 });
+
+const locationBaseSchema = z.object({
+  kind: z.enum(['province', 'district', 'city', 'town']),
+  country: pakistanCountrySchema.default('Pakistan').optional(),
+  province: optionalTrimmedString(100).nullable(),
+  name: trimmedString(120),
+  is_active: z.boolean().optional(),
+});
+
+const withLocationRules = (schema) => schema.refine((data) => {
+  if (!data.kind || data.kind === 'province') return true;
+  return Boolean(data.province);
+}, {
+  message: 'Province is mandatory for district, city, and town options.',
+  path: ['province'],
+}).transform((data) => ({
+  ...data,
+  country: 'Pakistan',
+  province: data.kind === 'province' ? null : data.province,
+}));
+
+const locationSchema = withLocationRules(locationBaseSchema);
 
 const entitySchemaMap = {
   departments: z.object({
@@ -70,12 +110,16 @@ const entitySchemaMap = {
     role_name: z.string().min(1).max(100),
     description: z.string().optional().nullable(),
   }),
+  locations: locationSchema,
 };
 
 function getEntitySchema(entity, isPatch = false) {
   const schema = entitySchemaMap[entity];
   if (!schema) {
     throw new AppError(404, 'NOT_FOUND', 'Config entity not found.');
+  }
+  if (entity === 'locations' && isPatch) {
+    return withLocationRules(locationBaseSchema.partial());
   }
   return isPatch ? schema.partial() : schema;
 }

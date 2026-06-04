@@ -70,6 +70,12 @@ const entityConfig = {
     hasUpdatedAt: false,
     orderBy: 'role_name ASC',
   },
+  locations: {
+    table: 'employee_locations',
+    createFields: ['kind', 'country', 'province', 'name', 'is_active'],
+    updateFields: ['kind', 'country', 'province', 'name', 'is_active'],
+    orderBy: 'kind ASC, province ASC NULLS FIRST, name ASC',
+  },
 };
 
 function getEntityConfig(entity) {
@@ -88,6 +94,72 @@ function pickFields(payload, fields) {
     }
   }
   return out;
+}
+
+function trimString(value) {
+  return typeof value === 'string' ? value.trim() : value;
+}
+
+function normalizeLocationInput(payload, existing = {}) {
+  const kind = trimString(payload.kind ?? existing.kind);
+  const country = 'Pakistan';
+  const rawProvince = kind === 'province' ? null : trimString(payload.province ?? existing.province);
+  const province = rawProvince || null;
+  const name = trimString(payload.name ?? existing.name);
+  const isActive = Object.prototype.hasOwnProperty.call(payload, 'is_active')
+    ? payload.is_active !== false
+    : existing.is_active !== false;
+
+  if (!['province', 'district', 'city', 'town'].includes(kind)) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Location kind must be province, district, city, or town.');
+  }
+
+  if (!name) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Location name is mandatory.');
+  }
+
+  if (kind !== 'province' && !province) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Province is mandatory for district, city, and town options.');
+  }
+
+  return { kind, country, province, name, is_active: isActive };
+}
+
+async function assertUniqueLocation({ kind, country, province, name }, idToExclude = null) {
+  const params = [kind, country, name, province];
+  let excludeSql = '';
+  if (idToExclude) {
+    params.push(idToExclude);
+    excludeSql = `AND id <> $${params.length}`;
+  }
+
+  const duplicate = await pool.query(
+    `
+      SELECT 1
+      FROM public.employee_locations
+      WHERE kind = $1
+        AND country = $2
+        AND LOWER(name) = LOWER($3)
+        AND COALESCE(province, '') = COALESCE($4, '')
+        ${excludeSql}
+      LIMIT 1
+    `,
+    params
+  );
+
+  if (duplicate.rowCount > 0) {
+    throw new AppError(409, 'CONFLICT', 'Location option already exists.');
+  }
+}
+
+function handleLocationWriteError(error) {
+  if (error?.code === '23505') {
+    throw new AppError(409, 'CONFLICT', 'Location option already exists.');
+  }
+  if (error?.code === '23514') {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Location option violates Pakistan location rules.');
+  }
+  throw error;
 }
 
 export async function isSuperAdmin(roleId) {
@@ -204,6 +276,23 @@ export async function getEntityRecords(entity, { isSuperAdminCaller, includeInac
     whereParts.push(`department_id = $${params.length}`);
   }
 
+  if (entity === 'locations') {
+    if (filters.kind) {
+      params.push(trimString(filters.kind));
+      whereParts.push(`kind = $${params.length}`);
+    }
+    if (filters.country) {
+      params.push('Pakistan');
+      whereParts.push(`country = $${params.length}`);
+    } else {
+      whereParts.push(`country = 'Pakistan'`);
+    }
+    if (filters.province) {
+      params.push(trimString(filters.province));
+      whereParts.push(`province = $${params.length}`);
+    }
+  }
+
   const whereSql = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 
   const result = await pool.query(
@@ -222,6 +311,26 @@ export async function getEntityRecords(entity, { isSuperAdminCaller, includeInac
 export async function createEntityRecord(entity, payload) {
   if (entity === 'departments') {
     return createDepartment(payload);
+  }
+
+  if (entity === 'locations') {
+    const location = normalizeLocationInput(payload);
+    await assertUniqueLocation(location);
+
+    try {
+      const result = await pool.query(
+        `
+          INSERT INTO public.employee_locations (kind, country, province, name, is_active)
+          VALUES ($1, $2, $3, $4, $5)
+          RETURNING *
+        `,
+        [location.kind, location.country, location.province, location.name, location.is_active]
+      );
+
+      return result.rows[0];
+    } catch (error) {
+      handleLocationWriteError(error);
+    }
   }
 
   const { table, createFields } = getEntityConfig(entity);
@@ -251,6 +360,37 @@ export async function createEntityRecord(entity, payload) {
 export async function updateEntityRecord(entity, id, payload) {
   if (entity === 'departments') {
     return updateDepartment(id, payload);
+  }
+
+  if (entity === 'locations') {
+    const existing = await pool.query(`SELECT * FROM public.employee_locations WHERE id = $1`, [id]);
+    if (existing.rowCount === 0) {
+      throw new AppError(404, 'NOT_FOUND', 'Record not found.');
+    }
+
+    const location = normalizeLocationInput(payload, existing.rows[0]);
+    await assertUniqueLocation(location, id);
+
+    try {
+      const result = await pool.query(
+        `
+          UPDATE public.employee_locations
+          SET kind = $1,
+              country = $2,
+              province = $3,
+              name = $4,
+              is_active = $5,
+              updated_at = now()
+          WHERE id = $6
+          RETURNING *
+        `,
+        [location.kind, location.country, location.province, location.name, location.is_active, id]
+      );
+
+      return result.rows[0];
+    } catch (error) {
+      handleLocationWriteError(error);
+    }
   }
 
   const { table, updateFields, hasUpdatedAt = true } = getEntityConfig(entity);

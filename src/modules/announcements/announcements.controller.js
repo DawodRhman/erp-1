@@ -8,6 +8,8 @@ const announcementSchema = z.object({
   audience: z.enum(['all', 'hr', 'employee']).default('all'),
   target_department_id: z.string().uuid().nullable().optional(),
   target_designation_id: z.string().uuid().nullable().optional(),
+  target_department_ids: z.array(z.string().uuid()).optional(),
+  target_designation_ids: z.array(z.string().uuid()).optional(),
   is_active: z.boolean().optional(),
 });
 

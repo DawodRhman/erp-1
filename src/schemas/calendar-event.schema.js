@@ -26,16 +26,41 @@ export const calendarEventParamsSchema = z.object({
 
 export const createCalendarEventSchema = z.object({
     type: z.string().trim().min(1).max(50),
-    date: z.string().date(),
+    date: z.string().date().optional(),
+    start_date: z.string().date().optional(),
+    end_date: z.string().date().optional(),
     title: z.string().trim().min(1).max(255),
     visibility: visibilitySchema.default('all'),
+    target_department_ids: z.array(z.string().uuid()).optional(),
+    target_designation_ids: z.array(z.string().uuid()).optional(),
+}).refine((data) => data.date || data.start_date, {
+    message: 'Start date is mandatory.',
+    path: ['start_date'],
+}).refine((data) => {
+    const startDate = data.start_date || data.date;
+    const endDate = data.end_date || startDate;
+    return !startDate || !endDate || endDate >= startDate;
+}, {
+    message: 'To date cannot be before from date.',
+    path: ['end_date'],
 })
 
 export const updateCalendarEventSchema = z.object({
     type: z.string().trim().min(1).max(50).optional(),
     date: z.string().date().optional(),
+    start_date: z.string().date().optional(),
+    end_date: z.string().date().optional(),
     title: z.string().trim().min(1).max(255).optional(),
     visibility: visibilitySchema.optional(),
+    target_department_ids: z.array(z.string().uuid()).optional(),
+    target_designation_ids: z.array(z.string().uuid()).optional(),
 }).refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field is required.',
+}).refine((data) => {
+    const startDate = data.start_date || data.date;
+    const endDate = data.end_date;
+    return !startDate || !endDate || endDate >= startDate;
+}, {
+    message: 'To date cannot be before from date.',
+    path: ['end_date'],
 })

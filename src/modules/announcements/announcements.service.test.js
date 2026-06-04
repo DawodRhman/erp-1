@@ -54,8 +54,8 @@ describe('announcements service', () => {
       'Office timing',
       'Friday timing update',
       'all',
-      'department-id',
-      'designation-id',
+      ['department-id'],
+      ['designation-id'],
       true,
       'user-id',
     ]);
