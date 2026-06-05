@@ -112,6 +112,7 @@ describe('audit service', () => {
     const result = await listActivityLogs({ module: 'auth', search: 'login' });
 
     expect(query.mock.calls[0][0]).toContain('FROM public.activity_logs al');
+    expect(query.mock.calls[0][0]).toContain('al.created_at <= now()');
     expect(result.total).toBe(1);
     expect(result.items[0]).toMatchObject({
       id: 'log-1',

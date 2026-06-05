@@ -89,6 +89,10 @@ export async function listActivityLogs(filters = {}) {
   const params = [];
   const where = [];
 
+  if (filters.include_future !== true && filters.include_future !== 'true') {
+    where.push(`al.created_at <= now()`);
+  }
+
   if (filters.action) {
     params.push(filters.action);
     where.push(`al.action = $${params.length}`);

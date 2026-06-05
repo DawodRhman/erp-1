@@ -2,6 +2,7 @@ import { z } from 'zod';
 import pool from '../../config/db.js';
 import { sendSuccess } from '../../utils/respond.js';
 import * as directoryService from './directory.service.js';
+import { recordRequestActivity } from '../audit/audit.service.js';
 
 const createSchema = z.object({
   employee_id: z.string().min(3).max(10).optional().nullable(),
@@ -53,6 +54,12 @@ export async function createEntry(req, res, next) {
     }
 
     const result = await directoryService.createEntry(parsed.data, req.user.user_id);
+    await recordRequestActivity(req, {
+      action: 'DIRECTORY_ENTRY_CREATED',
+      entityType: 'directory',
+      entityId: result?.id || null,
+      meta: { directory_entry_id: result?.id || null, employee_id: parsed.data.employee_id || null },
+    });
     return sendSuccess(res, result, 201);
   } catch (error) {
     return next(error);
@@ -74,6 +81,12 @@ export async function updateEntry(req, res, next) {
     }
 
     const result = await directoryService.updateEntry(req.params.id, parsed.data, req.user.user_id);
+    await recordRequestActivity(req, {
+      action: 'DIRECTORY_ENTRY_UPDATED',
+      entityType: 'directory',
+      entityId: req.params.id,
+      meta: { directory_entry_id: req.params.id, updated_fields: Object.keys(parsed.data) },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
