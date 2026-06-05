@@ -32,6 +32,7 @@ Read this file before making backend changes in `C:\backend`. This file is backe
    - Which frontend screen depends on it?
    - Which role can call it?
    - What data must be validated, sanitized, inserted, updated, returned, or hidden?
+   - What Audit Log entry must be written for every persistent change?
    - What errors can happen?
 5. Write/update tests first where practical.
 6. Keep the change scoped. Do not refactor unrelated modules.
@@ -77,6 +78,7 @@ Most modules should follow this shape:
   - SQL queries.
   - Permission-sensitive filtering.
   - Duplicate checks.
+  - Audit Log writes for every create, update, delete-like, approval, rejection, upload, import, generation, or status-changing action.
   - Service-level validation for important invariants.
   - Throws `AppError` for expected failures.
 - `src/modules/<module>/<module>.schema.js` or `src/schemas/<module>.schema.js`
@@ -111,6 +113,7 @@ When creating a new backend module, do this order:
    - Implement business logic.
    - Add duplicate checks before insert/update.
    - Add permission-sensitive filtering.
+   - Add Audit Log writes for every database-changing action.
    - Do not trust the controller alone for important invariants.
    - Map expected database failures to `AppError`.
 4. Controller
@@ -127,10 +130,96 @@ When creating a new backend module, do this order:
    - Add service tests.
    - Add controller tests for validation/error paths.
    - Add schema tests for complex validation.
+   - Add tests proving write actions create Audit Log records.
 7. Verify
    - `npm.cmd test`
    - `npm.cmd run db:check`
    - If migration was added, run `npm.cmd run db:migrate`, then `npm.cmd run db:check`.
+
+## Audit Log Rules
+
+Audit Logs are mandatory for the EMS backend. Any feature that changes persistent data is incomplete until it writes an Audit Log entry.
+
+Audit Logs must cover:
+
+- Authentication actions where supported:
+  - login
+  - logout
+  - forced password change
+- Employee actions:
+  - create
+  - update profile sections
+  - status changes
+  - salary revisions
+  - allowance changes
+  - credentials resend/reset
+  - profile photo upload/replace
+  - document upload/delete
+  - bulk import validation and import
+- Leave actions:
+  - request
+  - approve
+  - reject
+  - initialize balances
+  - yearly rollover
+- Attendance actions:
+  - save/update rows
+  - submit sheets
+  - approve/verify
+  - unlock request/approval
+  - attendance sheet/report generation
+- Penalty actions:
+  - propose
+  - approve
+  - reject
+  - employee acknowledgement
+- Configuration actions:
+  - create/update/deactivate departments, designations, locations, shifts, roles, leave policies, allowance types, and other master data.
+- Communication actions:
+  - announcements create/update/status changes
+  - calendar event create/update/status changes
+- System actions:
+  - imports
+  - exports/generation where the backend records or produces official data
+  - any future module action that inserts, updates, deletes, uploads, approves, rejects, or changes status.
+
+Audit Log access rules:
+
+- Super Admin only can read Audit Logs.
+- Audit Logs are immutable.
+- No edit endpoint.
+- No delete endpoint.
+- No UI controls for edit/delete, even for Super Admin.
+
+Audit Log records should include where available:
+
+- actor user id
+- actor employee id/name/email
+- actor role
+- action type
+- module
+- target table/resource
+- target employee id or resource id
+- readable summary
+- before data for updates/status changes when practical
+- after data for creates/updates when practical
+- request IP and user agent when available
+- timestamp
+
+Do not log secrets:
+
+- passwords
+- password hashes
+- tokens
+- reset links
+- full uploaded file binary data
+- sensitive medical notes unless there is an explicit business need.
+
+Audit Log tests:
+
+- Every new write endpoint needs a test that proves the audit write is attempted.
+- Error-path tests should confirm failed validation does not write success audit entries.
+- Import tests should cover row-level summaries and final import summaries.
 
 ## New Table SOP
 
