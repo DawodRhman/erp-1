@@ -136,8 +136,10 @@ const medicalInfoSchema = z.object({
   next_medical_exam_date: z.string().optional().nullable(),
 });
 
+export const employeeIdSchema = z.string().regex(/^EMP\d{4}$/, 'Employee ID must use EMP0001 format.');
+
 export const createEmployeeSchema = z.object({
-  employee_id: z.string().min(3).max(10),
+  employee_id: employeeIdSchema,
   personalInfo: personalInfoSchema,
   jobInfo: jobInfoSchema,
   salaryInfo: salaryInfoSchema,
@@ -171,4 +173,9 @@ export const salaryRevisionSchema = salaryInfoSchema;
 
 export const updateAllowancesSchema = z.object({
   allowances: z.array(allowanceItemSchema),
+});
+
+export const createEmployeeAccountSchema = z.object({
+  email: z.string().email(),
+  role_id: z.string().uuid(),
 });

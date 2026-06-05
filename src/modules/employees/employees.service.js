@@ -1,6 +1,7 @@
 import pool from '../../config/db.js';
 import { AppError } from '../../utils/errors.js';
 import { generateTempPassword, hashPassword } from '../auth/auth.service.js';
+import { recordActivityLog } from '../audit/audit.service.js';
 import { initializeBalances } from '../leave/leave.service.js';
 
 function contactFromPayload(employeeContact, emergencyContacts, accountInfo) {
@@ -449,13 +450,23 @@ export async function getEmployees({
       dsg.title AS designation_title,
       dep.department_name,
       js.status_name AS status,
-      ji.date_of_joining
+      ji.date_of_joining,
+      photo.file_path AS profile_photo_url
     FROM public.employee_info ei
     JOIN public.job_info ji ON ji.employee_id = ei.employee_id
     LEFT JOIN public.departments dep ON dep.id = ji.department_id
     LEFT JOIN public.designations dsg ON dsg.id = ji.designation_id
     LEFT JOIN public.job_statuses js ON js.id = ji.job_status_id
     LEFT JOIN public.users u ON u.employee_id = ei.employee_id
+    LEFT JOIN LATERAL (
+      SELECT ea.file_path
+      FROM public.employee_attachments ea
+      WHERE ea.employee_id = ei.employee_id
+        AND ea.kind = 'profile_photo'
+        AND ea.mime_type LIKE 'image/%'
+      ORDER BY ea.created_at DESC
+      LIMIT 1
+    ) photo ON true
     ${whereSql}
     ORDER BY ei.employee_id ASC
     LIMIT $${params.length + 1} OFFSET $${params.length + 2}
@@ -524,7 +535,8 @@ export async function getEmployeeById(employeeId) {
         -- Medical Info
         em.blood_group, em.date_of_birth AS medical_dob, em.gender, em.height_cm, em.weight_kg, em.has_disability, em.disability_type, em.disability_description,
         em.has_chronic_condition, em.chronic_condition_notes, em.has_known_allergies, em.allergy_notes, em.emergency_medication, em.fitness_status,
-        em.last_medical_exam_date, em.next_medical_exam_date
+        em.last_medical_exam_date, em.next_medical_exam_date,
+        photo.file_path AS profile_photo_url
       FROM public.employee_info ei
       LEFT JOIN public.job_info ji ON ji.employee_id = ei.employee_id
       LEFT JOIN public.departments dep ON dep.id = ji.department_id
@@ -538,6 +550,15 @@ export async function getEmployeeById(employeeId) {
       LEFT JOIN public.emergency_contacts ec ON ec.employee_id = ei.employee_id
       LEFT JOIN public.employee_bank_accounts eba ON eba.employee_id = ei.employee_id
       LEFT JOIN public.employee_medical em ON em.employee_id = ei.employee_id
+      LEFT JOIN LATERAL (
+        SELECT ea.file_path
+        FROM public.employee_attachments ea
+        WHERE ea.employee_id = ei.employee_id
+          AND ea.kind = 'profile_photo'
+          AND ea.mime_type LIKE 'image/%'
+        ORDER BY ea.created_at DESC
+        LIMIT 1
+      ) photo ON true
       WHERE ei.employee_id = $1
       LIMIT 1
     `,
@@ -1093,6 +1114,86 @@ export async function resendCredentials(employeeId) {
   return {
     tempPassword,
     whatsappPhone: userResult.rows[0]?.primary_phone || null,
+  };
+}
+
+export async function createEmployeeAccount(employeeId, data, createdByUserId, requestContext = {}) {
+  const employeeResult = await pool.query(
+    `
+      SELECT ei.employee_id, empc.primary_phone
+      FROM public.employee_info ei
+      LEFT JOIN public.employee_contacts empc ON empc.employee_id = ei.employee_id
+      WHERE ei.employee_id = $1
+      LIMIT 1
+    `,
+    [employeeId]
+  );
+
+  if (employeeResult.rowCount === 0) {
+    throw new AppError(404, 'NOT_FOUND', 'Employee not found.');
+  }
+
+  const existingEmployeeUser = await pool.query(
+    `SELECT id FROM public.users WHERE employee_id = $1 LIMIT 1`,
+    [employeeId]
+  );
+  if (existingEmployeeUser.rowCount > 0) {
+    throw new AppError(409, 'ACCOUNT_EXISTS', 'Employee already has a login account.');
+  }
+
+  const existingEmail = await pool.query(
+    `SELECT id FROM public.users WHERE email = $1 LIMIT 1`,
+    [data.email]
+  );
+  if (existingEmail.rowCount > 0) {
+    throw new AppError(409, 'DUPLICATE_EMAIL', 'Email is already used by another account.');
+  }
+
+  const roleResult = await pool.query(
+    `SELECT id FROM public.roles WHERE id = $1 LIMIT 1`,
+    [data.role_id]
+  );
+  if (roleResult.rowCount === 0) {
+    throw new AppError(400, 'INVALID_ROLE', 'Selected role does not exist.');
+  }
+
+  const tempPassword = generateTempPassword();
+  const hashedPassword = await hashPassword(tempPassword);
+  const userResult = await pool.query(
+    `
+      INSERT INTO public.users (
+        employee_id,
+        email,
+        password,
+        role_id,
+        must_change_password
+      )
+      VALUES ($1, $2, $3, $4, true)
+      RETURNING id, email, employee_id, role_id, must_change_password
+    `,
+    [employeeId, data.email, hashedPassword, data.role_id]
+  );
+  const user = userResult.rows[0];
+
+  await recordActivityLog({
+    userId: createdByUserId,
+    action: 'EMPLOYEE_ACCOUNT_CREATED',
+    entityType: 'employee',
+    entityId: employeeId,
+    meta: {
+      employee_id: employeeId,
+      account_user_id: user?.id,
+      email: data.email,
+      role_id: data.role_id,
+    },
+    requestContext,
+    bestEffort: true,
+  });
+
+  return {
+    user,
+    tempPassword,
+    whatsappPhone: employeeResult.rows[0]?.primary_phone || null,
   };
 }
 

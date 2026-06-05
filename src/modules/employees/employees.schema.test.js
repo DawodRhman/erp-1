@@ -3,7 +3,7 @@ import { createEmployeeSchema } from './employees.schema.js';
 
 function validPayload() {
   return {
-    employee_id: 'EMP764',
+    employee_id: 'EMP0764',
     personalInfo: {
       name: 'Frontend Employee',
       father_name: 'Parent Name',
@@ -35,6 +35,21 @@ function validPayload() {
 }
 
 describe('createEmployeeSchema', () => {
+  it('requires the EMP0001 employee id format', () => {
+    const payload = validPayload();
+    payload.employee_id = 'EMP764';
+
+    const result = createEmployeeSchema.safeParse(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toContainEqual(
+      expect.objectContaining({
+        path: ['employee_id'],
+        message: 'Employee ID must use EMP0001 format.',
+      })
+    );
+  });
+
   it('blocks date of birth before year 1900 with a user-facing message', () => {
     const payload = validPayload();
     payload.personalInfo.date_of_birth = '1899-01-01';

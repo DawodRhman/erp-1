@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import path from 'node:path';
 
 import authRoutes from './modules/auth/auth.routes.js';
 import attendanceRoutes from './modules/attendance/attendance.routes.js';
@@ -9,6 +10,7 @@ import calendarEventRoutes from './modules/calendar-events/calendar-events.route
 import announcementRoutes from './modules/announcements/announcements.routes.js';
 import notificationRoutes from './modules/notifications/notifications.routes.js';
 import dashboardMetricsRoutes from './modules/dashboard/dashboard.routes.js';
+import auditRoutes from './modules/audit/audit.routes.js';
 import { errorHandler } from './utils/errors.js';
 import employeesModuleRoutes from './modules/employees/employees.routes.js';
 import configModuleRoutes from './modules/config/config.routes.js';
@@ -39,6 +41,7 @@ app.use(
 );
 app.use(express.json());
 app.use(cookieParser());
+app.use('/uploads', express.static(path.resolve('public', 'uploads')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/attendance', attendanceRoutes);
@@ -47,6 +50,7 @@ app.use('/api/calendar-events', calendarEventRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/dashboard', dashboardMetricsRoutes);
+app.use('/api/audit', auditRoutes);
 app.use('/api/employees', employeesModuleRoutes);
 app.use('/api/config', configModuleRoutes);
 app.use('/api', penaltiesModuleRoutes);

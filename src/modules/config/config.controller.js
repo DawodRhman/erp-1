@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { sendSuccess } from '../../utils/respond.js';
 import { AppError } from '../../utils/errors.js';
+import { recordRequestActivity } from '../audit/audit.service.js';
 import {
   getEntityRecords,
   createEntityRecord,
@@ -166,6 +167,12 @@ export async function createConfigEntity(req, res, next) {
     }
 
     const record = await createEntityRecord(req.params.entity, parse.data);
+    await recordRequestActivity(req, {
+      action: 'CONFIG_ENTITY_CREATED',
+      entityType: 'config',
+      entityId: record?.id || null,
+      meta: { entity: req.params.entity, record_id: record?.id || null },
+    });
     return sendSuccess(res, record, 201);
   } catch (error) {
     return next(error);
@@ -200,6 +207,12 @@ export async function updateConfigEntity(req, res, next) {
     }
 
     const record = await updateEntityRecord(req.params.entity, req.params.id, parse.data);
+    await recordRequestActivity(req, {
+      action: 'CONFIG_ENTITY_UPDATED',
+      entityType: 'config',
+      entityId: req.params.id,
+      meta: { entity: req.params.entity, record_id: req.params.id, updated_fields: Object.keys(parse.data) },
+    });
     return sendSuccess(res, record, 200);
   } catch (error) {
     return next(error);

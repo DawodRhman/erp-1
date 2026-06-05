@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { sendSuccess } from '../../utils/respond.js';
+import { buildAuditRequestContext, recordActivityLog } from '../audit/audit.service.js';
 import * as authService from './auth.service.js';
 
 const passwordPolicy = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
@@ -62,6 +63,25 @@ export async function login(req, res, next) {
 
     res.cookie('ems_csrf', randomUUID(), authCookieOptions(req, false));
 
+    await recordActivityLog({
+      userId: user.user_id,
+      action: 'AUTH_LOGIN_SUCCESS',
+      entityType: 'auth',
+      entityId: user.employee_id,
+      meta: {
+        employee_id: user.employee_id,
+        email: user.email,
+        role_id: user.role_id,
+      },
+      requestContext: buildAuditRequestContext(req, {
+        actor_user_id: user.user_id,
+        actor_employee_id: user.employee_id,
+        actor_role_id: user.role_id,
+        actor_email: user.email,
+      }),
+      bestEffort: true,
+    });
+
     return sendSuccess(
       res,
       {
@@ -76,11 +96,37 @@ export async function login(req, res, next) {
       200
     );
   } catch (error) {
+    await recordActivityLog({
+      userId: null,
+      action: 'AUTH_LOGIN_FAILED',
+      entityType: 'auth',
+      meta: {
+        email: req.body?.email,
+        error_code: error.code || error.name || 'LOGIN_FAILED',
+      },
+      requestContext: buildAuditRequestContext(req, {
+        actor_email: req.body?.email,
+      }),
+      bestEffort: true,
+    });
     return next(error);
   }
 }
 
-export function logout(req, res) {
+export async function logout(req, res) {
+  await recordActivityLog({
+    userId: req.user?.user_id,
+    action: 'AUTH_LOGOUT',
+    entityType: 'auth',
+    entityId: req.user?.employee_id,
+    meta: {
+      employee_id: req.user?.employee_id,
+      role_id: req.user?.role_id,
+    },
+    requestContext: buildAuditRequestContext(req),
+    bestEffort: true,
+  });
+
   res.clearCookie('ems_jwt', authCookieOptions(req, true));
   res.clearCookie('ems_csrf', authCookieOptions(req, false));
   return sendSuccess(res, null, 200);
@@ -117,6 +163,19 @@ export async function changePassword(req, res, next) {
     const token = signToken(newPayload);
 
     res.cookie('ems_jwt', token, authCookieOptions(req, true));
+
+    await recordActivityLog({
+      userId: req.user.user_id,
+      action: 'AUTH_PASSWORD_CHANGED',
+      entityType: 'auth',
+      entityId: req.user.employee_id,
+      meta: {
+        employee_id: req.user.employee_id,
+        role_id: req.user.role_id,
+      },
+      requestContext: buildAuditRequestContext(req),
+      bestEffort: true,
+    });
 
     return sendSuccess(res, { message: 'Password changed.' }, 200);
   } catch (error) {

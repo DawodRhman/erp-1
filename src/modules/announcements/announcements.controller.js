@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { sendSuccess } from '../../utils/respond.js';
 import * as announcementsService from './announcements.service.js';
+import { recordRequestActivity } from '../audit/audit.service.js';
 
 const announcementSchema = z.object({
   title: z.string().min(1).max(255),
@@ -50,6 +51,12 @@ export async function createAnnouncement(req, res, next) {
       ...parsed.data,
       userId: req.user.user_id,
     });
+    await recordRequestActivity(req, {
+      action: 'ANNOUNCEMENT_CREATED',
+      entityType: 'announcements',
+      entityId: result?.id || null,
+      meta: { announcement_id: result?.id || null, title: result?.title || parsed.data.title },
+    });
     return sendSuccess(res, result, 201);
   } catch (error) {
     return next(error);
@@ -75,6 +82,12 @@ export async function updateAnnouncement(req, res, next) {
       parsed.data,
       req.user.user_id
     );
+    await recordRequestActivity(req, {
+      action: 'ANNOUNCEMENT_UPDATED',
+      entityType: 'announcements',
+      entityId: req.params.id,
+      meta: { announcement_id: req.params.id, updated_fields: Object.keys(parsed.data) },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);

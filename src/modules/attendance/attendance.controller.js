@@ -1,5 +1,6 @@
 import { sendSuccess } from '../../utils/respond.js';
 import * as attendanceService from './attendance.service.js';
+import { recordRequestActivity } from '../audit/audit.service.js';
 
 export async function getAttendanceSheet(req, res, next) {
   try {
@@ -23,6 +24,11 @@ export async function saveAttendanceSheet(req, res, next) {
       req.body.rows,
       req.user.user_id
     );
+    await recordRequestActivity(req, {
+      action: 'ATTENDANCE_SHEET_SAVED',
+      entityType: 'attendance',
+      meta: { date: req.body.date, location_id: req.body.location_id, row_count: req.body.rows?.length || 0 },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
@@ -35,6 +41,12 @@ export async function acknowledgeAttendance(req, res, next) {
       req.params.id,
       req.user.employee_id
     );
+    await recordRequestActivity(req, {
+      action: 'ATTENDANCE_ACKNOWLEDGED',
+      entityType: 'attendance',
+      entityId: req.params.id,
+      meta: { attendance_id: req.params.id, employee_id: req.user.employee_id },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
@@ -48,6 +60,11 @@ export async function submitSheetToHO(req, res, next) {
       req.body.location_id,
       req.user.user_id
     );
+    await recordRequestActivity(req, {
+      action: 'ATTENDANCE_SHEET_SUBMITTED',
+      entityType: 'attendance',
+      meta: { date: req.body.date, location_id: req.body.location_id },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
@@ -62,6 +79,11 @@ export async function requestUnlock(req, res, next) {
       req.body.reason,
       req.user.user_id
     );
+    await recordRequestActivity(req, {
+      action: 'ATTENDANCE_UNLOCK_REQUESTED',
+      entityType: 'attendance',
+      meta: { date: req.body.date, location_id: req.body.location_id, reason: req.body.reason || null },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
@@ -76,6 +98,11 @@ export async function approveUnlock(req, res, next) {
       req.user.user_id,
       req.body.unlock_reason
     );
+    await recordRequestActivity(req, {
+      action: 'ATTENDANCE_UNLOCK_APPROVED',
+      entityType: 'attendance',
+      meta: { date: req.body.date, location_id: req.body.location_id, unlock_reason: req.body.unlock_reason || null },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);

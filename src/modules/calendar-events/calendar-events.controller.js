@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { sendSuccess } from '../../utils/respond.js';
 import * as calendarEventsService from './calendar-events.service.js';
+import { recordRequestActivity } from '../audit/audit.service.js';
 
 const eventBaseSchema = z.object({
   type: z.string().min(1),
@@ -83,6 +84,12 @@ export async function createCalendarEvent(req, res, next) {
     }
 
     const result = await calendarEventsService.createCalendarEvent(parsed.data, req.user.user_id);
+    await recordRequestActivity(req, {
+      action: 'CALENDAR_EVENT_CREATED',
+      entityType: 'calendar_events',
+      entityId: result?.id || null,
+      meta: { event_id: result?.id || null, title: result?.title || parsed.data.title },
+    });
     return sendSuccess(res, result, 201);
   } catch (error) {
     return next(error);
@@ -108,6 +115,12 @@ export async function updateCalendarEvent(req, res, next) {
       parsed.data,
       req.user.user_id
     );
+    await recordRequestActivity(req, {
+      action: 'CALENDAR_EVENT_UPDATED',
+      entityType: 'calendar_events',
+      entityId: req.params.id,
+      meta: { event_id: req.params.id, updated_fields: Object.keys(parsed.data) },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);

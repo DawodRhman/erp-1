@@ -4,6 +4,7 @@ const query = vi.hoisted(() => vi.fn());
 const clientQuery = vi.hoisted(() => vi.fn());
 const release = vi.hoisted(() => vi.fn());
 const initializeBalances = vi.hoisted(() => vi.fn());
+const recordActivityLog = vi.hoisted(() => vi.fn());
 
 vi.mock('../../config/db.js', () => ({
   default: {
@@ -19,6 +20,10 @@ vi.mock('../auth/auth.service.js', () => ({
 
 vi.mock('../leave/leave.service.js', () => ({
   initializeBalances,
+}));
+
+vi.mock('../audit/audit.service.js', () => ({
+  recordActivityLog,
 }));
 
 async function loadService() {
@@ -258,6 +263,124 @@ describe('createEmployee', () => {
           message: 'An account with this email already exists.',
         },
       ],
+    });
+  });
+});
+
+describe('employee profile photo fields', () => {
+  beforeEach(() => {
+    query.mockReset();
+    clientQuery.mockReset();
+    release.mockReset();
+    recordActivityLog.mockReset();
+    recordActivityLog.mockResolvedValue(null);
+  });
+
+  it('selects the latest profile photo url in the employee list', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ total: 0 }], rowCount: 1 });
+
+    const { getEmployees } = await loadService();
+    await getEmployees({ page: 1, limit: 20 });
+
+    expect(query.mock.calls[0][0]).toContain('profile_photo_url');
+    expect(query.mock.calls[0][0]).toContain('public.employee_attachments');
+    expect(query.mock.calls[0][0]).toContain("kind = 'profile_photo'");
+  });
+
+  it('selects the latest profile photo url in employee detail', async () => {
+    query
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            employee_id: 'EMP0001',
+            name: 'Super Admin',
+            profile_photo_url: '/uploads/employees/EMP0001/profile/photo.png',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+    const { getEmployeeById } = await loadService();
+    const employee = await getEmployeeById('EMP0001');
+
+    expect(query.mock.calls[0][0]).toContain('profile_photo_url');
+    expect(query.mock.calls[0][0]).toContain('public.employee_attachments');
+    expect(employee.profile_photo_url).toBe('/uploads/employees/EMP0001/profile/photo.png');
+  });
+});
+
+describe('createEmployeeAccount', () => {
+  beforeEach(() => {
+    query.mockReset();
+    clientQuery.mockReset();
+    release.mockReset();
+    recordActivityLog.mockReset();
+    recordActivityLog.mockResolvedValue(null);
+  });
+
+  it('creates a login account for an existing employee without a user', async () => {
+    query
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ employee_id: 'EMP0201', primary_phone: '03001234567' }],
+      })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'role-1' }] })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ id: 'user-1', email: 'emp0201@example.com', employee_id: 'EMP0201' }],
+      });
+
+    const { createEmployeeAccount } = await loadService();
+    const result = await createEmployeeAccount('EMP0201', {
+      email: 'emp0201@example.com',
+      role_id: 'role-1',
+    }, 'creator-user-id');
+
+    expect(query.mock.calls[4][0]).toContain('INSERT INTO public.users');
+    expect(query.mock.calls[4][1]).toEqual([
+      'EMP0201',
+      'emp0201@example.com',
+      'hashed-password',
+      'role-1',
+    ]);
+    expect(result.tempPassword).toBe('TempPass123!');
+    expect(result.whatsappPhone).toBe('03001234567');
+    expect(result.user.email).toBe('emp0201@example.com');
+    expect(recordActivityLog).toHaveBeenCalledWith({
+      userId: 'creator-user-id',
+      action: 'EMPLOYEE_ACCOUNT_CREATED',
+      entityType: 'employee',
+      entityId: 'EMP0201',
+      meta: {
+        employee_id: 'EMP0201',
+        account_user_id: 'user-1',
+        email: 'emp0201@example.com',
+        role_id: 'role-1',
+      },
+      requestContext: {},
+      bestEffort: true,
+    });
+  });
+
+  it('rejects account creation when the employee already has a user', async () => {
+    query
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ employee_id: 'EMP0201' }] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'existing-user' }] });
+
+    const { createEmployeeAccount } = await loadService();
+
+    await expect(createEmployeeAccount('EMP0201', {
+      email: 'emp0201@example.com',
+      role_id: 'role-1',
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'ACCOUNT_EXISTS',
     });
   });
 });

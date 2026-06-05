@@ -4,7 +4,7 @@
  * Covers FK-safe seeding for Electronic Safety & Security Pvt. Ltd (ESSPL),
  * operational window 2020-01-01 .. 2026-05-12.
  *
- * Employee IDs match backend generator: EMP001 … EMP100 (see employees.service.js).
+ * Employee IDs match backend generator: EMP0001 … EMP0100 (see employees.service.js).
  *
  * Usage:
  *   node seeds/master_seed.js
@@ -34,6 +34,8 @@ const PERMISSION_KEYS = [
   ['employees:self_read', 'View own employee profile'],
   ['employees:read', 'View employee records'],
   ['employees:write', 'Create / update employees'],
+  ['employee_attachments:read', 'Read employee attachments'],
+  ['employee_attachments:upload', 'Upload employee attachments'],
   ['salary:read', 'Read salary'],
   ['salary:write', 'Salary revisions'],
   ['allowances:read', 'Read allowances'],
@@ -466,6 +468,8 @@ async function seedViaPool(client) {
     'config:write',
     'employees:read',
     'employees:write',
+    'employee_attachments:read',
+    'employee_attachments:upload',
     'salary:read',
     'salary:write',
     'allowances:read',
@@ -499,6 +503,8 @@ async function seedViaPool(client) {
   await wireRole('hr_executive', [
     'config:read',
     'employees:read',
+    'employee_attachments:read',
+    'employee_attachments:upload',
     'leave:read',
     'attendance:read',
     'attendance:write',

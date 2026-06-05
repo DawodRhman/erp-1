@@ -771,14 +771,14 @@ export async function seedEmployeesAndHR(client, ctx) {
 
   const evRows = [];
   for (let y = 2020; y <= 2026; y++) {
-    evRows.push(['holiday', `${y}-03-23`, `Pakistan Day ${y}`, hrUid, null]);
-    evRows.push(['holiday', `${y}-08-14`, `Independence Day ${y}`, hrUid, null]);
-    evRows.push(['event', `${y}-12-15`, `Annual Performance Review ${y}`, hrUid, null]);
+    evRows.push(['holiday', `${y}-03-23`, `${y}-03-23`, `${y}-03-23`, `Pakistan Day ${y}`, hrUid, null]);
+    evRows.push(['holiday', `${y}-08-14`, `${y}-08-14`, `${y}-08-14`, `Independence Day ${y}`, hrUid, null]);
+    evRows.push(['event', `${y}-12-15`, `${y}-12-15`, `${y}-12-15`, `Annual Performance Review ${y}`, hrUid, null]);
   }
   await batchInsert(
     client,
-    `INSERT INTO calendar_events (type, date, title, created_by, updated_by)`,
-    ['type', 'date', 'title', 'created_by', 'updated_by'],
+    `INSERT INTO calendar_events (type, date, start_date, end_date, title, created_by, updated_by)`,
+    ['type', 'date', 'start_date', 'end_date', 'title', 'created_by', 'updated_by'],
     evRows
   );
 

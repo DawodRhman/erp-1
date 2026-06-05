@@ -8,7 +8,7 @@ export function mulberry32(a) {
 }
 
 export function padEmp(n) {
-  return `EMP${String(n).padStart(3, '0')}`;
+  return `EMP${String(n).padStart(4, '0')}`;
 }
 
 export function fmtDate(d) {

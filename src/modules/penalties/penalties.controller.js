@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { sendSuccess } from '../../utils/respond.js';
 import { AppError } from '../../utils/errors.js';
 import * as penaltiesService from './penalties.service.js';
+import { recordRequestActivity } from '../audit/audit.service.js';
 
 const ruleSchema = z.object({
   name: z.string().min(1),
@@ -49,6 +50,12 @@ export async function createPenaltyRule(req, res, next) {
       ...parsed.data,
       created_by: req.user.user_id,
     });
+    await recordRequestActivity(req, {
+      action: 'PENALTY_RULE_CREATED',
+      entityType: 'penalty_rules',
+      entityId: result?.id || null,
+      meta: { rule_id: result?.id || null, name: result?.name || parsed.data.name },
+    });
     return sendSuccess(res, result, 201);
   } catch (error) {
     return next(error);
@@ -70,6 +77,12 @@ export async function updatePenaltyRule(req, res, next) {
     }
 
     const result = await penaltiesService.updatePenaltyRule(req.params.id, parsed.data);
+    await recordRequestActivity(req, {
+      action: 'PENALTY_RULE_UPDATED',
+      entityType: 'penalty_rules',
+      entityId: req.params.id,
+      meta: { rule_id: req.params.id, updated_fields: Object.keys(parsed.data) },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
@@ -115,6 +128,12 @@ export async function proposePenalty(req, res, next) {
       ...parsed.data,
       proposed_by: req.user.user_id,
     });
+    await recordRequestActivity(req, {
+      action: 'PENALTY_PROPOSED',
+      entityType: 'penalties',
+      entityId: result?.id || null,
+      meta: { penalty_id: result?.id || null, employee_id: parsed.data.employee_id, rule_id: parsed.data.rule_id },
+    });
 
     return sendSuccess(res, result, 201);
   } catch (error) {
@@ -125,6 +144,12 @@ export async function proposePenalty(req, res, next) {
 export async function approvePenalty(req, res, next) {
   try {
     const result = await penaltiesService.approvePenalty(req.params.id, req.user.user_id);
+    await recordRequestActivity(req, {
+      action: 'PENALTY_APPROVED',
+      entityType: 'penalties',
+      entityId: req.params.id,
+      meta: { penalty_id: req.params.id },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
@@ -146,6 +171,12 @@ export async function rejectPenalty(req, res, next) {
     }
 
     const result = await penaltiesService.rejectPenalty(req.params.id, req.user.user_id, parsed.data.reviewNote);
+    await recordRequestActivity(req, {
+      action: 'PENALTY_REJECTED',
+      entityType: 'penalties',
+      entityId: req.params.id,
+      meta: { penalty_id: req.params.id, review_note: parsed.data.reviewNote },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
@@ -158,6 +189,12 @@ export async function acknowledgePenalty(req, res, next) {
       req.params.id,
       req.user.employee_id
     );
+    await recordRequestActivity(req, {
+      action: 'PENALTY_ACKNOWLEDGED',
+      entityType: 'penalties',
+      entityId: req.params.id,
+      meta: { penalty_id: req.params.id, employee_id: req.user.employee_id },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);

@@ -10,10 +10,23 @@ import {
   updateJobInfo,
   updateExtraInfo,
   resendCredentials,
+  createEmployeeAccount,
   addSalaryRevision,
   updateAllowances,
   getFinanceHistory,
 } from './employees.controller.js';
+import {
+  bulkUpload,
+  downloadBulkTemplate,
+  importBulkEmployeesController,
+  revalidateBulkEmployeeRows,
+  validateBulkEmployees,
+} from './employees.bulk.controller.js';
+import {
+  attachmentUpload,
+  getEmployeeAttachments,
+  uploadAttachment,
+} from './employees.attachments.controller.js';
 import {
   createEmployeeSchema,
   updatePersonalInfoSchema,
@@ -21,6 +34,7 @@ import {
   updateExtraInfoSchema,
   salaryRevisionSchema,
   updateAllowancesSchema,
+  createEmployeeAccountSchema,
 } from './employees.schema.js';
 
 const router = Router();
@@ -32,7 +46,39 @@ router.get(
   requirePermissionOrSelf('employees:read', 'employees:self_read', { paramKey: null }),
   getEmployees
 );
+router.get(
+  '/bulk/template',
+  requirePermission('employees:write'),
+  downloadBulkTemplate
+);
+router.post(
+  '/bulk/validate',
+  requirePermission('employees:write'),
+  bulkUpload.single('file'),
+  validateBulkEmployees
+);
+router.post(
+  '/bulk/revalidate',
+  requirePermission('employees:write'),
+  revalidateBulkEmployeeRows
+);
+router.post(
+  '/bulk/import',
+  requirePermission('employees:write'),
+  importBulkEmployeesController
+);
 router.get('/:employeeId', requirePermissionOrSelf('employees:read', 'employees:self_read'), getEmployeeById);
+router.get(
+  '/:employeeId/attachments',
+  requirePermissionOrSelf('employee_attachments:read', 'employees:self_read'),
+  getEmployeeAttachments
+);
+router.post(
+  '/:employeeId/attachments',
+  requirePermission('employee_attachments:upload'),
+  attachmentUpload.single('file'),
+  uploadAttachment
+);
 router.post('/', requirePermission('employees:write'), validate(createEmployeeSchema), createEmployee);
 router.patch(
   '/:employeeId/personal',
@@ -56,6 +102,12 @@ router.post(
   '/:employeeId/resend-credentials',
   requirePermission('employees:write'),
   resendCredentials
+);
+router.post(
+  '/:employeeId/account',
+  requirePermission('employees:write'),
+  validate(createEmployeeAccountSchema),
+  createEmployeeAccount
 );
 
 // Finance Routes

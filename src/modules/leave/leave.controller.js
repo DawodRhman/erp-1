@@ -1,5 +1,6 @@
 import { sendSuccess } from '../../utils/respond.js';
 import * as leaveService from './leave.service.js';
+import { recordRequestActivity } from '../audit/audit.service.js';
 
 export async function getLeaveRequests(req, res, next) {
   try {
@@ -35,6 +36,12 @@ export async function submitLeaveRequest(req, res, next) {
       ...req.body,
       created_by: req.user.user_id,
     });
+    await recordRequestActivity(req, {
+      action: 'LEAVE_REQUEST_SUBMITTED',
+      entityType: 'leave',
+      entityId: result?.id || null,
+      meta: { employee_id: req.user.employee_id, leave_request_id: result?.id || null },
+    });
     return sendSuccess(res, result, 201);
   } catch (error) {
     if (error.code === 'CAPACITY_EXCEEDED' && error.details) {
@@ -47,6 +54,12 @@ export async function submitLeaveRequest(req, res, next) {
 export async function approveLeave(req, res, next) {
   try {
     const result = await leaveService.approveLeave(req.params.id, req.user.user_id);
+    await recordRequestActivity(req, {
+      action: 'LEAVE_REQUEST_APPROVED',
+      entityType: 'leave',
+      entityId: req.params.id,
+      meta: { leave_request_id: req.params.id },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
@@ -56,6 +69,12 @@ export async function approveLeave(req, res, next) {
 export async function rejectLeave(req, res, next) {
   try {
     const result = await leaveService.rejectLeave(req.params.id, req.user.user_id, req.body.reason);
+    await recordRequestActivity(req, {
+      action: 'LEAVE_REQUEST_REJECTED',
+      entityType: 'leave',
+      entityId: req.params.id,
+      meta: { leave_request_id: req.params.id, reason: req.body.reason || null },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
@@ -65,6 +84,12 @@ export async function rejectLeave(req, res, next) {
 export async function earlyReturn(req, res, next) {
   try {
     const result = await leaveService.earlyReturn(req.params.id, req.user.user_id);
+    await recordRequestActivity(req, {
+      action: 'LEAVE_EARLY_RETURN_RECORDED',
+      entityType: 'leave',
+      entityId: req.params.id,
+      meta: { leave_request_id: req.params.id },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
@@ -103,6 +128,11 @@ export async function getMyLeaveBalances(req, res, next) {
 export async function initializeYearlyLeaveBalances(req, res, next) {
   try {
     const result = await leaveService.initializeYearlyBalances(req.body.year);
+    await recordRequestActivity(req, {
+      action: 'LEAVE_BALANCES_INITIALIZED',
+      entityType: 'leave_balances',
+      meta: { year: req.body.year, created_count: Array.isArray(result) ? result.length : undefined },
+    });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
