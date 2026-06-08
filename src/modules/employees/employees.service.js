@@ -1298,7 +1298,7 @@ export async function updateAllowances(employeeId, allowances, createdByUserId) 
               is_active,
               created_by
             )
-            VALUES ($1, $2, $3, $4, true, true, $5)
+            VALUES ($1, $2, $3, $4, true, $5, $6)
             RETURNING *
           `,
           [
@@ -1306,6 +1306,7 @@ export async function updateAllowances(employeeId, allowances, createdByUserId) 
             allowance.allowance_type_id,
             allowance.amount,
             allowance.is_percentage || false,
+            allowance.is_active !== false,
             createdByUserId,
           ]
         );

@@ -433,3 +433,60 @@ describe('createEmployeeAccount', () => {
     expect(result.employeeId).toBe('EMP0201');
   });
 });
+
+describe('updateAllowances', () => {
+  beforeEach(() => {
+    query.mockReset();
+    clientQuery.mockReset();
+    release.mockReset();
+  });
+
+  it('persists active and inactive allowance states while creating history rows', async () => {
+    clientQuery
+      .mockResolvedValueOnce({}) // BEGIN
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }) // archive current
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'allowance-history-1',
+            employee_id: 'EMP0201',
+            allowance_type_id: '11111111-1111-4111-8111-111111111111',
+            amount: '2500',
+            is_percentage: true,
+            is_current: true,
+            is_active: false,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}); // COMMIT
+
+    const { updateAllowances } = await loadService();
+    const result = await updateAllowances(
+      'EMP0201',
+      [
+        {
+          allowance_type_id: '11111111-1111-4111-8111-111111111111',
+          amount: 2500,
+          is_percentage: true,
+          is_active: false,
+        },
+      ],
+      'creator-user-id'
+    );
+
+    const insertCall = clientQuery.mock.calls.find(([sql]) =>
+      sql.includes('INSERT INTO public.employee_allowances')
+    );
+
+    expect(insertCall[0]).toContain('is_active');
+    expect(insertCall[1]).toEqual([
+      'EMP0201',
+      '11111111-1111-4111-8111-111111111111',
+      2500,
+      true,
+      false,
+      'creator-user-id',
+    ]);
+    expect(result[0]).toMatchObject({ is_active: false, is_current: true });
+  });
+});

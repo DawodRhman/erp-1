@@ -115,6 +115,7 @@ const allowanceItemSchema = z.object({
   allowance_type_id: z.string().uuid(),
   amount: z.number().nonnegative(),
   is_percentage: z.boolean().default(false),
+  is_active: z.boolean().default(true),
 });
 
 const medicalInfoSchema = z.object({

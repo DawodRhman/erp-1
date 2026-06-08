@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEmployeeSchema } from './employees.schema.js';
+import { createEmployeeSchema, updateAllowancesSchema } from './employees.schema.js';
 
 function validPayload() {
   return {
@@ -230,5 +230,37 @@ describe('createEmployeeSchema', () => {
     payload.bankInfo.account_number = '1234567890123456789012345678901'; // 31 chars
     const resultMaxAccount = createEmployeeSchema.safeParse(payload);
     expect(resultMaxAccount.success).toBe(false);
+  });
+});
+
+describe('updateAllowancesSchema', () => {
+  it('accepts active and inactive allowance rows', () => {
+    const result = updateAllowancesSchema.safeParse({
+      allowances: [
+        {
+          allowance_type_id: '11111111-1111-4111-8111-111111111111',
+          amount: 2500,
+          is_percentage: false,
+          is_active: false,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data.allowances[0].is_active).toBe(false);
+  });
+
+  it('defaults allowance rows to active when not provided', () => {
+    const result = updateAllowancesSchema.safeParse({
+      allowances: [
+        {
+          allowance_type_id: '11111111-1111-4111-8111-111111111111',
+          amount: 2500,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data.allowances[0].is_active).toBe(true);
   });
 });
