@@ -311,6 +311,34 @@ describe('employee profile photo fields', () => {
     expect(query.mock.calls[0][0]).toContain('public.employee_attachments');
     expect(employee.profile_photo_url).toBe('/uploads/employees/EMP0001/profile/photo.png');
   });
+
+  it('returns account email in employee detail for profile display', async () => {
+    query
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            employee_id: 'EMP0113',
+            name: 'Bulk Test Employee 0111',
+            account_email: 'bulk0113@example.com',
+            account_user_id: 'user-113',
+            account_role_id: 'role-employee',
+            account_must_change_password: true,
+            primary_phone: '03007000111',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+    const { getEmployeeById } = await loadService();
+    const employee = await getEmployeeById('EMP0113');
+
+    expect(query.mock.calls[0][0]).toContain('u.email AS account_email');
+    expect(query.mock.calls[0][0]).toContain('LEFT JOIN public.users u ON u.employee_id = ei.employee_id');
+    expect(employee.accountInfo.email).toBe('bulk0113@example.com');
+    expect(employee.email).toBe('bulk0113@example.com');
+  });
 });
 
 describe('createEmployeeAccount', () => {
@@ -351,6 +379,8 @@ describe('createEmployeeAccount', () => {
     ]);
     expect(result.tempPassword).toBe('TempPass123!');
     expect(result.whatsappPhone).toBe('03001234567');
+    expect(result.email).toBe('emp0201@example.com');
+    expect(result.employeeId).toBe('EMP0201');
     expect(result.user.email).toBe('emp0201@example.com');
     expect(recordActivityLog).toHaveBeenCalledWith({
       userId: 'creator-user-id',
@@ -382,5 +412,24 @@ describe('createEmployeeAccount', () => {
       statusCode: 409,
       code: 'ACCOUNT_EXISTS',
     });
+  });
+
+  it('returns email and phone when resending credentials', async () => {
+    query
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ id: 'user-1', email: 'emp0201@example.com', employee_id: 'EMP0201', primary_phone: '03001234567' }],
+      })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] });
+
+    const { resendCredentials } = await loadService();
+    const result = await resendCredentials('EMP0201');
+
+    expect(query.mock.calls[0][0]).toContain('SELECT u.id');
+    expect(query.mock.calls[0][0]).toContain('u.email');
+    expect(result.tempPassword).toBe('TempPass123!');
+    expect(result.whatsappPhone).toBe('03001234567');
+    expect(result.email).toBe('emp0201@example.com');
+    expect(result.employeeId).toBe('EMP0201');
   });
 });

@@ -536,6 +536,10 @@ export async function getEmployeeById(employeeId) {
         em.blood_group, em.date_of_birth AS medical_dob, em.gender, em.height_cm, em.weight_kg, em.has_disability, em.disability_type, em.disability_description,
         em.has_chronic_condition, em.chronic_condition_notes, em.has_known_allergies, em.allergy_notes, em.emergency_medication, em.fitness_status,
         em.last_medical_exam_date, em.next_medical_exam_date,
+        u.id AS account_user_id,
+        u.email AS account_email,
+        u.role_id AS account_role_id,
+        u.must_change_password AS account_must_change_password,
         photo.file_path AS profile_photo_url
       FROM public.employee_info ei
       LEFT JOIN public.job_info ji ON ji.employee_id = ei.employee_id
@@ -550,6 +554,7 @@ export async function getEmployeeById(employeeId) {
       LEFT JOIN public.emergency_contacts ec ON ec.employee_id = ei.employee_id
       LEFT JOIN public.employee_bank_accounts eba ON eba.employee_id = ei.employee_id
       LEFT JOIN public.employee_medical em ON em.employee_id = ei.employee_id
+      LEFT JOIN public.users u ON u.employee_id = ei.employee_id
       LEFT JOIN LATERAL (
         SELECT ea.file_path
         FROM public.employee_attachments ea
@@ -600,6 +605,13 @@ export async function getEmployeeById(employeeId) {
       revision_type: salaryResult.rows[0].revision_type,
       revision_percent: salaryResult.rows[0].revision_percent,
       revision_reason: salaryResult.rows[0].revision_reason
+    } : null,
+    email: row.account_email || row.email || null,
+    accountInfo: row.account_email ? {
+      id: row.account_user_id,
+      email: row.account_email,
+      role_id: row.account_role_id,
+      must_change_password: row.account_must_change_password,
     } : null,
     allowances: allowancesResult.rows,
     employeeContact: row.primary_phone ? {
@@ -685,6 +697,7 @@ export async function getEmployeeById(employeeId) {
     'blood_group', 'medical_dob', 'gender', 'height_cm', 'weight_kg', 'has_disability', 'disability_type', 'disability_description',
     'has_chronic_condition', 'chronic_condition_notes', 'has_known_allergies', 'allergy_notes', 'emergency_medication', 'fitness_status',
     'last_medical_exam_date', 'next_medical_exam_date'
+    , 'account_user_id', 'account_email', 'account_role_id', 'account_must_change_password'
   ];
   
   fieldsToRemove.forEach(field => delete employee[field]);
@@ -1083,7 +1096,7 @@ export async function updateMedicalInfo(employeeId, data) {
 export async function resendCredentials(employeeId) {
   const userResult = await pool.query(
     `
-      SELECT u.id, empc.primary_phone
+      SELECT u.id, u.email, u.employee_id, empc.primary_phone
       FROM public.users u
       LEFT JOIN public.employee_contacts empc ON empc.employee_id = u.employee_id
       WHERE u.employee_id = $1
@@ -1113,6 +1126,8 @@ export async function resendCredentials(employeeId) {
 
   return {
     tempPassword,
+    email: userResult.rows[0]?.email || null,
+    employeeId: userResult.rows[0]?.employee_id || employeeId,
     whatsappPhone: userResult.rows[0]?.primary_phone || null,
   };
 }
@@ -1193,6 +1208,8 @@ export async function createEmployeeAccount(employeeId, data, createdByUserId, r
   return {
     user,
     tempPassword,
+    email: user?.email || data.email,
+    employeeId: user?.employee_id || employeeId,
     whatsappPhone: employeeResult.rows[0]?.primary_phone || null,
   };
 }
