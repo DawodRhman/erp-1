@@ -157,6 +157,14 @@ export async function getLeaveBalancesAll({ department_id, location_id, shift_id
       SELECT
         ei.employee_id,
         ei.name,
+        (
+          SELECT ea.file_path
+          FROM public.employee_attachments ea
+          WHERE ea.employee_id = ei.employee_id
+            AND ea.kind = 'profile_photo'
+          ORDER BY ea.created_at DESC
+          LIMIT 1
+        ) AS profile_photo_url,
         d.department_name,
         ji.work_location_id,
         ji.shift_id,
@@ -179,6 +187,42 @@ export async function getLeaveBalancesAll({ department_id, location_id, shift_id
   );
 
   return rows.rows;
+}
+
+export async function getLeaveBalanceSummary(filters = {}) {
+  const rows = await getLeaveBalancesAll(filters);
+  const employees = new Map();
+
+  for (const row of rows) {
+    const allocated = Number(row.balance ?? 0);
+    const used = Number(row.used ?? 0);
+    const remaining = Number(row.remaining ?? allocated - used);
+    const current = employees.get(row.employee_id) || {
+      employee_id: row.employee_id,
+      employee_name: row.name || row.employee_id,
+      department_name: row.department_name || null,
+      profile_photo_url: row.profile_photo_url || null,
+      year: row.year,
+      total_allocated: 0,
+      total_used: 0,
+      total_remaining: 0,
+      leave_types: [],
+    };
+
+    current.total_allocated += allocated;
+    current.total_used += used;
+    current.total_remaining += remaining;
+    current.leave_types.push({
+      leave_type_id: row.leave_type_id,
+      leave_type_name: row.leave_type_name,
+      allocated,
+      used,
+      remaining,
+    });
+    employees.set(row.employee_id, current);
+  }
+
+  return Array.from(employees.values());
 }
 
 export async function initializeBalances(employeeId, year, { db = pool } = {}) {

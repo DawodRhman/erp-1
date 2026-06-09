@@ -139,6 +139,20 @@ export async function initializeYearlyLeaveBalances(req, res, next) {
   }
 }
 
+export async function getLeaveBalanceSummary(req, res, next) {
+  try {
+    const result = await leaveService.getLeaveBalanceSummary({
+      department_id: req.query.department_id,
+      location_id: req.query.location_id,
+      shift_id: req.query.shift_id,
+      year: req.query.year ? Number(req.query.year) : undefined,
+    });
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function getLeaveCalendar(req, res, next) {
   try {
     const roleName = await leaveService.getRoleName(req.user.role_id);

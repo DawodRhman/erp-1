@@ -116,4 +116,53 @@ describe('leave balance entitlement initialization', () => {
     expect(query.mock.calls[0][0]).toContain('reviewer_user.email');
     expect(query.mock.calls[0][0]).not.toContain('reviewer_emp.name AS reviewed_by_name');
   });
+
+  it('aggregates leave balances into one summary row per employee', async () => {
+    query.mockResolvedValueOnce({
+      rows: [
+        {
+          employee_id: 'EMP001',
+          name: 'Adeel Rahman',
+          department_name: 'Administration',
+          profile_photo_url: '/uploads/employees/EMP001/profile/photo.png',
+          leave_type_id: 'annual-id',
+          leave_type_name: 'Annual Leave',
+          balance: '12',
+          used: '4',
+          remaining: '8',
+          year: 2026,
+        },
+        {
+          employee_id: 'EMP001',
+          name: 'Adeel Rahman',
+          department_name: 'Administration',
+          profile_photo_url: '/uploads/employees/EMP001/profile/photo.png',
+          leave_type_id: 'sick-id',
+          leave_type_name: 'Sick Leave',
+          balance: '10',
+          used: '2',
+          remaining: '8',
+          year: 2026,
+        },
+      ],
+    });
+
+    const { getLeaveBalanceSummary } = await loadService();
+    const result = await getLeaveBalanceSummary({ year: 2026 });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        employee_id: 'EMP001',
+        employee_name: 'Adeel Rahman',
+        total_allocated: 22,
+        total_used: 6,
+        total_remaining: 16,
+        leave_types: [
+          expect.objectContaining({ leave_type_name: 'Annual Leave', remaining: 8 }),
+          expect.objectContaining({ leave_type_name: 'Sick Leave', remaining: 8 }),
+        ],
+      }),
+    ]);
+    expect(query.mock.calls[0][0]).toContain('profile_photo_url');
+  });
 });

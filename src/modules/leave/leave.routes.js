@@ -11,6 +11,7 @@ import {
   rejectLeave,
   earlyReturn,
   getLeaveBalances,
+  getLeaveBalanceSummary,
   getMyLeaveBalances,
   initializeYearlyLeaveBalances,
   getLeaveCalendar,
@@ -51,6 +52,7 @@ router.patch(
   rejectLeave
 );
 router.patch('/:id/early-return', requirePermission('leave:approve'), validateParams(uuidParamSchema), earlyReturn);
+router.get('/balances/summary', requirePermission('leave:read'), getLeaveBalanceSummary);
 router.get('/balances', requirePermission('leave:read'), getLeaveBalances);
 router.get('/balances/mine', getMyLeaveBalances);
 router.post(
