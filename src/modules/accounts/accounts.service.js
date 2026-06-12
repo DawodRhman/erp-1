@@ -14,6 +14,9 @@ function mapAccount(row) {
     role_id: row.role_id,
     role_name: row.role_name || null,
     role_description: row.role_description || null,
+    department_id: row.department_id || null,
+    department_name: row.department_name || null,
+    designation_title: row.designation_title || null,
     employee_name: row.employee_name || null,
     linked_employee: row.employee_id
       ? `${row.employee_name || 'Employee'} (${row.employee_id})`
@@ -26,7 +29,44 @@ function mapAccount(row) {
   };
 }
 
-export async function listAccounts() {
+export async function listAccounts(filters = {}) {
+  const whereParts = [];
+  const params = [];
+
+  const search = String(filters.search || '').trim();
+  const roleId = String(filters.role_id || '').trim();
+  const departmentId = String(filters.department_id || '').trim();
+  const status = String(filters.status || 'all').trim().toLowerCase();
+
+  if (search) {
+    params.push(`%${search}%`);
+    whereParts.push(`(
+      u.email ILIKE $${params.length}
+      OR ei.name ILIKE $${params.length}
+      OR ei.employee_id ILIKE $${params.length}
+      OR r.role_name ILIKE $${params.length}
+      OR dep.department_name ILIKE $${params.length}
+      OR dsg.title ILIKE $${params.length}
+    )`);
+  }
+
+  if (roleId) {
+    params.push(roleId);
+    whereParts.push(`u.role_id = $${params.length}`);
+  }
+
+  if (departmentId) {
+    params.push(departmentId);
+    whereParts.push(`ji.department_id = $${params.length}`);
+  }
+
+  if (status === 'active' || status === 'inactive') {
+    params.push(status === 'active');
+    whereParts.push(`COALESCE(u.is_active, true) = $${params.length}`);
+  }
+
+  const whereSql = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+
   const result = await pool.query(
     `
       SELECT
@@ -40,15 +80,23 @@ export async function listAccounts() {
         u.updated_at,
         r.role_name,
         r.description AS role_description,
-        ei.name AS employee_name
+        ei.name AS employee_name,
+        ji.department_id,
+        dep.department_name,
+        dsg.title AS designation_title
       FROM public.users u
       LEFT JOIN public.roles r ON r.id = u.role_id
       LEFT JOIN public.employee_info ei ON ei.employee_id = u.employee_id
+      LEFT JOIN public.job_info ji ON ji.employee_id = u.employee_id
+      LEFT JOIN public.departments dep ON dep.id = ji.department_id
+      LEFT JOIN public.designations dsg ON dsg.id = ji.designation_id
+      ${whereSql}
       ORDER BY
         CASE WHEN r.role_name = 'super_admin' THEN 0 ELSE 1 END,
         r.role_name ASC NULLS LAST,
         u.email ASC
-    `
+    `,
+    params
   );
 
   return result.rows.map(mapAccount);

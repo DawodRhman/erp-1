@@ -54,6 +54,25 @@ describe('accounts service', () => {
     expect(query.mock.calls[0][0]).toContain('LEFT JOIN public.employee_info');
   });
 
+  it('applies search, department, role, and status filters when listing accounts', async () => {
+    query.mockResolvedValueOnce({ rows: [] });
+
+    const { listAccounts } = await loadService();
+    await listAccounts({
+      search: 'ifrah',
+      role_id: 'role-1',
+      department_id: 'dept-1',
+      status: 'inactive',
+    });
+
+    const [sql, params] = query.mock.calls[0];
+    expect(sql).toContain('u.email ILIKE');
+    expect(sql).toContain('u.role_id =');
+    expect(sql).toContain('ji.department_id =');
+    expect(sql).toContain('COALESCE(u.is_active, true) =');
+    expect(params).toEqual(['%ifrah%', 'role-1', 'dept-1', false]);
+  });
+
   it('blocks deactivating the protected super admin account', async () => {
     query.mockResolvedValueOnce({
       rowCount: 1,

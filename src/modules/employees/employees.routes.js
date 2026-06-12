@@ -124,7 +124,7 @@ router.post(
 // Finance Routes
 router.get(
   '/:employeeId/finance',
-  requirePermission('salary:read'),
+  requirePermissionOrSelf('salary:read', 'employees:self_read'),
   getFinanceHistory
 );
 

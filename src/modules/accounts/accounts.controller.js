@@ -12,6 +12,25 @@ const credentialTemplateSchema = z.object({
   template: z.string().trim().min(1).max(2000),
 });
 
+const listAccountsQuerySchema = z.object({
+  search: z.preprocess(
+    (value) => (typeof value === 'string' ? value.trim() : value),
+    z.string().min(1).max(120).optional()
+  ),
+  role_id: z.preprocess(
+    (value) => (typeof value === 'string' ? value.trim() : value),
+    z.string().min(1).max(100).optional()
+  ),
+  department_id: z.preprocess(
+    (value) => (typeof value === 'string' ? value.trim() : value),
+    z.string().min(1).max(100).optional()
+  ),
+  status: z.preprocess(
+    (value) => (typeof value === 'string' ? value.trim().toLowerCase() : value),
+    z.enum(['all', 'active', 'inactive']).default('all')
+  ),
+});
+
 function parseBody(schema, body) {
   const result = schema.safeParse(body || {});
   if (!result.success) {
@@ -22,7 +41,8 @@ function parseBody(schema, body) {
 
 export async function listAccounts(req, res, next) {
   try {
-    const result = await accountsService.listAccounts();
+    const query = listAccountsQuerySchema.parse(req.query || {});
+    const result = await accountsService.listAccounts(query);
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
