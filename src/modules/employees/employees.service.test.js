@@ -314,7 +314,7 @@ describe('employee profile photo fields', () => {
     ]);
   });
 
-  it('filters employee detail by Department Head scope and hides sensitive sections', async () => {
+  it('filters employee detail by Department Head scope without truncating profile data', async () => {
     query
       .mockResolvedValueOnce({
         rowCount: 1,
@@ -324,8 +324,13 @@ describe('employee profile photo fields', () => {
           department_id: 'dept-engineering',
           work_location_id: 'location-lahore',
           account_email: 'private@example.com',
+          account_user_id: 'user-10',
+          account_role_id: 'role-head',
+          account_is_active: true,
+          account_must_change_password: false,
           bank_name: 'Private Bank',
           blood_group: 'O+',
+          primary_phone: '03001234567',
         }],
       })
       .mockResolvedValueOnce({ rows: [], rowCount: 0 })
@@ -341,10 +346,10 @@ describe('employee profile photo fields', () => {
 
     expect(query.mock.calls[0][0]).toContain('ji.department_id = $2');
     expect(query.mock.calls[0][0]).toContain('ji.work_location_id = $3');
-    expect(employee.accountInfo).toBeUndefined();
-    expect(employee.bankInfo).toBeUndefined();
-    expect(employee.medicalInfo).toBeUndefined();
-    expect(employee.salaryInfo).toBeUndefined();
+    expect(employee.accountInfo.email).toBe('private@example.com');
+    expect(employee.employeeContact.primary_phone).toBe('03001234567');
+    expect(employee.bankInfo.bank_name).toBe('Private Bank');
+    expect(employee.medicalInfo.blood_group).toBe('O+');
   });
 
   it('selects the latest profile photo url in employee detail', async () => {

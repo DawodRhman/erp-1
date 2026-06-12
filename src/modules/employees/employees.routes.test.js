@@ -10,7 +10,7 @@ describe('employees finance route permissions', () => {
 
     expect(permissionMiddleware?.__perm).toEqual({
       mode: 'any',
-      keys: ['salary:read', 'employees:self_read'],
+      keys: ['salary:read', 'employees:department_read', 'employees:self_read'],
     });
   });
 });

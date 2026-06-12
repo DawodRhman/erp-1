@@ -561,6 +561,7 @@ export async function getEmployeeById(employeeId, { scope = null } = {}) {
         u.id AS account_user_id,
         u.email AS account_email,
         u.role_id AS account_role_id,
+        COALESCE(u.is_active, true) AS account_is_active,
         u.must_change_password AS account_must_change_password,
         photo.file_path AS profile_photo_url
       FROM public.employee_info ei
@@ -602,40 +603,6 @@ export async function getEmployeeById(employeeId, { scope = null } = {}) {
 
   const row = result.rows[0];
 
-  if (scope) {
-    const employee = {
-      employee_id: row.employee_id,
-      name: row.name,
-      father_name: row.father_name,
-      cnic: row.cnic,
-      date_of_birth: row.date_of_birth,
-      department_id: row.department_id,
-      department_name: row.department_name,
-      department_code: row.department_code,
-      designation_id: row.designation_id,
-      designation_title: row.designation_title,
-      employment_type_id: row.employment_type_id,
-      employment_type_name: row.employment_type_name,
-      job_status_id: row.job_status_id,
-      job_status_name: row.job_status_name,
-      work_mode_id: row.work_mode_id,
-      work_mode_name: row.work_mode_name,
-      work_location_id: row.work_location_id,
-      work_location_name: row.work_location_name,
-      shift_id: row.shift_id,
-      shift_name: row.shift_name,
-      shift_start_time: row.shift_start_time,
-      shift_end_time: row.shift_end_time,
-      late_after_minutes: row.late_after_minutes,
-      date_of_joining: row.date_of_joining,
-      date_of_exit: row.date_of_exit,
-      probation_end_date: row.probation_end_date,
-      contract_end_date: row.contract_end_date,
-      profile_photo_url: row.profile_photo_url,
-    };
-    return employee;
-  }
-
   const salaryResult = await pool.query(
     `
       SELECT * FROM public.employee_salary
@@ -671,6 +638,7 @@ export async function getEmployeeById(employeeId, { scope = null } = {}) {
       id: row.account_user_id,
       email: row.account_email,
       role_id: row.account_role_id,
+      is_active: row.account_is_active,
       must_change_password: row.account_must_change_password,
     } : null,
     allowances: allowancesResult.rows,

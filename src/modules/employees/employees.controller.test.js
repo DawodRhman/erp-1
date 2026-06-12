@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const getEmployeeById = vi.hoisted(() => vi.fn());
 const getEmployeesService = vi.hoisted(() => vi.fn());
 const resolveDepartmentScope = vi.hoisted(() => vi.fn());
+const assertEmployeeInScope = vi.hoisted(() => vi.fn());
 
 vi.mock('./employees.service.js', () => ({
   getEmployeeById,
@@ -11,6 +12,7 @@ vi.mock('./employees.service.js', () => ({
 
 vi.mock('../department-scope/department-scope.service.js', () => ({
   resolveDepartmentScope,
+  assertEmployeeInScope,
 }));
 
 function mockResponse() {
@@ -28,7 +30,9 @@ describe('employees controller self-service', () => {
     getEmployeeById.mockReset();
     getEmployeesService.mockReset();
     resolveDepartmentScope.mockReset();
+    assertEmployeeInScope.mockReset();
     resolveDepartmentScope.mockResolvedValue(null);
+    assertEmployeeInScope.mockResolvedValue(undefined);
   });
 
   it('returns the caller employee record when the route is self-scoped', async () => {
@@ -107,5 +111,33 @@ describe('employees controller self-service', () => {
         work_location_id: null,
       },
     }));
+  });
+
+  it('checks department scope before returning finance history', async () => {
+    resolveDepartmentScope.mockResolvedValueOnce({
+      department_id: 'backend-dept',
+      work_location_id: 'head-office',
+    });
+
+    const { getFinanceHistory } = await import('./employees.controller.js');
+    const req = {
+      params: { employeeId: 'EMP0035' },
+      permissionScope: 'all',
+      user: {
+        user_id: 'user-34',
+        employee_id: 'EMP0034',
+        role_id: 'department-head-role',
+      },
+    };
+    const res = mockResponse();
+    const next = vi.fn();
+
+    await getFinanceHistory(req, res, next);
+
+    expect(resolveDepartmentScope).toHaveBeenCalled();
+    expect(assertEmployeeInScope).toHaveBeenCalledWith('EMP0035', {
+      department_id: 'backend-dept',
+      work_location_id: null,
+    });
   });
 });

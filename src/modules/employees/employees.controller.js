@@ -1,7 +1,7 @@
 import * as employeesService from './employees.service.js';
 import { sendSuccess } from '../../utils/respond.js';
 import { buildAuditRequestContext, recordRequestActivity } from '../audit/audit.service.js';
-import { resolveDepartmentScope } from '../department-scope/department-scope.service.js';
+import { assertEmployeeInScope, resolveDepartmentScope } from '../department-scope/department-scope.service.js';
 
 function withoutLocationScope(scope) {
   return scope ? { ...scope, work_location_id: null } : null;
@@ -191,6 +191,18 @@ export async function updateAllowances(req, res, next) {
 
 export async function getFinanceHistory(req, res, next) {
   try {
+    const scope = req.permissionScope === 'self'
+      ? null
+      : withoutLocationScope(await resolveDepartmentScope({
+          roleId: req.user.role_id,
+          userId: req.user.user_id,
+          employeeId: req.user.employee_id,
+        }));
+
+    if (scope) {
+      await assertEmployeeInScope(req.params.employeeId, scope);
+    }
+
     const result = await employeesService.getEmployeeFinanceHistory(req.params.employeeId);
     return sendSuccess(res, result, 200);
   } catch (error) {
