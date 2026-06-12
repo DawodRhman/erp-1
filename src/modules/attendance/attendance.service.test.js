@@ -126,4 +126,50 @@ describe('attendance self-service', () => {
     expect(result.rows[0].date).toBe('2026-05-22');
     expect(query.mock.calls[1][1]).toEqual(['2026-05-22', 'EMP521']);
   });
+
+  it('filters Department Head attendance by assigned department and location', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ role_name: 'department_head' }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const { getAttendanceSheet } = await loadService();
+    await getAttendanceSheet(
+      '2026-06-09',
+      'location-lahore',
+      'EMP0020',
+      'role-head',
+      {
+        department_id: 'dept-engineering',
+        work_location_id: 'location-lahore',
+      }
+    );
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[1][0]).toContain('ji.department_id = $3');
+    expect(query.mock.calls[1][1]).toEqual([
+      '2026-06-09',
+      'location-lahore',
+      'dept-engineering',
+    ]);
+  });
+
+  it('rejects a Department Head request for another work location', async () => {
+    query.mockResolvedValueOnce({ rows: [{ role_name: 'department_head' }] });
+
+    const { getAttendanceSheet } = await loadService();
+
+    await expect(getAttendanceSheet(
+      '2026-06-09',
+      'location-karachi',
+      'EMP0020',
+      'role-head',
+      {
+        department_id: 'dept-engineering',
+        work_location_id: 'location-lahore',
+      }
+    )).rejects.toMatchObject({
+      statusCode: 403,
+      code: 'OUTSIDE_DEPARTMENT_SCOPE',
+    });
+  });
 });

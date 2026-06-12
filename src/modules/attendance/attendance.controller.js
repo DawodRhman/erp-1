@@ -1,14 +1,21 @@
 import { sendSuccess } from '../../utils/respond.js';
 import * as attendanceService from './attendance.service.js';
 import { recordRequestActivity } from '../audit/audit.service.js';
+import { resolveDepartmentScope } from '../department-scope/department-scope.service.js';
 
 export async function getAttendanceSheet(req, res, next) {
   try {
+    const scope = await resolveDepartmentScope({
+      roleId: req.user.role_id,
+      userId: req.user.user_id,
+      employeeId: req.user.employee_id,
+    });
     const result = await attendanceService.getAttendanceSheet(
       req.query.date,
       req.query.location_id,
       req.user.employee_id,
-      req.user.role_id
+      req.user.role_id,
+      scope
     );
     return sendSuccess(res, result, 200);
   } catch (error) {
@@ -114,6 +121,11 @@ export async function getMonthlyReport(req, res, next) {
     const now = new Date();
     const year = Number(req.query.year);
     const month = Number(req.query.month);
+    const scope = await resolveDepartmentScope({
+      roleId: req.user.role_id,
+      userId: req.user.user_id,
+      employeeId: req.user.employee_id,
+    });
 
     const result = await attendanceService.getMonthlyReport(
       Number.isNaN(year) ? now.getFullYear() : year,
@@ -124,7 +136,8 @@ export async function getMonthlyReport(req, res, next) {
         department_id: req.query.department_id,
       },
       req.user.employee_id,
-      req.user.role_id
+      req.user.role_id,
+      scope
     );
     return sendSuccess(res, result, 200);
   } catch (error) {

@@ -289,6 +289,64 @@ describe('employee profile photo fields', () => {
     expect(query.mock.calls[0][0]).toContain("kind = 'profile_photo'");
   });
 
+  it('filters employee lists by Department Head department and location scope', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ total: 0 }], rowCount: 1 });
+
+    const { getEmployees } = await loadService();
+    await getEmployees({
+      page: 1,
+      limit: 20,
+      scope: {
+        department_id: 'dept-engineering',
+        work_location_id: 'location-lahore',
+      },
+    });
+
+    expect(query.mock.calls[0][0]).toContain('ji.department_id = $1');
+    expect(query.mock.calls[0][0]).toContain('ji.work_location_id = $2');
+    expect(query.mock.calls[0][1]).toEqual([
+      'dept-engineering',
+      'location-lahore',
+      20,
+      0,
+    ]);
+  });
+
+  it('filters employee detail by Department Head scope and hides sensitive sections', async () => {
+    query
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{
+          employee_id: 'EMP0010',
+          name: 'Scoped Employee',
+          department_id: 'dept-engineering',
+          work_location_id: 'location-lahore',
+          account_email: 'private@example.com',
+          bank_name: 'Private Bank',
+          blood_group: 'O+',
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+    const { getEmployeeById } = await loadService();
+    const employee = await getEmployeeById('EMP0010', {
+      scope: {
+        department_id: 'dept-engineering',
+        work_location_id: 'location-lahore',
+      },
+    });
+
+    expect(query.mock.calls[0][0]).toContain('ji.department_id = $2');
+    expect(query.mock.calls[0][0]).toContain('ji.work_location_id = $3');
+    expect(employee.accountInfo).toBeUndefined();
+    expect(employee.bankInfo).toBeUndefined();
+    expect(employee.medicalInfo).toBeUndefined();
+    expect(employee.salaryInfo).toBeUndefined();
+  });
+
   it('selects the latest profile photo url in employee detail', async () => {
     query
       .mockResolvedValueOnce({

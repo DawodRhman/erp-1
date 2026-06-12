@@ -182,6 +182,19 @@ export async function seedEmployeesAndHR(client, ctx) {
   const medRows = [];
   const salaryRows = [];
   const userMeta = [];
+  const departmentHeadByDept = new Map();
+  profiles.forEach((profile, index) => {
+    const empId = padEmp(index + 1);
+    if (
+      !departmentHeadByDept.has(profile.deptId) &&
+      empId !== padEmp(1) &&
+      empId !== hrManagerEmpId &&
+      empId !== hrExecEmpId
+    ) {
+      departmentHeadByDept.set(profile.deptId, empId);
+    }
+  });
+  const departmentHeadEmpIds = new Set(departmentHeadByDept.values());
 
   for (let i = 1; i <= EMPLOYEE_COUNT; i++) {
     const empId = padEmp(i);
@@ -357,6 +370,7 @@ export async function seedEmployeesAndHR(client, ctx) {
     if (i === 1) roleId = superAdminRoleId;
     else if (empId === hrManagerEmpId) roleId = hrManagerRoleId;
     else if (empId === hrExecEmpId) roleId = hrExecRoleId;
+    else if (departmentHeadEmpIds.has(empId) && roleIds.department_head) roleId = roleIds.department_head;
 
     let emailLocal = name.toLowerCase().replace(/[^a-z]+/g, '.').replace(/^\.+|\.+$/g, '');
     if (emailLocal) emailLocal = `${emailLocal}.${empId.toLowerCase()}`;
@@ -502,6 +516,25 @@ export async function seedEmployeesAndHR(client, ctx) {
   const uidByEmp = Object.fromEntries(userRowsDb.rows.map((r) => [r.employee_id, r.id]));
   const hrUid = uidByEmp[hrManagerEmpId];
   const hrExecUid = uidByEmp[hrExecEmpId];
+
+  const departmentHeadRows = [];
+  for (const empId of departmentHeadEmpIds) {
+    const index = Number(empId.replace('EMP', '')) - 1;
+    const ji = jobRows[index];
+    const userId = uidByEmp[empId];
+    if (userId && ji) {
+      departmentHeadRows.push([userId, ji[1], ji[6], ji[8], null, true, hrUid]);
+    }
+  }
+  if (departmentHeadRows.length > 0) {
+    await batchInsert(
+      client,
+      `INSERT INTO department_head_assignments (user_id, department_id, work_location_id, effective_from, effective_to, is_active, assigned_by)`,
+      ['user_id', 'department_id', 'work_location_id', 'effective_from', 'effective_to', 'is_active', 'assigned_by'],
+      departmentHeadRows
+    );
+    console.log(`  department_head_assignments ${departmentHeadRows.length}`);
+  }
 
   await client.query(`UPDATE employee_medical SET updated_by = $1 WHERE updated_by IS NULL`, [hrUid]);
   await client.query(

@@ -68,8 +68,39 @@ export function requirePermission(permissionKey) {
   return middleware;
 }
 
+export function requireAnyPermission(...permissionKeys) {
+  const keys = permissionKeys.flat().filter(Boolean);
+  const middleware = async (req, res, next) => {
+    try {
+      const roleId = req.user?.role_id;
+
+      if (!roleId) {
+        return sendError(res, 'UNAUTHORIZED', 'Authentication required.', 401);
+      }
+
+      const roleName = await getRoleName(roleId);
+      if (roleName === 'super_admin') {
+        return next();
+      }
+
+      const permissions = await getPermissionsForRole(roleId);
+      if (!keys.some((key) => permissions.has(key))) {
+        return sendError(res, 'FORBIDDEN', 'Insufficient permissions.', 403);
+      }
+
+      return next();
+    } catch (error) {
+      return next(error);
+    }
+  };
+
+  middleware.__perm = { mode: 'any', keys };
+  return middleware;
+}
+
 export function requirePermissionOrSelf(permissionKey, selfPermissionKey, options = {}) {
   const { paramKey = 'employeeId' } = options;
+  const fullPermissionKeys = Array.isArray(permissionKey) ? permissionKey : [permissionKey];
 
   const middleware = async (req, res, next) => {
     try {
@@ -85,7 +116,7 @@ export function requirePermissionOrSelf(permissionKey, selfPermissionKey, option
       }
 
       const permissions = await getPermissionsForRole(roleId);
-      if (permissions.has(permissionKey)) {
+      if (fullPermissionKeys.some((key) => permissions.has(key))) {
         req.permissionScope = 'all';
         return next();
       }
@@ -108,6 +139,6 @@ export function requirePermissionOrSelf(permissionKey, selfPermissionKey, option
     }
   };
 
-  middleware.__perm = { mode: 'any', keys: [permissionKey, selfPermissionKey] };
+  middleware.__perm = { mode: 'any', keys: [...fullPermissionKeys, selfPermissionKey] };
   return middleware;
 }

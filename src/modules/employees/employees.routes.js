@@ -43,7 +43,11 @@ router.use(verifyToken);
 
 router.get(
   '/',
-  requirePermissionOrSelf('employees:read', 'employees:self_read', { paramKey: null }),
+  requirePermissionOrSelf(
+    ['employees:read', 'employees:department_read'],
+    'employees:self_read',
+    { paramKey: null }
+  ),
   getEmployees
 );
 router.get(
@@ -67,7 +71,14 @@ router.post(
   requirePermission('employees:write'),
   importBulkEmployeesController
 );
-router.get('/:employeeId', requirePermissionOrSelf('employees:read', 'employees:self_read'), getEmployeeById);
+router.get(
+  '/:employeeId',
+  requirePermissionOrSelf(
+    ['employees:read', 'employees:department_read'],
+    'employees:self_read'
+  ),
+  getEmployeeById
+);
 router.get(
   '/:employeeId/attachments',
   requirePermissionOrSelf('employee_attachments:read', 'employees:self_read'),

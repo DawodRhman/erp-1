@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const query = vi.hoisted(() => vi.fn());
+const connect = vi.hoisted(() => vi.fn());
 
 vi.mock('../../config/db.js', () => ({
-  default: { query },
-  pool: { query },
+  default: { query, connect },
+  pool: { query, connect },
 }));
 
 async function loadService() {
@@ -15,6 +16,7 @@ async function loadService() {
 describe('leave balance entitlement initialization', () => {
   beforeEach(() => {
     query.mockReset();
+    connect.mockReset();
   });
 
   it('prorates joining-year entitlement by remaining calendar days and rounds to whole days', async () => {
@@ -115,6 +117,73 @@ describe('leave balance entitlement initialization', () => {
     expect(query.mock.calls[0][0]).toContain('COALESCE(reviewer_emp.name');
     expect(query.mock.calls[0][0]).toContain('reviewer_user.email');
     expect(query.mock.calls[0][0]).not.toContain('reviewer_emp.name AS reviewed_by_name');
+  });
+
+  it('filters leave requests by Department Head department and location scope', async () => {
+    query.mockResolvedValueOnce({ rows: [] });
+
+    const { getLeaveRequests } = await loadService();
+    await getLeaveRequests({
+      scope: {
+        department_id: 'dept-engineering',
+        work_location_id: 'location-lahore',
+      },
+    });
+
+    expect(query.mock.calls[0][0]).toContain('ji.department_id = $1');
+    expect(query.mock.calls[0][0]).toContain('ji.work_location_id = $2');
+    expect(query.mock.calls[0][1]).toEqual(['dept-engineering', 'location-lahore']);
+  });
+
+  it('blocks Department Head approval outside assigned leave scope', async () => {
+    const client = {
+      query: vi.fn(),
+      release: vi.fn(),
+    };
+    connect.mockResolvedValueOnce(client);
+    client.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+      rowCount: 1,
+      rows: [{ employee_id: 'EMP0099', department_id: 'dept-sales', work_location_id: 'loc-karachi' }],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const { approveLeave } = await loadService();
+
+    await expect(
+      approveLeave('leave-id', 'reviewer-id', {
+        department_id: 'dept-engineering',
+        work_location_id: 'loc-lahore',
+      })
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      code: 'OUTSIDE_DEPARTMENT_SCOPE',
+    });
+    expect(client.query).toHaveBeenCalledTimes(3);
+    expect(client.query.mock.calls[2][0]).toBe('ROLLBACK');
+    expect(client.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('forces leave balance filters to the Department Head scope', async () => {
+    query.mockResolvedValueOnce({ rows: [] });
+
+    const { getLeaveBalancesAll } = await loadService();
+    await getLeaveBalancesAll({
+      department_id: 'untrusted-department',
+      location_id: 'untrusted-location',
+      year: 2026,
+      scope: {
+        department_id: 'dept-engineering',
+        work_location_id: 'location-lahore',
+      },
+    });
+
+    expect(query.mock.calls[0][1]).toEqual([
+      2026,
+      'dept-engineering',
+      'location-lahore',
+    ]);
   });
 
   it('aggregates leave balances into one summary row per employee', async () => {

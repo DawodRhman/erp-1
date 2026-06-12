@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { sendSuccess } from '../../utils/respond.js';
 import * as announcementsService from './announcements.service.js';
 import { recordRequestActivity } from '../audit/audit.service.js';
+import { resolveDepartmentScope } from '../department-scope/department-scope.service.js';
 
 const announcementSchema = z.object({
   title: z.string().min(1).max(255),
@@ -15,6 +16,14 @@ const announcementSchema = z.object({
 });
 
 const announcementPatchSchema = announcementSchema.partial();
+
+function getRequestScope(req) {
+  return resolveDepartmentScope({
+    roleId: req.user.role_id,
+    userId: req.user.user_id,
+    employeeId: req.user.employee_id,
+  });
+}
 
 export async function getAnnouncements(req, res, next) {
   try {
@@ -47,9 +56,11 @@ export async function createAnnouncement(req, res, next) {
       });
     }
 
+    const scope = await getRequestScope(req);
     const result = await announcementsService.createAnnouncement({
       ...parsed.data,
       userId: req.user.user_id,
+      scope,
     });
     await recordRequestActivity(req, {
       action: 'ANNOUNCEMENT_CREATED',
@@ -77,10 +88,12 @@ export async function updateAnnouncement(req, res, next) {
       });
     }
 
+    const scope = await getRequestScope(req);
     const result = await announcementsService.updateAnnouncement(
       req.params.id,
       parsed.data,
-      req.user.user_id
+      req.user.user_id,
+      scope
     );
     await recordRequestActivity(req, {
       action: 'ANNOUNCEMENT_UPDATED',

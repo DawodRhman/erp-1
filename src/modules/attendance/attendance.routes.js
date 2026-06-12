@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { verifyToken } from '../../middleware/auth.js';
-import { requirePermission } from '../../middleware/require-permission.js';
+import { requireAnyPermission, requirePermission } from '../../middleware/require-permission.js';
 import { validate, validateParams } from '../../middleware/validate.js';
 import {
   getAttendanceSheet,
@@ -54,7 +54,7 @@ const approveUnlockSchema = z.object({
 
 router.use(verifyToken);
 
-router.get('/', requirePermission('attendance:read'), getAttendanceSheet);
+router.get('/', requireAnyPermission('attendance:read', 'attendance:department_read'), getAttendanceSheet);
 router.put('/save', requirePermission('attendance:write'), validate(saveSheetSchema), saveAttendanceSheet);
 router.post('/submit', requirePermission('attendance:submit_ho'), validate(submitSchema), submitSheetToHO);
 router.post(
@@ -70,6 +70,6 @@ router.post(
   approveUnlock
 );
 router.patch('/:id/ack', validateParams(uuidParamSchema), acknowledgeAttendance);
-router.get('/report', requirePermission('attendance:read'), getMonthlyReport);
+router.get('/report', requireAnyPermission('attendance:read', 'attendance:department_read'), getMonthlyReport);
 
 export default router;

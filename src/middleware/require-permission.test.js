@@ -94,6 +94,29 @@ describe('requirePermissionOrSelf', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
+  it('accepts any scoped full-read permission while preserving self-only enforcement', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ role_name: 'department_head' }] })
+      .mockResolvedValueOnce({ rows: [{ permission_key: 'employees:department_read' }] });
+
+    const { requirePermissionOrSelf } = await loadMiddleware();
+    const middleware = requirePermissionOrSelf(
+      ['employees:read', 'employees:department_read'],
+      'employees:self_read'
+    );
+    const req = {
+      user: { role_id: 'role-head', employee_id: 'EMP0020' },
+      params: { employeeId: 'EMP0099' },
+    };
+    const res = mockResponse();
+    const next = vi.fn();
+
+    await middleware(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.permissionScope).toBe('all');
+  });
+
   it('allows a user with self-read permission through a self-scoped list route', async () => {
     query
       .mockResolvedValueOnce({ rows: [{ role_name: 'employee' }] })
@@ -114,6 +137,31 @@ describe('requirePermissionOrSelf', () => {
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(req.permissionScope).toBe('self');
+    expect(res.status).not.toHaveBeenCalled();
+  });
+});
+
+describe('requireAnyPermission', () => {
+  beforeEach(() => {
+    query.mockReset();
+  });
+
+  it('allows a role when any requested permission is assigned', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ role_name: 'department_head' }] })
+      .mockResolvedValueOnce({
+        rows: [{ permission_key: 'employees:department_read' }],
+      });
+
+    const { requireAnyPermission } = await loadMiddleware();
+    const middleware = requireAnyPermission('employees:read', 'employees:department_read');
+    const req = { user: { role_id: 'role-head' } };
+    const res = mockResponse();
+    const next = vi.fn();
+
+    await middleware(req, res, next);
+
+    expect(next).toHaveBeenCalledWith();
     expect(res.status).not.toHaveBeenCalled();
   });
 });

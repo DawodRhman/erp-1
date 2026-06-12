@@ -114,4 +114,21 @@ describe('announcements service', () => {
     expect(query.mock.calls[0][0]).toContain('viewer_job.department_id');
     expect(query.mock.calls[0][1]).toEqual(['EMP061']);
   });
+
+  it('forces Department Head announcement targets to assigned department scope', async () => {
+    query.mockResolvedValueOnce({
+      rows: [{ id: 'announcement-id', target_department_ids: ['dept-engineering'] }],
+    });
+
+    const { createAnnouncement } = await import('./announcements.service.js');
+    await createAnnouncement({
+      title: 'Scoped notice',
+      body: 'Visible only to my department',
+      target_department_ids: ['dept-sales'],
+      userId: 'user-head',
+      scope: { department_id: 'dept-engineering' },
+    });
+
+    expect(query.mock.calls[0][1][3]).toEqual(['dept-engineering']);
+  });
 });

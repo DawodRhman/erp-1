@@ -129,7 +129,7 @@ async function getEmployeeAttendanceSheet(date, employeeId) {
   };
 }
 
-export async function getAttendanceSheet(date, locationId, callerEmployeeId, roleId) {
+export async function getAttendanceSheet(date, locationId, callerEmployeeId, roleId, scope = null) {
   const selectedDate = date || new Date().toISOString().slice(0, 10);
   const roleName = await getRoleName(roleId);
 
@@ -137,7 +137,15 @@ export async function getAttendanceSheet(date, locationId, callerEmployeeId, rol
     return getEmployeeAttendanceSheet(selectedDate, callerEmployeeId);
   }
 
-  if (roleName !== 'super_admin') {
+  if (scope) {
+    if (scope.work_location_id && locationId !== scope.work_location_id) {
+      throw new AppError(
+        403,
+        'OUTSIDE_DEPARTMENT_SCOPE',
+        'Attendance location is outside your assigned department scope.'
+      );
+    }
+  } else if (roleName !== 'super_admin') {
     const callerLocation = await pool.query(
       `SELECT work_location_id FROM public.job_info WHERE employee_id = $1 LIMIT 1`,
       [callerEmployeeId]
@@ -146,6 +154,13 @@ export async function getAttendanceSheet(date, locationId, callerEmployeeId, rol
     if (callerLocation.rowCount === 0 || callerLocation.rows[0].work_location_id !== locationId) {
       throw new AppError(403, 'FORBIDDEN', 'Cannot access attendance for another location.');
     }
+  }
+
+  const attendanceParams = [selectedDate, locationId];
+  const scopeFilters = [];
+  if (scope?.department_id) {
+    attendanceParams.push(scope.department_id);
+    scopeFilters.push(`ji.department_id = $${attendanceParams.length}`);
   }
 
   const employeesResult = await pool.query(
@@ -180,9 +195,10 @@ export async function getAttendanceSheet(date, locationId, callerEmployeeId, rol
        AND lr.status = 'approved'
        AND $1::date BETWEEN lr.start_date AND COALESCE(lr.end_by_force, lr.end_date)
       WHERE ji.work_location_id = $2
+      ${scopeFilters.length ? `AND ${scopeFilters.join(' AND ')}` : ''}
       ORDER BY ei.employee_id ASC
     `,
-    [selectedDate, locationId]
+    attendanceParams
   );
 
   return {
@@ -425,7 +441,8 @@ export async function getMonthlyReport(
   locationId,
   filters = {},
   callerEmployeeId = null,
-  roleId = null
+  roleId = null,
+  scope = null
 ) {
   const roleName = roleId ? await getRoleName(roleId) : null;
   const effectiveFilters = {
@@ -434,6 +451,14 @@ export async function getMonthlyReport(
   };
   const params = [year, month];
   const whereExtra = [];
+
+  if (scope?.work_location_id && locationId && locationId !== scope.work_location_id) {
+    throw new AppError(
+      403,
+      'OUTSIDE_DEPARTMENT_SCOPE',
+      'Attendance location is outside your assigned department scope.'
+    );
+  }
 
   if (locationId) {
     params.push(locationId);
@@ -445,8 +470,9 @@ export async function getMonthlyReport(
     whereExtra.push(`ei.employee_id = $${params.length}`);
   }
 
-  if (effectiveFilters.department_id) {
-    params.push(effectiveFilters.department_id);
+  const effectiveDepartmentId = scope?.department_id || effectiveFilters.department_id;
+  if (effectiveDepartmentId) {
+    params.push(effectiveDepartmentId);
     whereExtra.push(`ji.department_id = $${params.length}`);
   }
 

@@ -39,7 +39,7 @@ export function generateTempPassword() {
 export async function login(email, password) {
   const result = await pool.query(
     `
-      SELECT id, email, employee_id, role_id, password, must_change_password
+      SELECT id, email, employee_id, role_id, password, must_change_password, COALESCE(is_active, true) AS is_active
       FROM public.users
       WHERE email = $1
       LIMIT 1
@@ -50,6 +50,10 @@ export async function login(email, password) {
   const user = result.rows[0];
   if (!user) {
     throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password.');
+  }
+
+  if (user.is_active === false) {
+    throw new AppError(403, 'ACCOUNT_INACTIVE', 'This account is inactive. Contact HR or Super Admin.');
   }
 
   const validPassword = await bcrypt.compare(password, user.password);

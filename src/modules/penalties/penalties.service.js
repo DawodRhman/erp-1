@@ -84,7 +84,27 @@ export async function updatePenaltyRule(id, data) {
   return result.rows[0];
 }
 
-export async function proposePenalty({ employee_id, rule_id, date, reason, proposed_by }) {
+export async function proposePenalty({ employee_id, rule_id, date, reason, proposed_by, scope = null }) {
+  if (scope) {
+    const employeeScope = await pool.query(
+      `
+        SELECT department_id, work_location_id
+        FROM public.job_info
+        WHERE employee_id = $1
+        LIMIT 1
+      `,
+      [employee_id]
+    );
+
+    const target = employeeScope.rows[0];
+    const matchesDepartment = target?.department_id === scope.department_id;
+    const matchesLocation = !scope.work_location_id || target?.work_location_id === scope.work_location_id;
+
+    if (!matchesDepartment || !matchesLocation) {
+      throw new AppError(403, 'OUTSIDE_DEPARTMENT_SCOPE', 'Employee is outside your assigned department scope.');
+    }
+  }
+
   const rule = await pool.query(
     `SELECT * FROM public.penalty_rules WHERE id = $1 AND is_active = true LIMIT 1`,
     [rule_id]
@@ -267,6 +287,16 @@ export async function listPenalties(filters = {}) {
     where.push(`ep.employee_id = $${params.length}`);
   }
 
+  if (filters.scope?.department_id) {
+    params.push(filters.scope.department_id);
+    where.push(`ji.department_id = $${params.length}`);
+  }
+
+  if (filters.scope?.work_location_id) {
+    params.push(filters.scope.work_location_id);
+    where.push(`ji.work_location_id = $${params.length}`);
+  }
+
   const result = await pool.query(
     `
       SELECT
@@ -274,10 +304,13 @@ export async function listPenalties(filters = {}) {
         pr.name AS rule_name,
         COALESCE(ep.applied_amount_pkr, pr.amount_pkr) AS amount_pkr,
         pr.type,
-        ei.name AS employee_name
+        ei.name AS employee_name,
+        ji.department_id,
+        ji.work_location_id
       FROM public.employee_penalties ep
       JOIN public.penalty_rules pr ON pr.id = ep.rule_id
       JOIN public.employee_info ei ON ei.employee_id = ep.employee_id
+      JOIN public.job_info ji ON ji.employee_id = ep.employee_id
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
       ORDER BY ep.created_at DESC
     `,

@@ -49,6 +49,35 @@ async function getEmployeeContext(employeeId, db = pool) {
   return result.rows[0];
 }
 
+async function assertLeaveInScope(leaveId, scope, db = pool) {
+  if (!scope) return null;
+
+  const result = await db.query(
+    `
+      SELECT lr.employee_id, ji.department_id, ji.work_location_id
+      FROM public.leave_requests lr
+      JOIN public.job_info ji ON ji.employee_id = lr.employee_id
+      WHERE lr.id = $1
+      LIMIT 1
+    `,
+    [leaveId]
+  );
+
+  if (result.rowCount === 0) {
+    throw new AppError(404, 'NOT_FOUND', 'Leave request not found.');
+  }
+
+  const target = result.rows[0];
+  const matchesDepartment = target.department_id === scope.department_id;
+  const matchesLocation = !scope.work_location_id || target.work_location_id === scope.work_location_id;
+
+  if (!matchesDepartment || !matchesLocation) {
+    throw new AppError(403, 'OUTSIDE_DEPARTMENT_SCOPE', 'Leave request is outside your assigned department scope.');
+  }
+
+  return target;
+}
+
 export async function getRoleName(roleId) {
   const result = await pool.query(
     `SELECT role_name FROM public.roles WHERE id = $1 LIMIT 1`,
@@ -81,7 +110,7 @@ export async function getLeaveBalances(employeeId) {
   return result.rows;
 }
 
-export async function getLeaveRequests({ status, employee_id, department_id } = {}) {
+export async function getLeaveRequests({ status, employee_id, department_id, scope = null } = {}) {
   const params = [];
   const filters = [];
 
@@ -95,9 +124,15 @@ export async function getLeaveRequests({ status, employee_id, department_id } = 
     filters.push(`lr.employee_id = $${params.length}`);
   }
 
-  if (department_id) {
-    params.push(department_id);
+  const effectiveDepartmentId = scope?.department_id || department_id;
+  if (effectiveDepartmentId) {
+    params.push(effectiveDepartmentId);
     filters.push(`ji.department_id = $${params.length}`);
+  }
+
+  if (scope?.work_location_id) {
+    params.push(scope.work_location_id);
+    filters.push(`ji.work_location_id = $${params.length}`);
   }
 
   const result = await pool.query(
@@ -132,18 +167,20 @@ export async function getMyLeaveRequests(employeeId) {
   return getLeaveRequests({ employee_id: employeeId });
 }
 
-export async function getLeaveBalancesAll({ department_id, location_id, shift_id, year }) {
+export async function getLeaveBalancesAll({ department_id, location_id, shift_id, year, scope = null }) {
   const selectedYear = year || new Date().getFullYear();
   const params = [selectedYear];
   const extraFilters = [];
 
-  if (department_id) {
-    params.push(department_id);
+  const effectiveDepartmentId = scope?.department_id || department_id;
+  if (effectiveDepartmentId) {
+    params.push(effectiveDepartmentId);
     extraFilters.push(`ji.department_id = $${params.length}`);
   }
 
-  if (location_id) {
-    params.push(location_id);
+  const effectiveLocationId = scope?.work_location_id || location_id;
+  if (effectiveLocationId) {
+    params.push(effectiveLocationId);
     extraFilters.push(`ji.work_location_id = $${params.length}`);
   }
 
@@ -484,10 +521,11 @@ export async function submitLeaveRequest(employeeId, data) {
   return created.rows[0];
 }
 
-export async function approveLeave(leaveId, reviewedByUserId) {
+export async function approveLeave(leaveId, reviewedByUserId, scope = null) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await assertLeaveInScope(leaveId, scope, client);
 
     const leaveResult = await client.query(
       `SELECT * FROM public.leave_requests WHERE id = $1 LIMIT 1`,
@@ -551,7 +589,9 @@ export async function approveLeave(leaveId, reviewedByUserId) {
   }
 }
 
-export async function rejectLeave(leaveId, reviewedByUserId, reason) {
+export async function rejectLeave(leaveId, reviewedByUserId, reason, scope = null) {
+  await assertLeaveInScope(leaveId, scope);
+
   const leaveResult = await pool.query(
     `SELECT * FROM public.leave_requests WHERE id = $1 LIMIT 1`,
     [leaveId]
@@ -675,17 +715,19 @@ export async function earlyReturn(leaveId, hrUserId) {
   }
 }
 
-export async function getLeaveCalendar({ month, year, department_id, branch_id, employee_id }) {
+export async function getLeaveCalendar({ month, year, department_id, branch_id, employee_id, scope = null }) {
   const params = [year, month];
   const filters = [];
 
-  if (department_id) {
-    params.push(department_id);
+  const effectiveDepartmentId = scope?.department_id || department_id;
+  if (effectiveDepartmentId) {
+    params.push(effectiveDepartmentId);
     filters.push(`ji.department_id = $${params.length}`);
   }
 
-  if (branch_id) {
-    params.push(branch_id);
+  const effectiveLocationId = scope?.work_location_id || branch_id;
+  if (effectiveLocationId) {
+    params.push(effectiveLocationId);
     filters.push(`ji.work_location_id = $${params.length}`);
   }
 

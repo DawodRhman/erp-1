@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { verifyToken } from '../../middleware/auth.js';
-import { requirePermission } from '../../middleware/require-permission.js';
+import { requireAnyPermission, requirePermission } from '../../middleware/require-permission.js';
 import { validate, validateParams } from '../../middleware/validate.js';
 import {
   getLeaveRequests,
@@ -40,20 +40,20 @@ const initializeYearSchema = z.object({
 
 router.use(verifyToken);
 
-router.get('/', requirePermission('leave:read'), getLeaveRequests);
+router.get('/', requireAnyPermission('leave:read', 'leave:department_read'), getLeaveRequests);
 router.get('/mine', getMyLeaveRequests);
-router.post('/', validate(submitLeaveSchema), submitLeaveRequest);
-router.patch('/:id/approve', requirePermission('leave:approve'), validateParams(uuidParamSchema), approveLeave);
+router.post('/', requirePermission('leave:write'), validate(submitLeaveSchema), submitLeaveRequest);
+router.patch('/:id/approve', requireAnyPermission('leave:approve', 'leave:department_approve'), validateParams(uuidParamSchema), approveLeave);
 router.patch(
   '/:id/reject',
-  requirePermission('leave:approve'),
+  requireAnyPermission('leave:approve', 'leave:department_approve'),
   validateParams(uuidParamSchema),
   validate(rejectSchema),
   rejectLeave
 );
 router.patch('/:id/early-return', requirePermission('leave:approve'), validateParams(uuidParamSchema), earlyReturn);
-router.get('/balances/summary', requirePermission('leave:read'), getLeaveBalanceSummary);
-router.get('/balances', requirePermission('leave:read'), getLeaveBalances);
+router.get('/balances/summary', requireAnyPermission('leave:read', 'leave:department_read'), getLeaveBalanceSummary);
+router.get('/balances', requireAnyPermission('leave:read', 'leave:department_read'), getLeaveBalances);
 router.get('/balances/mine', getMyLeaveBalances);
 router.post(
   '/balances/initialize-year',
@@ -61,6 +61,6 @@ router.post(
   validate(initializeYearSchema),
   initializeYearlyLeaveBalances
 );
-router.get('/calendar', requirePermission('leave:read'), getLeaveCalendar);
+router.get('/calendar', requireAnyPermission('leave:read', 'leave:department_read'), getLeaveCalendar);
 
 export default router;

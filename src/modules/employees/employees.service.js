@@ -418,6 +418,7 @@ export async function getEmployees({
   is_active,
   page = 1,
   limit = 20,
+  scope = null,
 }) {
   const normalizedPage = Math.max(Number(page) || 1, 1);
   const normalizedLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
@@ -425,6 +426,16 @@ export async function getEmployees({
 
   const whereParts = [];
   const params = [];
+
+  if (scope?.department_id) {
+    params.push(scope.department_id);
+    whereParts.push(`ji.department_id = $${params.length}`);
+  }
+
+  if (scope?.work_location_id) {
+    params.push(scope.work_location_id);
+    whereParts.push(`ji.work_location_id = $${params.length}`);
+  }
 
   if (search) {
     params.push(`%${search}%`);
@@ -495,7 +506,18 @@ export async function getEmployees({
   };
 }
 
-export async function getEmployeeById(employeeId) {
+export async function getEmployeeById(employeeId, { scope = null } = {}) {
+  const detailParams = [employeeId];
+  const scopeFilters = [];
+  if (scope?.department_id) {
+    detailParams.push(scope.department_id);
+    scopeFilters.push(`ji.department_id = $${detailParams.length}`);
+  }
+  if (scope?.work_location_id) {
+    detailParams.push(scope.work_location_id);
+    scopeFilters.push(`ji.work_location_id = $${detailParams.length}`);
+  }
+
   const result = await pool.query(
     `
       SELECT
@@ -565,17 +587,55 @@ export async function getEmployeeById(employeeId) {
         LIMIT 1
       ) photo ON true
       WHERE ei.employee_id = $1
+      ${scopeFilters.length ? `AND ${scopeFilters.join(' AND ')}` : ''}
       LIMIT 1
     `,
-    [employeeId]
+    detailParams
   );
 
   if (result.rowCount === 0) {
+    if (scope) {
+      throw new AppError(403, 'OUTSIDE_DEPARTMENT_SCOPE', 'Employee is outside your assigned department scope.');
+    }
     throw new AppError(404, 'NOT_FOUND', 'Employee not found.');
   }
 
   const row = result.rows[0];
-  
+
+  if (scope) {
+    const employee = {
+      employee_id: row.employee_id,
+      name: row.name,
+      father_name: row.father_name,
+      cnic: row.cnic,
+      date_of_birth: row.date_of_birth,
+      department_id: row.department_id,
+      department_name: row.department_name,
+      department_code: row.department_code,
+      designation_id: row.designation_id,
+      designation_title: row.designation_title,
+      employment_type_id: row.employment_type_id,
+      employment_type_name: row.employment_type_name,
+      job_status_id: row.job_status_id,
+      job_status_name: row.job_status_name,
+      work_mode_id: row.work_mode_id,
+      work_mode_name: row.work_mode_name,
+      work_location_id: row.work_location_id,
+      work_location_name: row.work_location_name,
+      shift_id: row.shift_id,
+      shift_name: row.shift_name,
+      shift_start_time: row.shift_start_time,
+      shift_end_time: row.shift_end_time,
+      late_after_minutes: row.late_after_minutes,
+      date_of_joining: row.date_of_joining,
+      date_of_exit: row.date_of_exit,
+      probation_end_date: row.probation_end_date,
+      contract_end_date: row.contract_end_date,
+      profile_photo_url: row.profile_photo_url,
+    };
+    return employee;
+  }
+
   const salaryResult = await pool.query(
     `
       SELECT * FROM public.employee_salary

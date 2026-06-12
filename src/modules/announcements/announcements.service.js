@@ -6,6 +6,29 @@ function normalizeTargetIds(value, fallback) {
   return [...new Set(source.filter(Boolean))];
 }
 
+function applyDepartmentScope(departmentIds, scope) {
+  if (!scope) return departmentIds;
+  return [scope.department_id];
+}
+
+async function assertDesignationsInDepartments(designationIds, departmentIds) {
+  if (!designationIds.length || !departmentIds.length) return;
+
+  const result = await pool.query(
+    `
+      SELECT id
+      FROM public.designations
+      WHERE id = ANY($1::uuid[])
+        AND department_id = ANY($2::uuid[])
+    `,
+    [designationIds, departmentIds]
+  );
+
+  if (result.rowCount !== designationIds.length) {
+    throw new AppError(403, 'OUTSIDE_DEPARTMENT_SCOPE', 'One or more designations are outside your assigned department scope.');
+  }
+}
+
 export async function listAnnouncements({ activeOnly = true, roleName = 'employee', all = false, employeeId } = {}) {
   const filters = [];
   const params = [];
@@ -74,9 +97,17 @@ export async function createAnnouncement({
   target_designation_ids,
   is_active,
   userId,
+  scope = null,
 }) {
-  const departmentIds = normalizeTargetIds(target_department_ids, target_department_id);
+  const departmentIds = applyDepartmentScope(
+    normalizeTargetIds(target_department_ids, target_department_id),
+    scope
+  );
   const designationIds = normalizeTargetIds(target_designation_ids, target_designation_id);
+  if (scope) {
+    await assertDesignationsInDepartments(designationIds, departmentIds);
+  }
+
   const result = await pool.query(
     `
       INSERT INTO public.announcements (
@@ -98,7 +129,7 @@ export async function createAnnouncement({
   return result.rows[0];
 }
 
-export async function updateAnnouncement(id, payload, userId) {
+export async function updateAnnouncement(id, payload, userId, scope = null) {
   const fields = [];
   const values = [];
 
@@ -107,8 +138,14 @@ export async function updateAnnouncement(id, payload, userId) {
     Object.prototype.hasOwnProperty.call(payload, 'target_department_ids') ||
     Object.prototype.hasOwnProperty.call(payload, 'target_department_id')
   ) {
-    normalizedPayload.target_department_ids = normalizeTargetIds(payload.target_department_ids, payload.target_department_id);
+    normalizedPayload.target_department_ids = applyDepartmentScope(
+      normalizeTargetIds(payload.target_department_ids, payload.target_department_id),
+      scope
+    );
     delete normalizedPayload.target_department_id;
+  }
+  if (scope && !Object.prototype.hasOwnProperty.call(normalizedPayload, 'target_department_ids')) {
+    normalizedPayload.target_department_ids = [scope.department_id];
   }
   if (
     Object.prototype.hasOwnProperty.call(payload, 'target_designation_ids') ||
@@ -116,6 +153,13 @@ export async function updateAnnouncement(id, payload, userId) {
   ) {
     normalizedPayload.target_designation_ids = normalizeTargetIds(payload.target_designation_ids, payload.target_designation_id);
     delete normalizedPayload.target_designation_id;
+  }
+
+  if (scope) {
+    await assertDesignationsInDepartments(
+      normalizeTargetIds(normalizedPayload.target_designation_ids),
+      normalizeTargetIds(normalizedPayload.target_department_ids)
+    );
   }
 
   for (const key of ['title', 'body', 'expiry_date', 'target_department_ids', 'target_designation_ids', 'is_active']) {

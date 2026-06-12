@@ -33,6 +33,7 @@ const PERMISSION_KEYS = [
   ['config:manage', 'Legacy alias — kept for parity with older seeds'],
   ['employees:self_read', 'View own employee profile'],
   ['employees:read', 'View employee records'],
+  ['employees:department_read', 'View employee records in assigned department scope'],
   ['employees:write', 'Create / update employees'],
   ['employee_attachments:read', 'Read employee attachments'],
   ['employee_attachments:upload', 'Upload employee attachments'],
@@ -41,25 +42,31 @@ const PERMISSION_KEYS = [
   ['allowances:read', 'Read allowances'],
   ['allowances:write', 'Manage allowances'],
   ['leave:read', 'Read leave'],
+  ['leave:department_read', 'Read leave in assigned department scope'],
   ['leave:write', 'Submit leave'],
   ['leave:approve', 'Approve leave'],
+  ['leave:department_approve', 'Approve leave in assigned department scope'],
   ['leave_capacity:read', 'Read leave capacity'],
   ['leave_capacity:write', 'Manage leave capacity'],
   ['attendance:read', 'Read attendance'],
+  ['attendance:department_read', 'Read attendance in assigned department scope'],
   ['attendance:write', 'Write attendance'],
   ['attendance:submit_ho', 'Submit attendance to HO'],
   ['attendance:unlock', 'Unlock attendance'],
   ['calendar:read', 'Read calendar'],
   ['calendar:write', 'Write calendar'],
+  ['calendar:department_write', 'Write calendar in assigned department scope'],
   ['notifications:read', 'Read notifications'],
   ['notifications:write', 'Create notifications'],
   ['alerts:read', 'Urgent alerts'],
   ['pending_actions:read', 'Pending actions'],
   ['dashboard:read', 'Dashboard'],
+  ['dashboard:department_read', 'Dashboard in assigned department scope'],
   ['directory:read', 'Directory read'],
   ['directory:write', 'Directory write'],
   ['announcements:read', 'Announcements read'],
   ['announcements:write', 'Announcements write'],
+  ['announcements:department_write', 'Write announcements in assigned department scope'],
   ['inventory:read', 'Inventory read'],
   ['inventory:write', 'Inventory write'],
   ['purchasing:read', 'Purchasing read'],
@@ -73,6 +80,8 @@ const PERMISSION_KEYS = [
   ['penalties:review', 'Review penalties'],
   ['penalties:read_own', 'Own penalties'],
   ['penalties:read_all', 'All penalties'],
+  ['penalties:department_read', 'Read penalties in assigned department scope'],
+  ['penalties:department_propose', 'Propose penalties in assigned department scope'],
   ['reports:read', 'Reports'],
 ];
 
@@ -439,6 +448,8 @@ async function seedViaPool(client) {
   await insertRole('super_admin', 'Full access', null);
   await insertRole('hr_manager', 'HR Manager', D.hr);
   await insertRole('hr_executive', 'HR Executive', D.hr);
+  await insertRole('department_head', 'Department Head', null);
+  await insertRole('ceo', 'Chief Executive Officer read-only access', null);
   await insertRole('it_manager', 'IT Manager', D.it);
   await insertRole('swe_manager', 'Software Engineering Manager', D.swe);
   await insertRole('tech_lead', 'Technical Lead', D.swe);
@@ -518,6 +529,47 @@ async function seedViaPool(client) {
     'announcements:read',
     'penalties:propose',
     'penalties:read_all',
+  ]);
+
+  await wireRole('department_head', [
+    'employees:self_read',
+    'employees:department_read',
+    'config:read',
+    'leave:department_read',
+    'leave:department_approve',
+    'attendance:department_read',
+    'calendar:read',
+    'calendar:department_write',
+    'notifications:read',
+    'dashboard:department_read',
+    'directory:read',
+    'announcements:read',
+    'announcements:department_write',
+    'penalties:department_read',
+    'penalties:department_propose',
+    'penalties:read_own',
+  ]);
+
+  await wireRole('ceo', [
+    'config:read',
+    'employees:read',
+    'employee_attachments:read',
+    'salary:read',
+    'allowances:read',
+    'leave:read',
+    'leave_capacity:read',
+    'attendance:read',
+    'calendar:read',
+    'notifications:read',
+    'alerts:read',
+    'pending_actions:read',
+    'dashboard:read',
+    'directory:read',
+    'announcements:read',
+    'penalties:read_all',
+    'reports:read',
+    'inventory:read',
+    'purchasing:read',
   ]);
 
   await wireRole('it_manager', ['employees:read', 'directory:read', 'calendar:read', 'notifications:read']);

@@ -11,6 +11,7 @@ import announcementRoutes from './modules/announcements/announcements.routes.js'
 import notificationRoutes from './modules/notifications/notifications.routes.js';
 import dashboardMetricsRoutes from './modules/dashboard/dashboard.routes.js';
 import auditRoutes from './modules/audit/audit.routes.js';
+import accountsRoutes from './modules/accounts/accounts.routes.js';
 import { errorHandler } from './utils/errors.js';
 import employeesModuleRoutes from './modules/employees/employees.routes.js';
 import configModuleRoutes from './modules/config/config.routes.js';
@@ -51,6 +52,7 @@ app.use('/api/announcements', announcementRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/dashboard', dashboardMetricsRoutes);
 app.use('/api/audit', auditRoutes);
+app.use('/api/accounts', accountsRoutes);
 app.use('/api/employees', employeesModuleRoutes);
 app.use('/api/config', configModuleRoutes);
 app.use('/api', penaltiesModuleRoutes);

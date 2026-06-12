@@ -1,11 +1,17 @@
 import { sendSuccess } from '../../utils/respond.js';
 import { AppError } from '../../utils/errors.js';
 import * as dashboardService from './dashboard.service.js';
+import { resolveDepartmentScope } from '../department-scope/department-scope.service.js';
 
 export async function getHRMetrics(req, res, next) {
   try {
     const range = req.query.range === '12m' ? '12m' : '6m';
-    const data = await dashboardService.getHRMetrics(range);
+    const scope = await resolveDepartmentScope({
+      roleId: req.user.role_id,
+      userId: req.user.user_id,
+      employeeId: req.user.employee_id,
+    });
+    const data = await dashboardService.getHRMetrics(range, scope);
     return sendSuccess(res, data, 200);
   } catch (error) {
     return next(error);

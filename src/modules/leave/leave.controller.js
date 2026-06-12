@@ -1,6 +1,15 @@
 import { sendSuccess } from '../../utils/respond.js';
 import * as leaveService from './leave.service.js';
 import { recordRequestActivity } from '../audit/audit.service.js';
+import { resolveDepartmentScope } from '../department-scope/department-scope.service.js';
+
+function getRequestScope(req) {
+  return resolveDepartmentScope({
+    roleId: req.user.role_id,
+    userId: req.user.user_id,
+    employeeId: req.user.employee_id,
+  });
+}
 
 export async function getLeaveRequests(req, res, next) {
   try {
@@ -10,10 +19,12 @@ export async function getLeaveRequests(req, res, next) {
       return sendSuccess(res, result, 200);
     }
 
+    const scope = await getRequestScope(req);
     const result = await leaveService.getLeaveRequests({
       status: req.query.status,
       employee_id: req.query.employee_id,
       department_id: req.query.department_id,
+      scope,
     });
     return sendSuccess(res, result, 200);
   } catch (error) {
@@ -53,7 +64,8 @@ export async function submitLeaveRequest(req, res, next) {
 
 export async function approveLeave(req, res, next) {
   try {
-    const result = await leaveService.approveLeave(req.params.id, req.user.user_id);
+    const scope = await getRequestScope(req);
+    const result = await leaveService.approveLeave(req.params.id, req.user.user_id, scope);
     await recordRequestActivity(req, {
       action: 'LEAVE_REQUEST_APPROVED',
       entityType: 'leave',
@@ -68,7 +80,8 @@ export async function approveLeave(req, res, next) {
 
 export async function rejectLeave(req, res, next) {
   try {
-    const result = await leaveService.rejectLeave(req.params.id, req.user.user_id, req.body.reason);
+    const scope = await getRequestScope(req);
+    const result = await leaveService.rejectLeave(req.params.id, req.user.user_id, req.body.reason, scope);
     await recordRequestActivity(req, {
       action: 'LEAVE_REQUEST_REJECTED',
       entityType: 'leave',
@@ -104,11 +117,13 @@ export async function getLeaveBalances(req, res, next) {
       return sendSuccess(res, result, 200);
     }
 
+    const scope = await getRequestScope(req);
     const result = await leaveService.getLeaveBalancesAll({
       department_id: req.query.department_id,
       location_id: req.query.location_id,
       shift_id: req.query.shift_id,
       year: req.query.year ? Number(req.query.year) : undefined,
+      scope,
     });
     return sendSuccess(res, result, 200);
   } catch (error) {
@@ -141,11 +156,13 @@ export async function initializeYearlyLeaveBalances(req, res, next) {
 
 export async function getLeaveBalanceSummary(req, res, next) {
   try {
+    const scope = await getRequestScope(req);
     const result = await leaveService.getLeaveBalanceSummary({
       department_id: req.query.department_id,
       location_id: req.query.location_id,
       shift_id: req.query.shift_id,
       year: req.query.year ? Number(req.query.year) : undefined,
+      scope,
     });
     return sendSuccess(res, result, 200);
   } catch (error) {
@@ -156,12 +173,14 @@ export async function getLeaveBalanceSummary(req, res, next) {
 export async function getLeaveCalendar(req, res, next) {
   try {
     const roleName = await leaveService.getRoleName(req.user.role_id);
+    const scope = await getRequestScope(req);
     const result = await leaveService.getLeaveCalendar({
       month: Number(req.query.month || new Date().getMonth() + 1),
       year: Number(req.query.year || new Date().getFullYear()),
       department_id: req.query.department_id,
       branch_id: req.query.branch_id,
       employee_id: roleName === 'employee' ? req.user.employee_id : undefined,
+      scope,
     });
     return sendSuccess(res, result, 200);
   } catch (error) {

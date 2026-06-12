@@ -5,6 +5,7 @@ const getMyLeaveRequests = vi.hoisted(() => vi.fn());
 const getLeaveRequestsService = vi.hoisted(() => vi.fn());
 const initializeYearlyBalances = vi.hoisted(() => vi.fn());
 const getLeaveBalanceSummaryService = vi.hoisted(() => vi.fn());
+const resolveDepartmentScope = vi.hoisted(() => vi.fn());
 
 vi.mock('./leave.service.js', () => ({
   getRoleName,
@@ -12,6 +13,10 @@ vi.mock('./leave.service.js', () => ({
   getLeaveRequests: getLeaveRequestsService,
   initializeYearlyBalances,
   getLeaveBalanceSummary: getLeaveBalanceSummaryService,
+}));
+
+vi.mock('../department-scope/department-scope.service.js', () => ({
+  resolveDepartmentScope,
 }));
 
 function mockResponse() {
@@ -31,11 +36,14 @@ describe('leave controller self-service', () => {
     getLeaveRequestsService.mockReset();
     initializeYearlyBalances.mockReset();
     getLeaveBalanceSummaryService.mockReset();
+    resolveDepartmentScope.mockReset();
+    resolveDepartmentScope.mockResolvedValue(null);
   });
 
   it('forces employee role leave list requests to the caller', async () => {
     getRoleName.mockResolvedValueOnce('employee');
     getMyLeaveRequests.mockResolvedValueOnce([{ id: 'leave-1', employee_id: 'EMP521' }]);
+    resolveDepartmentScope.mockResolvedValueOnce(null);
 
     const { getLeaveRequests } = await import('./leave.controller.js');
     const req = {
@@ -80,9 +88,18 @@ describe('leave controller self-service', () => {
     getLeaveBalanceSummaryService.mockResolvedValueOnce([
       { employee_id: 'EMP001', total_remaining: 16 },
     ]);
+    resolveDepartmentScope.mockResolvedValueOnce({
+      department_id: 'department-id',
+      work_location_id: 'location-id',
+    });
 
     const { getLeaveBalanceSummary } = await import('./leave.controller.js');
     const req = {
+      user: {
+        role_id: 'role-head',
+        user_id: 'user-head',
+        employee_id: 'EMP900',
+      },
       query: {
         department_id: 'department-id',
         location_id: 'location-id',
@@ -100,6 +117,10 @@ describe('leave controller self-service', () => {
       location_id: 'location-id',
       shift_id: 'shift-id',
       year: 2026,
+      scope: {
+        department_id: 'department-id',
+        work_location_id: 'location-id',
+      },
     });
     expect(res.json).toHaveBeenCalledWith({
       success: true,

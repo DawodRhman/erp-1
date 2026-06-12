@@ -1,6 +1,7 @@
 import * as employeesService from './employees.service.js';
 import { sendSuccess } from '../../utils/respond.js';
 import { buildAuditRequestContext, recordRequestActivity } from '../audit/audit.service.js';
+import { resolveDepartmentScope } from '../department-scope/department-scope.service.js';
 
 export async function createEmployee(req, res, next) {
   try {
@@ -24,6 +25,11 @@ export async function getEmployees(req, res, next) {
       return sendSuccess(res, result, 200);
     }
 
+    const scope = await resolveDepartmentScope({
+      roleId: req.user.role_id,
+      userId: req.user.user_id,
+      employeeId: req.user.employee_id,
+    });
     const result = await employeesService.getEmployees({
       search: req.query.search,
       department_id: req.query.department_id,
@@ -33,6 +39,7 @@ export async function getEmployees(req, res, next) {
           : req.query.is_active === 'true',
       page: req.query.page,
       limit: req.query.limit,
+      scope,
     });
 
     return sendSuccess(res, result, 200);
@@ -43,7 +50,12 @@ export async function getEmployees(req, res, next) {
 
 export async function getEmployeeById(req, res, next) {
   try {
-    const result = await employeesService.getEmployeeById(req.params.employeeId);
+    const scope = await resolveDepartmentScope({
+      roleId: req.user.role_id,
+      userId: req.user.user_id,
+      employeeId: req.user.employee_id,
+    });
+    const result = await employeesService.getEmployeeById(req.params.employeeId, { scope });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
