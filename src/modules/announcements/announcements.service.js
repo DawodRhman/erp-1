@@ -33,6 +33,13 @@ export async function listAnnouncements({ activeOnly = true, roleName = 'employe
   const filters = [];
   const params = [];
   const shouldScopeToEmployeeTargets = !all && roleName === 'employee' && employeeId;
+  const includeReadReceipt = Boolean(employeeId);
+  let employeeParamIndex = null;
+
+  if (includeReadReceipt || shouldScopeToEmployeeTargets) {
+    params.push(employeeId);
+    employeeParamIndex = params.length;
+  }
 
   if (activeOnly && !all) {
     filters.push('a.is_active = true');
@@ -43,7 +50,6 @@ export async function listAnnouncements({ activeOnly = true, roleName = 'employe
   }
 
   if (shouldScopeToEmployeeTargets) {
-    params.push(employeeId);
     filters.push(`(
       cardinality(a.target_department_ids) = 0
       OR viewer_job.department_id = ANY(a.target_department_ids)
@@ -62,6 +68,7 @@ export async function listAnnouncements({ activeOnly = true, roleName = 'employe
         updater_emp.name AS updated_by_name,
         target_departments.names AS target_department_names,
         target_designations.names AS target_designation_names
+        ${includeReadReceipt ? ', receipt.read_at AS read_at, (receipt.id IS NOT NULL) AS is_read' : ', NULL::timestamptz AS read_at, false AS is_read'}
       FROM public.announcements a
       LEFT JOIN public.users creator_user ON creator_user.id = a.created_by
       LEFT JOIN public.employee_info creator_emp ON creator_emp.employee_id = creator_user.employee_id
@@ -77,7 +84,10 @@ export async function listAnnouncements({ activeOnly = true, roleName = 'employe
         FROM public.designations dsg
         WHERE dsg.id = ANY(a.target_designation_ids)
       ) target_designations ON true
-      ${shouldScopeToEmployeeTargets ? `LEFT JOIN public.job_info viewer_job ON viewer_job.employee_id = $1` : ''}
+      ${includeReadReceipt ? `LEFT JOIN public.announcement_read_receipts receipt
+        ON receipt.announcement_id = a.id
+       AND receipt.employee_id = $${employeeParamIndex}` : ''}
+      ${shouldScopeToEmployeeTargets ? `LEFT JOIN public.job_info viewer_job ON viewer_job.employee_id = $${employeeParamIndex}` : ''}
       ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}
       ORDER BY a.created_at DESC
     `,
@@ -193,6 +203,45 @@ export async function updateAnnouncement(id, payload, userId, scope = null) {
   if (result.rowCount === 0) {
     throw new AppError(404, 'NOT_FOUND', 'Announcement not found.');
   }
+
+  return result.rows[0];
+}
+
+export async function markAnnouncementRead(announcementId, { userId, employeeId } = {}) {
+  const existing = await pool.query(
+    `
+      SELECT id
+      FROM public.announcements
+      WHERE id = $1
+        AND is_active = true
+        AND (expiry_date IS NULL OR expiry_date >= CURRENT_DATE)
+      LIMIT 1
+    `,
+    [announcementId]
+  );
+
+  if (existing.rowCount === 0) {
+    throw new AppError(404, 'NOT_FOUND', 'Announcement not found or no longer active.');
+  }
+
+  const conflictTarget = employeeId
+    ? '(announcement_id, employee_id)'
+    : '(announcement_id, user_id)';
+
+  const result = await pool.query(
+    `
+      INSERT INTO public.announcement_read_receipts (
+        announcement_id,
+        user_id,
+        employee_id
+      )
+      VALUES ($1, $2, $3)
+      ON CONFLICT ${conflictTarget}
+      DO UPDATE SET read_at = public.announcement_read_receipts.read_at
+      RETURNING *
+    `,
+    [announcementId, userId || null, employeeId || null]
+  );
 
   return result.rows[0];
 }

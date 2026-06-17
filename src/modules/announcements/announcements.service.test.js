@@ -112,6 +112,8 @@ describe('announcements service', () => {
     expect(query.mock.calls[0][0]).toContain('cardinality(a.target_department_ids)');
     expect(query.mock.calls[0][0]).toContain('viewer_job.department_id = ANY(a.target_department_ids)');
     expect(query.mock.calls[0][0]).toContain('viewer_job.department_id');
+    expect(query.mock.calls[0][0]).toContain('announcement_read_receipts receipt');
+    expect(query.mock.calls[0][0]).toContain('receipt.read_at');
     expect(query.mock.calls[0][1]).toEqual(['EMP061']);
   });
 
@@ -130,5 +132,31 @@ describe('announcements service', () => {
     });
 
     expect(query.mock.calls[0][1][3]).toEqual(['dept-engineering']);
+  });
+
+  it('marks an announcement read once per employee and user', async () => {
+    query
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'announcement-id' }] })
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 'receipt-id',
+          announcement_id: 'announcement-id',
+          user_id: 'user-id',
+          employee_id: 'EMP061',
+          read_at: '2026-06-16T07:00:00.000Z',
+        }],
+      });
+
+    const { markAnnouncementRead } = await import('./announcements.service.js');
+    const receipt = await markAnnouncementRead('announcement-id', {
+      userId: 'user-id',
+      employeeId: 'EMP061',
+    });
+
+    expect(receipt).toMatchObject({ id: 'receipt-id', announcement_id: 'announcement-id' });
+    expect(query.mock.calls[0][0]).toContain('FROM public.announcements');
+    expect(query.mock.calls[1][0]).toContain('INSERT INTO public.announcement_read_receipts');
+    expect(query.mock.calls[1][0]).toContain('ON CONFLICT (announcement_id, employee_id)');
+    expect(query.mock.calls[1][1]).toEqual(['announcement-id', 'user-id', 'EMP061']);
   });
 });

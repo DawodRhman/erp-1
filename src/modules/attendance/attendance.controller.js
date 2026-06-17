@@ -60,6 +60,73 @@ export async function acknowledgeAttendance(req, res, next) {
   }
 }
 
+export async function submitAttendanceCorrectionRequest(req, res, next) {
+  try {
+    const result = await attendanceService.submitAttendanceCorrectionRequest(
+      req.body,
+      req.user.employee_id,
+      req.user.user_id
+    );
+    await recordRequestActivity(req, {
+      action: 'ATTENDANCE_CORRECTION_REQUESTED',
+      entityType: 'attendance_correction_requests',
+      entityId: result?.id || null,
+      meta: {
+        correction_request_id: result?.id || null,
+        attendance_id: result?.attendance_id || null,
+        employee_id: req.user.employee_id,
+        date: req.body.date,
+      },
+    });
+    return sendSuccess(res, result, 201);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getAttendanceCorrectionRequests(req, res, next) {
+  try {
+    const scope = await resolveDepartmentScope({
+      roleId: req.user.role_id,
+      userId: req.user.user_id,
+      employeeId: req.user.employee_id,
+    });
+    const result = await attendanceService.listAttendanceCorrectionRequests({
+      status: req.query.status,
+      employee_id: req.query.employee_id,
+      date: req.query.date,
+      scope,
+    });
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function reviewAttendanceCorrectionRequest(req, res, next) {
+  try {
+    const result = await attendanceService.reviewAttendanceCorrectionRequest(
+      req.params.id,
+      req.body,
+      req.user.user_id
+    );
+    await recordRequestActivity(req, {
+      action: req.body.decision === 'approved'
+        ? 'ATTENDANCE_CORRECTION_APPROVED'
+        : 'ATTENDANCE_CORRECTION_REJECTED',
+      entityType: 'attendance_correction_requests',
+      entityId: req.params.id,
+      meta: {
+        correction_request_id: req.params.id,
+        decision: req.body.decision,
+      },
+    });
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function submitSheetToHO(req, res, next) {
   try {
     const result = await attendanceService.submitSheetToHO(

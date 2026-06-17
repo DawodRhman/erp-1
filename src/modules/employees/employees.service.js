@@ -1297,6 +1297,189 @@ export async function addSalaryRevision(employeeId, data, createdByUserId) {
   }
 }
 
+export async function addCareerMovement(employeeId, data, createdByUserId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const currentResult = await client.query(
+      `
+        SELECT *
+        FROM public.job_info
+        WHERE employee_id = $1
+        FOR UPDATE
+      `,
+      [employeeId]
+    );
+
+    if (currentResult.rowCount === 0) {
+      throw new AppError(404, 'NOT_FOUND', 'Employee job info not found.');
+    }
+
+    const current = currentResult.rows[0];
+    const newDepartmentId = data.department_id || current.department_id;
+    const newDesignationId = data.designation_id || current.designation_id;
+    const newWorkLocationId = data.work_location_id || current.work_location_id;
+    const effectiveDate = data.effective_date;
+    const jobChanged =
+      newDepartmentId !== current.department_id ||
+      newDesignationId !== current.designation_id ||
+      newWorkLocationId !== current.work_location_id;
+
+    const movementResult = await client.query(
+      `
+        INSERT INTO public.employee_career_movements (
+          employee_id,
+          movement_type,
+          effective_date,
+          previous_department_id,
+          previous_designation_id,
+          previous_work_location_id,
+          new_department_id,
+          new_designation_id,
+          new_work_location_id,
+          reason,
+          created_by
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING *
+      `,
+      [
+        employeeId,
+        data.movement_type,
+        effectiveDate,
+        current.department_id,
+        current.designation_id,
+        current.work_location_id,
+        newDepartmentId,
+        newDesignationId,
+        newWorkLocationId,
+        data.reason,
+        createdByUserId,
+      ]
+    );
+
+    if (jobChanged) {
+      await client.query(
+        `
+          INSERT INTO public.employee_job_history (
+            employee_id,
+            department_id,
+            designation_id,
+            manager_emp_id,
+            start_date,
+            end_date
+          )
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `,
+        [
+          employeeId,
+          current.department_id,
+          current.designation_id,
+          current.manager_emp_id || null,
+          current.date_of_joining,
+          effectiveDate,
+        ]
+      );
+
+      await client.query(
+        `
+          UPDATE public.job_info
+          SET department_id = $2,
+              designation_id = $3,
+              work_location_id = $4,
+              updated_at = now()
+          WHERE employee_id = $1
+          RETURNING employee_id, department_id, designation_id, work_location_id
+        `,
+        [employeeId, newDepartmentId, newDesignationId, newWorkLocationId]
+      );
+    }
+
+    let salaryRevision = null;
+    if (data.salaryInfo) {
+      await client.query(
+        `
+          UPDATE public.employee_salary
+          SET is_current = false, effective_to = $2
+          WHERE employee_id = $1 AND is_current = true
+        `,
+        [employeeId, effectiveDate]
+      );
+
+      const salaryResult = await client.query(
+        `
+          INSERT INTO public.employee_salary (
+            employee_id,
+            basic_salary,
+            currency,
+            effective_from,
+            is_current,
+            is_active,
+            revision_type,
+            revision_percent,
+            revision_reason,
+            created_by
+          )
+          VALUES ($1, $2, $3, $4, true, true, $5, $6, $7, $8)
+          RETURNING *
+        `,
+        [
+          employeeId,
+          data.salaryInfo.base_salary,
+          data.salaryInfo.currency || 'PKR',
+          data.salaryInfo.effective_from || effectiveDate,
+          data.salaryInfo.revision_type || data.movement_type,
+          data.salaryInfo.revision_percent || null,
+          data.salaryInfo.revision_reason || data.reason,
+          createdByUserId,
+        ]
+      );
+      salaryRevision = salaryResult.rows[0] || null;
+
+      if (salaryRevision?.id) {
+        await client.query(
+          `
+            UPDATE public.employee_career_movements
+            SET salary_revision_id = $2, updated_at = now()
+            WHERE id = $1
+          `,
+          [movementResult.rows[0].id, salaryRevision.id]
+        );
+      }
+    }
+
+    await client.query(
+      `
+        INSERT INTO public.notifications (user_id, type, message, created_by)
+        SELECT u.id,
+               'career_movement',
+               $2,
+               $3
+        FROM public.users u
+        WHERE u.employee_id = $1
+        LIMIT 1
+      `,
+      [
+        employeeId,
+        `Your career record was updated: ${data.movement_type}.`,
+        createdByUserId || null,
+      ]
+    );
+
+    await client.query('COMMIT');
+    return {
+      movement: movementResult.rows[0],
+      salaryRevision,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function updateAllowances(employeeId, allowances, createdByUserId) {
   const client = await pool.connect();
   try {

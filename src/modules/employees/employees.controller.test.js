@@ -2,17 +2,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getEmployeeById = vi.hoisted(() => vi.fn());
 const getEmployeesService = vi.hoisted(() => vi.fn());
+const addCareerMovement = vi.hoisted(() => vi.fn());
 const resolveDepartmentScope = vi.hoisted(() => vi.fn());
 const assertEmployeeInScope = vi.hoisted(() => vi.fn());
+const recordRequestActivity = vi.hoisted(() => vi.fn());
 
 vi.mock('./employees.service.js', () => ({
   getEmployeeById,
   getEmployees: getEmployeesService,
+  addCareerMovement,
 }));
 
 vi.mock('../department-scope/department-scope.service.js', () => ({
   resolveDepartmentScope,
   assertEmployeeInScope,
+}));
+
+vi.mock('../audit/audit.service.js', () => ({
+  recordRequestActivity,
+  buildAuditRequestContext: vi.fn(() => ({})),
 }));
 
 function mockResponse() {
@@ -29,10 +37,13 @@ describe('employees controller self-service', () => {
   beforeEach(() => {
     getEmployeeById.mockReset();
     getEmployeesService.mockReset();
+    addCareerMovement.mockReset();
     resolveDepartmentScope.mockReset();
     assertEmployeeInScope.mockReset();
+    recordRequestActivity.mockReset();
     resolveDepartmentScope.mockResolvedValue(null);
     assertEmployeeInScope.mockResolvedValue(undefined);
+    recordRequestActivity.mockResolvedValue(undefined);
   });
 
   it('returns the caller employee record when the route is self-scoped', async () => {
@@ -139,5 +150,42 @@ describe('employees controller self-service', () => {
       department_id: 'backend-dept',
       work_location_id: null,
     });
+  });
+
+  it('records audit metadata when HR creates a career movement', async () => {
+    addCareerMovement.mockResolvedValueOnce({
+      movement: { id: 'movement-1', employee_id: 'EMP0035', movement_type: 'Promotion' },
+      salaryRevision: { id: 'salary-1' },
+    });
+
+    const { addCareerMovement: controller } = await import('./employees.controller.js');
+    const req = {
+      params: { employeeId: 'EMP0035' },
+      body: {
+        movement_type: 'Promotion',
+        effective_date: '2026-06-16',
+        designation_id: '22222222-2222-4222-8222-222222222222',
+        reason: 'Promotion approved',
+      },
+      user: { user_id: 'user-1' },
+    };
+    const res = mockResponse();
+    const next = vi.fn();
+
+    await controller(req, res, next);
+
+    expect(addCareerMovement).toHaveBeenCalledWith('EMP0035', req.body, 'user-1');
+    expect(recordRequestActivity).toHaveBeenCalledWith(req, {
+      action: 'EMPLOYEE_CAREER_MOVEMENT_CREATED',
+      entityType: 'employee_career_movements',
+      entityId: 'movement-1',
+      meta: {
+        employee_id: 'EMP0035',
+        movement_id: 'movement-1',
+        movement_type: 'Promotion',
+        salary_revision_id: 'salary-1',
+      },
+    });
+    expect(res.status).toHaveBeenCalledWith(201);
   });
 });

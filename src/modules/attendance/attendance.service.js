@@ -345,6 +345,226 @@ export async function acknowledgeAttendance(attendanceId, employeeId) {
   return updated.rows[0];
 }
 
+export async function submitAttendanceCorrectionRequest(payload, employeeId, requestedByUserId) {
+  const attendanceResult = await pool.query(
+    `
+      SELECT id, employee_id, date, check_in, check_out, status, state
+      FROM public.attendance
+      WHERE employee_id = $1
+        AND date = $2
+      LIMIT 1
+    `,
+    [employeeId, payload.date]
+  );
+
+  if (attendanceResult.rowCount === 0) {
+    throw new AppError(404, 'ATTENDANCE_NOT_FOUND', 'Attendance record not found for the selected date.');
+  }
+
+  const attendance = attendanceResult.rows[0];
+  const duplicateResult = await pool.query(
+    `
+      SELECT id
+      FROM public.attendance_correction_requests
+      WHERE attendance_id = $1
+        AND status = 'submitted'
+      LIMIT 1
+    `,
+    [attendance.id]
+  );
+
+  if (duplicateResult.rowCount > 0) {
+    throw new AppError(
+      409,
+      'ATTENDANCE_CORRECTION_PENDING',
+      'A correction request is already pending for this attendance record.'
+    );
+  }
+
+  const insertResult = await pool.query(
+    `
+      INSERT INTO public.attendance_correction_requests (
+        attendance_id,
+        employee_id,
+        date,
+        requested_check_in,
+        requested_check_out,
+        reason,
+        requested_by
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *
+    `,
+    [
+      attendance.id,
+      employeeId,
+      payload.date,
+      payload.requested_check_in || null,
+      payload.requested_check_out || null,
+      payload.reason,
+      requestedByUserId || null,
+    ]
+  );
+
+  await pool.query(
+    `
+      INSERT INTO public.notifications (user_id, role, type, message, created_by)
+      VALUES
+        (NULL, 'super_admin', 'attendance_correction_requested', $1, $2),
+        (NULL, 'hr', 'attendance_correction_requested', $1, $2)
+    `,
+    [
+      `Attendance correction requested by ${employeeId} for ${payload.date}.`,
+      requestedByUserId || null,
+    ]
+  );
+
+  return insertResult.rows[0];
+}
+
+export async function listAttendanceCorrectionRequests({ status, employee_id, date, scope = null } = {}) {
+  const params = [];
+  const where = [];
+
+  if (status) {
+    params.push(status);
+    where.push(`acr.status = $${params.length}`);
+  }
+
+  if (employee_id) {
+    params.push(employee_id);
+    where.push(`acr.employee_id = $${params.length}`);
+  }
+
+  if (date) {
+    params.push(date);
+    where.push(`acr.date = $${params.length}`);
+  }
+
+  if (scope?.department_id) {
+    params.push(scope.department_id);
+    where.push(`ji.department_id = $${params.length}`);
+  }
+
+  if (scope?.work_location_id) {
+    params.push(scope.work_location_id);
+    where.push(`ji.work_location_id = $${params.length}`);
+  }
+
+  const result = await pool.query(
+    `
+      SELECT
+        acr.*,
+        ei.name AS employee_name,
+        d.title AS designation,
+        dep.department_name,
+        reviewer_emp.name AS reviewer_name
+      FROM public.attendance_correction_requests acr
+      JOIN public.employee_info ei ON ei.employee_id = acr.employee_id
+      JOIN public.job_info ji ON ji.employee_id = acr.employee_id
+      LEFT JOIN public.designations d ON d.id = ji.designation_id
+      LEFT JOIN public.departments dep ON dep.id = ji.department_id
+      LEFT JOIN public.users reviewer_user ON reviewer_user.id = acr.reviewed_by
+      LEFT JOIN public.employee_info reviewer_emp ON reviewer_emp.employee_id = reviewer_user.employee_id
+      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+      ORDER BY acr.created_at DESC
+    `,
+    params
+  );
+
+  return result.rows;
+}
+
+export async function reviewAttendanceCorrectionRequest(correctionId, payload, reviewedByUserId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const correctionResult = await client.query(
+      `
+        SELECT *
+        FROM public.attendance_correction_requests
+        WHERE id = $1
+        FOR UPDATE
+      `,
+      [correctionId]
+    );
+
+    if (correctionResult.rowCount === 0) {
+      throw new AppError(404, 'NOT_FOUND', 'Attendance correction request not found.');
+    }
+
+    const correction = correctionResult.rows[0];
+    if (correction.status !== 'submitted') {
+      throw new AppError(409, 'ATTENDANCE_CORRECTION_CLOSED', 'Attendance correction request is already closed.');
+    }
+
+    const approved = payload.decision === 'approved';
+    if (approved) {
+      await client.query(
+        `
+          UPDATE public.attendance
+          SET check_in = COALESCE($2, check_in),
+              check_out = COALESCE($3, check_out),
+              ack = false,
+              notes = COALESCE($4, notes),
+              updated_at = now()
+          WHERE id = $1
+          RETURNING id, employee_id, check_in, check_out
+        `,
+        [
+          correction.attendance_id,
+          correction.requested_check_in || null,
+          correction.requested_check_out || null,
+          payload.review_note || correction.reason,
+        ]
+      );
+    }
+
+    const updateResult = await client.query(
+      `
+        UPDATE public.attendance_correction_requests
+        SET status = $2,
+            review_note = $3,
+            reviewed_by = $4,
+            reviewed_at = now(),
+            updated_at = now()
+        WHERE id = $1
+        RETURNING *
+      `,
+      [
+        correctionId,
+        approved ? 'approved' : 'rejected',
+        payload.review_note || null,
+        reviewedByUserId,
+      ]
+    );
+
+    await client.query(
+      `
+        INSERT INTO public.notifications (user_id, role, type, message, created_by)
+        SELECT u.id, NULL, $2, $3, $4
+        FROM public.users u
+        WHERE u.employee_id = $1
+      `,
+      [
+        correction.employee_id,
+        approved ? 'attendance_correction_approved' : 'attendance_correction_rejected',
+        `Your attendance correction request for ${correction.date} was ${approved ? 'approved' : 'rejected'}.`,
+        reviewedByUserId,
+      ]
+    );
+
+    await client.query('COMMIT');
+    return updateResult.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function submitSheetToHO(date, locationId, submittedByUserId) {
   const hasPermission = await userHasPermissionByUserId(submittedByUserId, 'attendance:submit_ho');
   if (!hasPermission) {

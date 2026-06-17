@@ -106,3 +106,27 @@ export async function updateAnnouncement(req, res, next) {
     return next(error);
   }
 }
+
+export async function markAnnouncementRead(req, res, next) {
+  try {
+    const result = await announcementsService.markAnnouncementRead(req.params.id, {
+      userId: req.user.user_id,
+      employeeId: req.user.employee_id,
+    });
+
+    await recordRequestActivity(req, {
+      action: 'ANNOUNCEMENT_READ',
+      entityType: 'announcement_read_receipts',
+      entityId: result?.id || null,
+      meta: {
+        announcement_id: req.params.id,
+        receipt_id: result?.id || null,
+        employee_id: req.user.employee_id || null,
+      },
+    });
+
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}

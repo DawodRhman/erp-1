@@ -553,3 +553,93 @@ describe('updateAllowances', () => {
     expect(result[0]).toMatchObject({ is_active: false, is_current: true });
   });
 });
+
+describe('addCareerMovement', () => {
+  beforeEach(() => {
+    query.mockReset();
+    clientQuery.mockReset();
+    release.mockReset();
+  });
+
+  it('records a career movement and atomically updates job info and salary when provided', async () => {
+    clientQuery
+      .mockResolvedValueOnce({}) // BEGIN
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            employee_id: 'EMP0201',
+            department_id: 'dept-old',
+            designation_id: 'des-old',
+            employment_type_id: 'type-1',
+            job_status_id: 'status-1',
+            work_mode_id: 'mode-1',
+            work_location_id: 'loc-1',
+            shift_id: 'shift-1',
+            manager_emp_id: 'EMP0001',
+            date_of_joining: '2020-01-01',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ id: 'movement-1', employee_id: 'EMP0201', movement_type: 'Promotion' }],
+      })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'history-1' }] })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            employee_id: 'EMP0201',
+            department_id: 'dept-new',
+            designation_id: 'des-new',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ id: 'salary-1', basic_salary: 125000, revision_type: 'Promotion' }],
+      })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'notification-1' }] })
+      .mockResolvedValueOnce({}); // COMMIT
+
+    const { addCareerMovement } = await loadService();
+    const result = await addCareerMovement(
+      'EMP0201',
+      {
+        movement_type: 'Promotion',
+        effective_date: '2026-06-16',
+        department_id: 'dept-new',
+        designation_id: 'des-new',
+        reason: 'Promoted to senior role',
+        salaryInfo: {
+          base_salary: 125000,
+          currency: 'PKR',
+          revision_type: 'Promotion',
+          revision_percent: 20,
+          revision_reason: 'Promotion adjustment',
+        },
+      },
+      'user-1',
+    );
+
+    expect(clientQuery.mock.calls[1][0]).toContain('FROM public.job_info');
+    expect(clientQuery.mock.calls[1][0]).toContain('FOR UPDATE');
+    expect(clientQuery.mock.calls[2][0]).toContain('INSERT INTO public.employee_career_movements');
+    expect(clientQuery.mock.calls[3][0]).toContain('INSERT INTO public.employee_job_history');
+    expect(clientQuery.mock.calls[4][0]).toContain('UPDATE public.job_info');
+    expect(clientQuery.mock.calls[5][0]).toContain('UPDATE public.employee_salary');
+    expect(clientQuery.mock.calls[6][0]).toContain('INSERT INTO public.employee_salary');
+    expect(clientQuery.mock.calls[7][0]).toContain('UPDATE public.employee_career_movements');
+    expect(clientQuery.mock.calls[8][0]).toContain('INSERT INTO public.notifications');
+    expect(clientQuery.mock.calls[8][1]).toEqual([
+      'EMP0201',
+      'Your career record was updated: Promotion.',
+      'user-1',
+    ]);
+    expect(result.movement.id).toBe('movement-1');
+    expect(result.salaryRevision.id).toBe('salary-1');
+  });
+});

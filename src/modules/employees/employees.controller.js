@@ -174,6 +174,30 @@ export async function addSalaryRevision(req, res, next) {
   }
 }
 
+export async function addCareerMovement(req, res, next) {
+  try {
+    const result = await employeesService.addCareerMovement(
+      req.params.employeeId,
+      req.body,
+      req.user.user_id,
+    );
+    await recordRequestActivity(req, {
+      action: 'EMPLOYEE_CAREER_MOVEMENT_CREATED',
+      entityType: 'employee_career_movements',
+      entityId: result?.movement?.id || req.params.employeeId,
+      meta: {
+        employee_id: req.params.employeeId,
+        movement_id: result?.movement?.id || null,
+        movement_type: result?.movement?.movement_type || req.body.movement_type,
+        salary_revision_id: result?.salaryRevision?.id || null,
+      },
+    });
+    return sendSuccess(res, result, 201);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function updateAllowances(req, res, next) {
   try {
     const result = await employeesService.updateAllowances(req.params.employeeId, req.body.allowances, req.user.user_id);

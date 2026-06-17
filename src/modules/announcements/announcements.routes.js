@@ -6,6 +6,7 @@ import { validateParams } from '../../middleware/validate.js';
 import {
   createAnnouncement,
   getAnnouncements,
+  markAnnouncementRead,
   updateAnnouncement,
 } from './announcements.controller.js';
 
@@ -19,6 +20,7 @@ router.use(verifyToken);
 
 router.get('/', requirePermission('announcements:read'), getAnnouncements);
 router.post('/', requireAnyPermission('announcements:write', 'announcements:department_write'), createAnnouncement);
+router.post('/:id/read', requirePermission('announcements:read'), validateParams(uuidParamSchema), markAnnouncementRead);
 router.patch('/:id', requireAnyPermission('announcements:write', 'announcements:department_write'), validateParams(uuidParamSchema), updateAnnouncement);
 
 export default router;

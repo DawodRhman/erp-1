@@ -12,6 +12,7 @@ import {
   resendCredentials,
   createEmployeeAccount,
   addSalaryRevision,
+  addCareerMovement,
   updateAllowances,
   getFinanceHistory,
 } from './employees.controller.js';
@@ -33,6 +34,7 @@ import {
   updateJobInfoSchema,
   updateExtraInfoSchema,
   salaryRevisionSchema,
+  careerMovementSchema,
   updateAllowancesSchema,
   createEmployeeAccountSchema,
 } from './employees.schema.js';
@@ -133,6 +135,13 @@ router.post(
   requirePermission('salary:write'),
   validate(salaryRevisionSchema),
   addSalaryRevision
+);
+
+router.post(
+  '/:employeeId/career-movements',
+  requirePermission('employees:write'),
+  validate(careerMovementSchema),
+  addCareerMovement
 );
 
 router.put(
