@@ -36,6 +36,7 @@ describe('auth service', () => {
           password: 'hash',
           must_change_password: false,
           is_active: false,
+          job_status_name: 'Active',
         },
       ],
     });
@@ -43,8 +44,35 @@ describe('auth service', () => {
     const { login } = await loadService();
 
     await expect(login('inactive@example.com', 'Password123!')).rejects.toMatchObject({
-      code: 'ACCOUNT_INACTIVE',
+      code: 'ACCOUNT_DISABLED',
       statusCode: 403,
+      message: 'Your account is disabled. Contact your HR.',
+    });
+    expect(compare).not.toHaveBeenCalled();
+  });
+
+  it('rejects terminated employee accounts even when the user account is active', async () => {
+    query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'user-2',
+          email: 'terminated@example.com',
+          employee_id: 'EMP0099',
+          role_id: 'role-employee',
+          password: 'hash',
+          must_change_password: false,
+          is_active: true,
+          job_status_name: 'Terminated',
+        },
+      ],
+    });
+
+    const { login } = await loadService();
+
+    await expect(login('terminated@example.com', 'Password123!')).rejects.toMatchObject({
+      code: 'ACCOUNT_DISABLED',
+      statusCode: 403,
+      message: 'Your account is disabled. Contact your HR.',
     });
     expect(compare).not.toHaveBeenCalled();
   });
