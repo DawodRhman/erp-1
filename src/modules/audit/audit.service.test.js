@@ -31,6 +31,8 @@ describe('audit service', () => {
       'employees',
       'EMP0001',
       JSON.stringify({ total_rows: 1 }),
+      null,
+      null,
     ]);
   });
 
@@ -45,6 +47,8 @@ describe('audit service', () => {
       headers: {
         'user-agent': 'Vitest Browser',
         'x-request-id': 'request-1',
+        'x-client-local-ip': '192.168.1.50',
+        'x-client-hostname': 'WORKSTATION-01',
       },
       user: {
         user_id: 'actor-user',
@@ -76,6 +80,8 @@ describe('audit service', () => {
       actor_employee_id: 'EMP0002',
       actor_role_id: 'role-hr',
       actor_email: 'hr@example.com',
+      private_ip_address: '192.168.1.50',
+      hostname: 'WORKSTATION-01',
     }));
   });
 

@@ -38,6 +38,15 @@ app.use(
 			callback(null, true);
 		},
 		credentials: true,
+		allowedHeaders: [
+			'Content-Type',
+			'Authorization',
+			'x-client-local-ip',
+			'x-client-hostname',
+			'x-request-id',
+			'x-correlation-id',
+		],
+		exposedHeaders: ['x-request-id'],
 	})
 );
 app.use(express.json());
