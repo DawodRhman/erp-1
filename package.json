@@ -13,6 +13,7 @@
     "db:check": "node-pg-migrate up --dry-run",
     "db:fake": "node-pg-migrate up --fake",
     "db:seed": "node seeds/master_seed.js",
+    "db:seed:production": "node seeds/production_seed.js",
     "leave:rollover": "node scripts/initialize-yearly-leave-balances.js"
   },
   "keywords": [],

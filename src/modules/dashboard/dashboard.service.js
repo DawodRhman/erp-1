@@ -10,8 +10,41 @@ function percent(numerator, denominator) {
   return bottom > 0 ? Number(((top / bottom) * 100).toFixed(1)) : 0;
 }
 
-export async function getHRMetrics(range = '6m') {
+function addScopeCondition(params, scope, alias = 'ji') {
+  if (!scope?.department_id) return '';
+  params.push(scope.department_id);
+  let condition = `${alias}.department_id = $${params.length}`;
+  if (scope.work_location_id) {
+    params.push(scope.work_location_id);
+    condition += ` AND ${alias}.work_location_id = $${params.length}`;
+  }
+  return condition;
+}
+
+function scopedEmployeeExists(params, scope, employeeExpression) {
+  const condition = addScopeCondition(params, scope, 'scope_ji');
+  if (!condition) return '';
+  return `EXISTS (
+    SELECT 1
+    FROM public.job_info scope_ji
+    WHERE scope_ji.employee_id = ${employeeExpression}
+      AND ${condition}
+  )`;
+}
+
+export async function getHRMetrics(range = '6m', scope = null) {
   const months = monthRange(range);
+  const totalEmployeesParams = [];
+  const totalEmployeesScope = addScopeCondition(totalEmployeesParams, scope, 'ji');
+  const newThisMonthParams = [];
+  const newThisMonthScope = addScopeCondition(newThisMonthParams, scope, 'ji');
+  const departmentCountParams = [];
+  const departmentCountScope = scope?.department_id ? 'AND d.id = $1' : '';
+  if (scope?.department_id) departmentCountParams.push(scope.department_id);
+  const presentTodayParams = [];
+  const presentTodayScope = scopedEmployeeExists(presentTodayParams, scope, 'a.employee_id');
+  const onLeaveTodayParams = [];
+  const onLeaveTodayScope = scopedEmployeeExists(onLeaveTodayParams, scope, 'lr.employee_id');
 
   const [
     totalEmployees,
@@ -26,31 +59,55 @@ export async function getHRMetrics(range = '6m') {
     urgentAlerts,
     attendanceKpis,
     leaveUtilization,
+    recentActivity,
+    departmentHeads,
   ] = await Promise.all([
-    pool.query(`SELECT COUNT(*)::int AS total FROM public.employee_info`),
     pool.query(
       `
         SELECT COUNT(*)::int AS total
-        FROM public.job_info
-        WHERE date_trunc('month', date_of_joining) = date_trunc('month', CURRENT_DATE)
-      `
-    ),
-    pool.query(`SELECT COUNT(*)::int AS total FROM public.departments WHERE is_active = true`),
-    pool.query(
-      `
-        SELECT COUNT(*)::int AS total
-        FROM public.attendance
-        WHERE date = CURRENT_DATE
-          AND status IN ('present', 'late', 'half_day')
-      `
+        FROM public.employee_info ei
+        ${totalEmployeesScope ? 'JOIN public.job_info ji ON ji.employee_id = ei.employee_id' : ''}
+        ${totalEmployeesScope ? `WHERE ${totalEmployeesScope}` : ''}
+      `,
+      totalEmployeesParams
     ),
     pool.query(
       `
         SELECT COUNT(*)::int AS total
-        FROM public.leave_requests
-        WHERE status = 'approved'
-          AND CURRENT_DATE BETWEEN start_date AND COALESCE(end_by_force, end_date)
+        FROM public.job_info ji
+        WHERE date_trunc('month', ji.date_of_joining) = date_trunc('month', CURRENT_DATE)
+          ${newThisMonthScope ? `AND ${newThisMonthScope}` : ''}
+      `,
+      newThisMonthParams
+    ),
+    pool.query(
       `
+        SELECT COUNT(*)::int AS total
+        FROM public.departments d
+        WHERE d.is_active = true
+          ${departmentCountScope}
+      `,
+      departmentCountParams
+    ),
+    pool.query(
+      `
+        SELECT COUNT(*)::int AS total
+        FROM public.attendance a
+        WHERE a.date = CURRENT_DATE
+          AND a.status IN ('present', 'late', 'half_day')
+          ${presentTodayScope ? `AND ${presentTodayScope}` : ''}
+      `,
+      presentTodayParams
+    ),
+    pool.query(
+      `
+        SELECT COUNT(*)::int AS total
+        FROM public.leave_requests lr
+        WHERE lr.status = 'approved'
+          AND CURRENT_DATE BETWEEN lr.start_date AND COALESCE(lr.end_by_force, lr.end_date)
+          ${onLeaveTodayScope ? `AND ${onLeaveTodayScope}` : ''}
+      `,
+      onLeaveTodayParams
     ),
     pool.query(
       `
@@ -95,6 +152,7 @@ export async function getHRMetrics(range = '6m') {
           SELECT
             employee_id,
             name,
+            d.department_name,
             CASE
               WHEN date_of_birth ~ '^\\d{4}-\\d{2}-\\d{2}$'
                 THEN to_date(date_of_birth, 'YYYY-MM-DD')
@@ -103,24 +161,44 @@ export async function getHRMetrics(range = '6m') {
               ELSE NULL
             END AS dob
           FROM public.employee_info
+          LEFT JOIN public.job_info ji USING (employee_id)
+          LEFT JOIN public.departments d ON d.id = ji.department_id
+        ),
+        birthdays AS (
+          SELECT
+            employee_id,
+            name,
+            department_name,
+            dob,
+            CASE
+              WHEN make_date(
+                EXTRACT(YEAR FROM CURRENT_DATE)::int,
+                EXTRACT(MONTH FROM dob)::int,
+                EXTRACT(DAY FROM dob)::int
+              ) >= CURRENT_DATE
+              THEN make_date(
+                EXTRACT(YEAR FROM CURRENT_DATE)::int,
+                EXTRACT(MONTH FROM dob)::int,
+                EXTRACT(DAY FROM dob)::int
+              )
+              ELSE make_date(
+                EXTRACT(YEAR FROM CURRENT_DATE)::int + 1,
+                EXTRACT(MONTH FROM dob)::int,
+                EXTRACT(DAY FROM dob)::int
+              )
+            END AS next_birthday
+          FROM employees
+          WHERE dob IS NOT NULL
         )
         SELECT
           employee_id,
           name,
+          department_name AS department,
           dob AS date_of_birth,
-          GREATEST(
-            0,
-            (
-              make_date(
-                EXTRACT(YEAR FROM CURRENT_DATE)::int,
-                EXTRACT(MONTH FROM dob)::int,
-                EXTRACT(DAY FROM dob)::int
-              ) - CURRENT_DATE
-            )::int
-          ) AS days_until
-        FROM employees
-        WHERE dob IS NOT NULL
-          AND EXTRACT(MONTH FROM dob) = EXTRACT(MONTH FROM CURRENT_DATE)
+          next_birthday,
+          (next_birthday - CURRENT_DATE)::int AS days_until
+        FROM birthdays
+        WHERE next_birthday <= CURRENT_DATE + 30
         ORDER BY days_until ASC
       `
     ),
@@ -171,6 +249,57 @@ export async function getHRMetrics(range = '6m') {
         WHERE year = EXTRACT(YEAR FROM CURRENT_DATE)::int
       `
     ),
+    pool.query(
+      `
+        SELECT
+          al.id,
+          al.action,
+          al.entity_type AS type,
+          al.entity_id,
+          al.created_at,
+          COALESCE(ei.name, u.email, al.meta ->> 'actor_email', 'System') AS actor_name
+        FROM public.activity_logs al
+        LEFT JOIN public.users u ON u.id = al.user_id
+        LEFT JOIN public.employee_info ei ON ei.employee_id = u.employee_id
+        WHERE al.created_at <= now()
+        ORDER BY al.created_at DESC
+        LIMIT 10
+      `
+    ),
+    pool.query(
+      `
+        SELECT
+          ei.employee_id,
+          ei.name,
+          u.email,
+          d.department_name,
+          wl.location_name AS work_location_name,
+          dha.effective_from,
+          dha.source
+        FROM public.users u
+        JOIN public.roles r ON r.id = u.role_id
+        JOIN public.employee_info ei ON ei.employee_id = u.employee_id
+        LEFT JOIN LATERAL (
+          SELECT
+            a.department_id,
+            a.work_location_id,
+            a.effective_from,
+            'assignment'::text AS source
+          FROM public.department_head_assignments a
+          WHERE a.user_id = u.id
+            AND a.is_active = true
+            AND a.effective_from <= CURRENT_DATE
+            AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
+          ORDER BY a.effective_from DESC, a.created_at DESC
+          LIMIT 1
+        ) dha ON true
+        LEFT JOIN public.job_info ji ON ji.employee_id = u.employee_id
+        LEFT JOIN public.departments d ON d.id = COALESCE(dha.department_id, ji.department_id)
+        LEFT JOIN public.work_locations wl ON wl.id = COALESCE(dha.work_location_id, ji.work_location_id)
+        WHERE r.role_name = 'department_head'
+        ORDER BY d.department_name ASC, ei.name ASC
+      `
+    ),
   ]);
 
   const totalEmployeesValue = totalEmployees.rows[0]?.total || 0;
@@ -206,6 +335,15 @@ export async function getHRMetrics(range = '6m') {
     attendance_trend: attendanceTrend.rows,
     headcount_trend: headcountTrend.rows,
     upcoming_birthdays: upcomingBirthdays.rows,
+    recent_activity: recentActivity.rows.map((row) => ({
+      id: row.id,
+      text: String(row.action || 'ACTIVITY').replaceAll('_', ' ').toLowerCase(),
+      time: row.created_at,
+      by: row.actor_name,
+      type: row.type || 'system',
+      entity_id: row.entity_id,
+    })),
+    department_heads: departmentHeads.rows,
     pending_actions: pendingActions.rows.map((row) => ({
       employee_id: row.employee_id,
       name: row.name,

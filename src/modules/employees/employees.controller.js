@@ -1,6 +1,11 @@
 import * as employeesService from './employees.service.js';
 import { sendSuccess } from '../../utils/respond.js';
 import { buildAuditRequestContext, recordRequestActivity } from '../audit/audit.service.js';
+import { assertEmployeeInScope, resolveDepartmentScope } from '../department-scope/department-scope.service.js';
+
+function withoutLocationScope(scope) {
+  return scope ? { ...scope, work_location_id: null } : null;
+}
 
 export async function createEmployee(req, res, next) {
   try {
@@ -24,6 +29,11 @@ export async function getEmployees(req, res, next) {
       return sendSuccess(res, result, 200);
     }
 
+    const scope = withoutLocationScope(await resolveDepartmentScope({
+      roleId: req.user.role_id,
+      userId: req.user.user_id,
+      employeeId: req.user.employee_id,
+    }));
     const result = await employeesService.getEmployees({
       search: req.query.search,
       department_id: req.query.department_id,
@@ -33,6 +43,7 @@ export async function getEmployees(req, res, next) {
           : req.query.is_active === 'true',
       page: req.query.page,
       limit: req.query.limit,
+      scope,
     });
 
     return sendSuccess(res, result, 200);
@@ -43,7 +54,15 @@ export async function getEmployees(req, res, next) {
 
 export async function getEmployeeById(req, res, next) {
   try {
-    const result = await employeesService.getEmployeeById(req.params.employeeId);
+    const isOwnProfile = req.params.employeeId === req.user.employee_id;
+    const scope = isOwnProfile
+      ? null
+      : withoutLocationScope(await resolveDepartmentScope({
+          roleId: req.user.role_id,
+          userId: req.user.user_id,
+          employeeId: req.user.employee_id,
+        }));
+    const result = await employeesService.getEmployeeById(req.params.employeeId, { scope });
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);
@@ -155,6 +174,30 @@ export async function addSalaryRevision(req, res, next) {
   }
 }
 
+export async function addCareerMovement(req, res, next) {
+  try {
+    const result = await employeesService.addCareerMovement(
+      req.params.employeeId,
+      req.body,
+      req.user.user_id,
+    );
+    await recordRequestActivity(req, {
+      action: 'EMPLOYEE_CAREER_MOVEMENT_CREATED',
+      entityType: 'employee_career_movements',
+      entityId: result?.movement?.id || req.params.employeeId,
+      meta: {
+        employee_id: req.params.employeeId,
+        movement_id: result?.movement?.id || null,
+        movement_type: result?.movement?.movement_type || req.body.movement_type,
+        salary_revision_id: result?.salaryRevision?.id || null,
+      },
+    });
+    return sendSuccess(res, result, 201);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function updateAllowances(req, res, next) {
   try {
     const result = await employeesService.updateAllowances(req.params.employeeId, req.body.allowances, req.user.user_id);
@@ -172,6 +215,18 @@ export async function updateAllowances(req, res, next) {
 
 export async function getFinanceHistory(req, res, next) {
   try {
+    const scope = req.permissionScope === 'self'
+      ? null
+      : withoutLocationScope(await resolveDepartmentScope({
+          roleId: req.user.role_id,
+          userId: req.user.user_id,
+          employeeId: req.user.employee_id,
+        }));
+
+    if (scope) {
+      await assertEmployeeInScope(req.params.employeeId, scope);
+    }
+
     const result = await employeesService.getEmployeeFinanceHistory(req.params.employeeId);
     return sendSuccess(res, result, 200);
   } catch (error) {

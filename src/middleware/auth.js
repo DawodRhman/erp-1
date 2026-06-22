@@ -25,7 +25,7 @@ export async function verifyToken(req, res, next) {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userResult = await pool.query(
       `
-        SELECT id, employee_id, role_id, must_change_password
+        SELECT id, email, employee_id, role_id, must_change_password, COALESCE(is_active, true) AS is_active
         FROM public.users
         WHERE id = $1
         LIMIT 1
@@ -38,11 +38,16 @@ export async function verifyToken(req, res, next) {
     }
 
     const currentUser = userResult.rows[0];
+    if (currentUser.is_active === false) {
+      return sendError(res, 'ACCOUNT_INACTIVE', 'This account is inactive. Contact HR or Super Admin.', 403);
+    }
+
     req.user = {
       user_id: currentUser.id,
       employee_id: currentUser.employee_id,
       role_id: currentUser.role_id,
       must_change_password: currentUser.must_change_password,
+      email: currentUser.email,
     };
 
     const isChangePasswordRoute =

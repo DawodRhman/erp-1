@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { sendSuccess } from '../../utils/respond.js';
 import * as calendarEventsService from './calendar-events.service.js';
 import { recordRequestActivity } from '../audit/audit.service.js';
+import { resolveDepartmentScope } from '../department-scope/department-scope.service.js';
 
 const eventBaseSchema = z.object({
   type: z.string().min(1),
@@ -31,6 +32,14 @@ const eventPatchSchema = eventBaseSchema.partial().refine(validateDateRange, {
   message: 'To date cannot be before from date.',
   path: ['end_date'],
 });
+
+function getRequestScope(req) {
+  return resolveDepartmentScope({
+    roleId: req.user.role_id,
+    userId: req.user.user_id,
+    employeeId: req.user.employee_id,
+  });
+}
 
 export async function getCalendarEvents(req, res, next) {
   try {
@@ -83,7 +92,8 @@ export async function createCalendarEvent(req, res, next) {
       });
     }
 
-    const result = await calendarEventsService.createCalendarEvent(parsed.data, req.user.user_id);
+    const scope = await getRequestScope(req);
+    const result = await calendarEventsService.createCalendarEvent(parsed.data, req.user.user_id, scope);
     await recordRequestActivity(req, {
       action: 'CALENDAR_EVENT_CREATED',
       entityType: 'calendar_events',
@@ -110,10 +120,12 @@ export async function updateCalendarEvent(req, res, next) {
       });
     }
 
+    const scope = await getRequestScope(req);
     const result = await calendarEventsService.updateCalendarEvent(
       req.params.id,
       parsed.data,
-      req.user.user_id
+      req.user.user_id,
+      scope
     );
     await recordRequestActivity(req, {
       action: 'CALENDAR_EVENT_UPDATED',

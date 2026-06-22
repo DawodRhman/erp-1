@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { verifyToken } from '../../middleware/auth.js';
-import { requirePermission } from '../../middleware/require-permission.js';
+import { requireAnyPermission, requirePermission } from '../../middleware/require-permission.js';
 import {
 	getHRMetrics,
 	getEmployeeSelfMetrics,
@@ -12,7 +12,7 @@ const router = Router();
 
 router.use(verifyToken);
 
-router.get('/metrics', requirePermission('dashboard:read'), getHRMetrics);
+router.get('/metrics', requireAnyPermission('dashboard:read', 'dashboard:department_read'), getHRMetrics);
 router.get('/me', getEmployeeSelfMetrics);
 router.get('/pending-actions', requirePermission('pending_actions:read'), getPendingActions);
 router.get('/urgent-alerts', requirePermission('alerts:read'), getUrgentAlerts);

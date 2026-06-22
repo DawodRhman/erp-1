@@ -6,10 +6,40 @@ function normalizeTargetIds(value, fallback) {
   return [...new Set(source.filter(Boolean))];
 }
 
+function applyDepartmentScope(departmentIds, scope) {
+  if (!scope) return departmentIds;
+  return [scope.department_id];
+}
+
+async function assertDesignationsInDepartments(designationIds, departmentIds) {
+  if (!designationIds.length || !departmentIds.length) return;
+
+  const result = await pool.query(
+    `
+      SELECT id
+      FROM public.designations
+      WHERE id = ANY($1::uuid[])
+        AND department_id = ANY($2::uuid[])
+    `,
+    [designationIds, departmentIds]
+  );
+
+  if (result.rowCount !== designationIds.length) {
+    throw new AppError(403, 'OUTSIDE_DEPARTMENT_SCOPE', 'One or more designations are outside your assigned department scope.');
+  }
+}
+
 export async function listAnnouncements({ activeOnly = true, roleName = 'employee', all = false, employeeId } = {}) {
   const filters = [];
   const params = [];
   const shouldScopeToEmployeeTargets = !all && roleName === 'employee' && employeeId;
+  const includeReadReceipt = Boolean(employeeId);
+  let employeeParamIndex = null;
+
+  if (includeReadReceipt || shouldScopeToEmployeeTargets) {
+    params.push(employeeId);
+    employeeParamIndex = params.length;
+  }
 
   if (activeOnly && !all) {
     filters.push('a.is_active = true');
@@ -20,7 +50,6 @@ export async function listAnnouncements({ activeOnly = true, roleName = 'employe
   }
 
   if (shouldScopeToEmployeeTargets) {
-    params.push(employeeId);
     filters.push(`(
       cardinality(a.target_department_ids) = 0
       OR viewer_job.department_id = ANY(a.target_department_ids)
@@ -39,6 +68,7 @@ export async function listAnnouncements({ activeOnly = true, roleName = 'employe
         updater_emp.name AS updated_by_name,
         target_departments.names AS target_department_names,
         target_designations.names AS target_designation_names
+        ${includeReadReceipt ? ', receipt.read_at AS read_at, (receipt.id IS NOT NULL) AS is_read' : ', NULL::timestamptz AS read_at, false AS is_read'}
       FROM public.announcements a
       LEFT JOIN public.users creator_user ON creator_user.id = a.created_by
       LEFT JOIN public.employee_info creator_emp ON creator_emp.employee_id = creator_user.employee_id
@@ -54,7 +84,10 @@ export async function listAnnouncements({ activeOnly = true, roleName = 'employe
         FROM public.designations dsg
         WHERE dsg.id = ANY(a.target_designation_ids)
       ) target_designations ON true
-      ${shouldScopeToEmployeeTargets ? `LEFT JOIN public.job_info viewer_job ON viewer_job.employee_id = $1` : ''}
+      ${includeReadReceipt ? `LEFT JOIN public.announcement_read_receipts receipt
+        ON receipt.announcement_id = a.id
+       AND receipt.employee_id = $${employeeParamIndex}` : ''}
+      ${shouldScopeToEmployeeTargets ? `LEFT JOIN public.job_info viewer_job ON viewer_job.employee_id = $${employeeParamIndex}` : ''}
       ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}
       ORDER BY a.created_at DESC
     `,
@@ -74,9 +107,17 @@ export async function createAnnouncement({
   target_designation_ids,
   is_active,
   userId,
+  scope = null,
 }) {
-  const departmentIds = normalizeTargetIds(target_department_ids, target_department_id);
+  const departmentIds = applyDepartmentScope(
+    normalizeTargetIds(target_department_ids, target_department_id),
+    scope
+  );
   const designationIds = normalizeTargetIds(target_designation_ids, target_designation_id);
+  if (scope) {
+    await assertDesignationsInDepartments(designationIds, departmentIds);
+  }
+
   const result = await pool.query(
     `
       INSERT INTO public.announcements (
@@ -98,7 +139,7 @@ export async function createAnnouncement({
   return result.rows[0];
 }
 
-export async function updateAnnouncement(id, payload, userId) {
+export async function updateAnnouncement(id, payload, userId, scope = null) {
   const fields = [];
   const values = [];
 
@@ -107,8 +148,14 @@ export async function updateAnnouncement(id, payload, userId) {
     Object.prototype.hasOwnProperty.call(payload, 'target_department_ids') ||
     Object.prototype.hasOwnProperty.call(payload, 'target_department_id')
   ) {
-    normalizedPayload.target_department_ids = normalizeTargetIds(payload.target_department_ids, payload.target_department_id);
+    normalizedPayload.target_department_ids = applyDepartmentScope(
+      normalizeTargetIds(payload.target_department_ids, payload.target_department_id),
+      scope
+    );
     delete normalizedPayload.target_department_id;
+  }
+  if (scope && !Object.prototype.hasOwnProperty.call(normalizedPayload, 'target_department_ids')) {
+    normalizedPayload.target_department_ids = [scope.department_id];
   }
   if (
     Object.prototype.hasOwnProperty.call(payload, 'target_designation_ids') ||
@@ -116,6 +163,13 @@ export async function updateAnnouncement(id, payload, userId) {
   ) {
     normalizedPayload.target_designation_ids = normalizeTargetIds(payload.target_designation_ids, payload.target_designation_id);
     delete normalizedPayload.target_designation_id;
+  }
+
+  if (scope) {
+    await assertDesignationsInDepartments(
+      normalizeTargetIds(normalizedPayload.target_designation_ids),
+      normalizeTargetIds(normalizedPayload.target_department_ids)
+    );
   }
 
   for (const key of ['title', 'body', 'expiry_date', 'target_department_ids', 'target_designation_ids', 'is_active']) {
@@ -149,6 +203,45 @@ export async function updateAnnouncement(id, payload, userId) {
   if (result.rowCount === 0) {
     throw new AppError(404, 'NOT_FOUND', 'Announcement not found.');
   }
+
+  return result.rows[0];
+}
+
+export async function markAnnouncementRead(announcementId, { userId, employeeId } = {}) {
+  const existing = await pool.query(
+    `
+      SELECT id
+      FROM public.announcements
+      WHERE id = $1
+        AND is_active = true
+        AND (expiry_date IS NULL OR expiry_date >= CURRENT_DATE)
+      LIMIT 1
+    `,
+    [announcementId]
+  );
+
+  if (existing.rowCount === 0) {
+    throw new AppError(404, 'NOT_FOUND', 'Announcement not found or no longer active.');
+  }
+
+  const conflictTarget = employeeId
+    ? '(announcement_id, employee_id)'
+    : '(announcement_id, user_id)';
+
+  const result = await pool.query(
+    `
+      INSERT INTO public.announcement_read_receipts (
+        announcement_id,
+        user_id,
+        employee_id
+      )
+      VALUES ($1, $2, $3)
+      ON CONFLICT ${conflictTarget}
+      DO UPDATE SET read_at = public.announcement_read_receipts.read_at
+      RETURNING *
+    `,
+    [announcementId, userId || null, employeeId || null]
+  );
 
   return result.rows[0];
 }

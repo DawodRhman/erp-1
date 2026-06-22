@@ -39,9 +39,19 @@ export function generateTempPassword() {
 export async function login(email, password) {
   const result = await pool.query(
     `
-      SELECT id, email, employee_id, role_id, password, must_change_password
-      FROM public.users
-      WHERE email = $1
+      SELECT
+        u.id,
+        u.email,
+        u.employee_id,
+        u.role_id,
+        u.password,
+        u.must_change_password,
+        COALESCE(u.is_active, true) AS is_active,
+        js.status_name AS job_status_name
+      FROM public.users u
+      LEFT JOIN public.job_info ji ON ji.employee_id = u.employee_id
+      LEFT JOIN public.job_statuses js ON js.id = ji.job_status_id
+      WHERE u.email = $1
       LIMIT 1
     `,
     [email]
@@ -50,6 +60,15 @@ export async function login(email, password) {
   const user = result.rows[0];
   if (!user) {
     throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password.');
+  }
+
+  if (user.is_active === false) {
+    throw new AppError(403, 'ACCOUNT_DISABLED', 'Your account is disabled. Contact your HR.');
+  }
+
+  const normalizedJobStatus = String(user.job_status_name || '').trim().toLowerCase();
+  if (['terminated', 'inactive', 'resigned', 'left'].includes(normalizedJobStatus)) {
+    throw new AppError(403, 'ACCOUNT_DISABLED', 'Your account is disabled. Contact your HR.');
   }
 
   const validPassword = await bcrypt.compare(password, user.password);

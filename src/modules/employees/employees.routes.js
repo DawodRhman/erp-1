@@ -12,6 +12,7 @@ import {
   resendCredentials,
   createEmployeeAccount,
   addSalaryRevision,
+  addCareerMovement,
   updateAllowances,
   getFinanceHistory,
 } from './employees.controller.js';
@@ -33,6 +34,7 @@ import {
   updateJobInfoSchema,
   updateExtraInfoSchema,
   salaryRevisionSchema,
+  careerMovementSchema,
   updateAllowancesSchema,
   createEmployeeAccountSchema,
 } from './employees.schema.js';
@@ -43,7 +45,11 @@ router.use(verifyToken);
 
 router.get(
   '/',
-  requirePermissionOrSelf('employees:read', 'employees:self_read', { paramKey: null }),
+  requirePermissionOrSelf(
+    ['employees:read', 'employees:department_read'],
+    'employees:self_read',
+    { paramKey: null }
+  ),
   getEmployees
 );
 router.get(
@@ -67,7 +73,14 @@ router.post(
   requirePermission('employees:write'),
   importBulkEmployeesController
 );
-router.get('/:employeeId', requirePermissionOrSelf('employees:read', 'employees:self_read'), getEmployeeById);
+router.get(
+  '/:employeeId',
+  requirePermissionOrSelf(
+    ['employees:read', 'employees:department_read'],
+    'employees:self_read'
+  ),
+  getEmployeeById
+);
 router.get(
   '/:employeeId/attachments',
   requirePermissionOrSelf('employee_attachments:read', 'employees:self_read'),
@@ -113,7 +126,7 @@ router.post(
 // Finance Routes
 router.get(
   '/:employeeId/finance',
-  requirePermission('salary:read'),
+  requirePermissionOrSelf(['salary:read', 'employees:department_read'], 'employees:self_read'),
   getFinanceHistory
 );
 
@@ -122,6 +135,13 @@ router.post(
   requirePermission('salary:write'),
   validate(salaryRevisionSchema),
   addSalaryRevision
+);
+
+router.post(
+  '/:employeeId/career-movements',
+  requirePermission('employees:write'),
+  validate(careerMovementSchema),
+  addCareerMovement
 );
 
 router.put(

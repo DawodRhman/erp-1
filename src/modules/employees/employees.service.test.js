@@ -289,6 +289,69 @@ describe('employee profile photo fields', () => {
     expect(query.mock.calls[0][0]).toContain("kind = 'profile_photo'");
   });
 
+  it('filters employee lists by Department Head department and location scope', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ total: 0 }], rowCount: 1 });
+
+    const { getEmployees } = await loadService();
+    await getEmployees({
+      page: 1,
+      limit: 20,
+      scope: {
+        department_id: 'dept-engineering',
+        work_location_id: 'location-lahore',
+      },
+    });
+
+    expect(query.mock.calls[0][0]).toContain('ji.department_id = $1');
+    expect(query.mock.calls[0][0]).toContain('ji.work_location_id = $2');
+    expect(query.mock.calls[0][1]).toEqual([
+      'dept-engineering',
+      'location-lahore',
+      20,
+      0,
+    ]);
+  });
+
+  it('filters employee detail by Department Head scope without truncating profile data', async () => {
+    query
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{
+          employee_id: 'EMP0010',
+          name: 'Scoped Employee',
+          department_id: 'dept-engineering',
+          work_location_id: 'location-lahore',
+          account_email: 'private@example.com',
+          account_user_id: 'user-10',
+          account_role_id: 'role-head',
+          account_is_active: true,
+          account_must_change_password: false,
+          bank_name: 'Private Bank',
+          blood_group: 'O+',
+          primary_phone: '03001234567',
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+    const { getEmployeeById } = await loadService();
+    const employee = await getEmployeeById('EMP0010', {
+      scope: {
+        department_id: 'dept-engineering',
+        work_location_id: 'location-lahore',
+      },
+    });
+
+    expect(query.mock.calls[0][0]).toContain('ji.department_id = $2');
+    expect(query.mock.calls[0][0]).toContain('ji.work_location_id = $3');
+    expect(employee.accountInfo.email).toBe('private@example.com');
+    expect(employee.employeeContact.primary_phone).toBe('03001234567');
+    expect(employee.bankInfo.bank_name).toBe('Private Bank');
+    expect(employee.medicalInfo.blood_group).toBe('O+');
+  });
+
   it('selects the latest profile photo url in employee detail', async () => {
     query
       .mockResolvedValueOnce({
@@ -488,5 +551,95 @@ describe('updateAllowances', () => {
       'creator-user-id',
     ]);
     expect(result[0]).toMatchObject({ is_active: false, is_current: true });
+  });
+});
+
+describe('addCareerMovement', () => {
+  beforeEach(() => {
+    query.mockReset();
+    clientQuery.mockReset();
+    release.mockReset();
+  });
+
+  it('records a career movement and atomically updates job info and salary when provided', async () => {
+    clientQuery
+      .mockResolvedValueOnce({}) // BEGIN
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            employee_id: 'EMP0201',
+            department_id: 'dept-old',
+            designation_id: 'des-old',
+            employment_type_id: 'type-1',
+            job_status_id: 'status-1',
+            work_mode_id: 'mode-1',
+            work_location_id: 'loc-1',
+            shift_id: 'shift-1',
+            manager_emp_id: 'EMP0001',
+            date_of_joining: '2020-01-01',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ id: 'movement-1', employee_id: 'EMP0201', movement_type: 'Promotion' }],
+      })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'history-1' }] })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            employee_id: 'EMP0201',
+            department_id: 'dept-new',
+            designation_id: 'des-new',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ id: 'salary-1', basic_salary: 125000, revision_type: 'Promotion' }],
+      })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'notification-1' }] })
+      .mockResolvedValueOnce({}); // COMMIT
+
+    const { addCareerMovement } = await loadService();
+    const result = await addCareerMovement(
+      'EMP0201',
+      {
+        movement_type: 'Promotion',
+        effective_date: '2026-06-16',
+        department_id: 'dept-new',
+        designation_id: 'des-new',
+        reason: 'Promoted to senior role',
+        salaryInfo: {
+          base_salary: 125000,
+          currency: 'PKR',
+          revision_type: 'Promotion',
+          revision_percent: 20,
+          revision_reason: 'Promotion adjustment',
+        },
+      },
+      'user-1',
+    );
+
+    expect(clientQuery.mock.calls[1][0]).toContain('FROM public.job_info');
+    expect(clientQuery.mock.calls[1][0]).toContain('FOR UPDATE');
+    expect(clientQuery.mock.calls[2][0]).toContain('INSERT INTO public.employee_career_movements');
+    expect(clientQuery.mock.calls[3][0]).toContain('INSERT INTO public.employee_job_history');
+    expect(clientQuery.mock.calls[4][0]).toContain('UPDATE public.job_info');
+    expect(clientQuery.mock.calls[5][0]).toContain('UPDATE public.employee_salary');
+    expect(clientQuery.mock.calls[6][0]).toContain('INSERT INTO public.employee_salary');
+    expect(clientQuery.mock.calls[7][0]).toContain('UPDATE public.employee_career_movements');
+    expect(clientQuery.mock.calls[8][0]).toContain('INSERT INTO public.notifications');
+    expect(clientQuery.mock.calls[8][1]).toEqual([
+      'EMP0201',
+      'Your career record was updated: Promotion.',
+      'user-1',
+    ]);
+    expect(result.movement.id).toBe('movement-1');
+    expect(result.salaryRevision.id).toBe('salary-1');
   });
 });

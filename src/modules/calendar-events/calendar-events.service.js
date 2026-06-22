@@ -13,6 +13,29 @@ function normalizeTargetIds(value) {
   return [...new Set((Array.isArray(value) ? value : []).filter(Boolean))];
 }
 
+function applyDepartmentScope(departmentIds, scope) {
+  if (!scope) return departmentIds;
+  return [scope.department_id];
+}
+
+async function assertDesignationsInDepartments(designationIds, departmentIds) {
+  if (!designationIds.length || !departmentIds.length) return;
+
+  const result = await pool.query(
+    `
+      SELECT id
+      FROM public.designations
+      WHERE id = ANY($1::uuid[])
+        AND department_id = ANY($2::uuid[])
+    `,
+    [designationIds, departmentIds]
+  );
+
+  if (result.rowCount !== designationIds.length) {
+    throw new AppError(403, 'OUTSIDE_DEPARTMENT_SCOPE', 'One or more designations are outside your assigned department scope.');
+  }
+}
+
 function resolveDateRange(payload) {
   const startDate = payload.start_date || payload.date;
   const endDate = payload.end_date || startDate;
@@ -98,9 +121,12 @@ export async function getCalendarEvents({ from, to, type, search, sort, order, r
   return result.rows;
 }
 
-export async function createCalendarEvent(payload, userId) {
-  const departmentIds = normalizeTargetIds(payload.target_department_ids);
+export async function createCalendarEvent(payload, userId, scope = null) {
+  const departmentIds = applyDepartmentScope(normalizeTargetIds(payload.target_department_ids), scope);
   const designationIds = normalizeTargetIds(payload.target_designation_ids);
+  if (scope) {
+    await assertDesignationsInDepartments(designationIds, departmentIds);
+  }
   const { startDate, endDate } = resolveDateRange(payload);
   const result = await pool.query(
     `
@@ -124,13 +150,16 @@ export async function createCalendarEvent(payload, userId) {
   return result.rows[0];
 }
 
-export async function updateCalendarEvent(id, payload, userId) {
+export async function updateCalendarEvent(id, payload, userId, scope = null) {
   const fields = [];
   const values = [];
 
   const normalizedPayload = { ...payload };
   if (Object.prototype.hasOwnProperty.call(payload, 'target_department_ids')) {
-    normalizedPayload.target_department_ids = normalizeTargetIds(payload.target_department_ids);
+    normalizedPayload.target_department_ids = applyDepartmentScope(normalizeTargetIds(payload.target_department_ids), scope);
+  }
+  if (scope && !Object.prototype.hasOwnProperty.call(normalizedPayload, 'target_department_ids')) {
+    normalizedPayload.target_department_ids = [scope.department_id];
   }
   if (Object.prototype.hasOwnProperty.call(payload, 'target_designation_ids')) {
     normalizedPayload.target_designation_ids = normalizeTargetIds(payload.target_designation_ids);
@@ -161,6 +190,13 @@ export async function updateCalendarEvent(id, payload, userId) {
       throw new AppError(404, 'NOT_FOUND', 'Calendar event not found.');
     }
     return existing.rows[0];
+  }
+
+  if (scope) {
+    await assertDesignationsInDepartments(
+      normalizeTargetIds(normalizedPayload.target_designation_ids),
+      normalizeTargetIds(normalizedPayload.target_department_ids)
+    );
   }
 
   values.push(userId);

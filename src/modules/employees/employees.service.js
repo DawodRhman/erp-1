@@ -418,6 +418,7 @@ export async function getEmployees({
   is_active,
   page = 1,
   limit = 20,
+  scope = null,
 }) {
   const normalizedPage = Math.max(Number(page) || 1, 1);
   const normalizedLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
@@ -425,6 +426,16 @@ export async function getEmployees({
 
   const whereParts = [];
   const params = [];
+
+  if (scope?.department_id) {
+    params.push(scope.department_id);
+    whereParts.push(`ji.department_id = $${params.length}`);
+  }
+
+  if (scope?.work_location_id) {
+    params.push(scope.work_location_id);
+    whereParts.push(`ji.work_location_id = $${params.length}`);
+  }
 
   if (search) {
     params.push(`%${search}%`);
@@ -495,7 +506,18 @@ export async function getEmployees({
   };
 }
 
-export async function getEmployeeById(employeeId) {
+export async function getEmployeeById(employeeId, { scope = null } = {}) {
+  const detailParams = [employeeId];
+  const scopeFilters = [];
+  if (scope?.department_id) {
+    detailParams.push(scope.department_id);
+    scopeFilters.push(`ji.department_id = $${detailParams.length}`);
+  }
+  if (scope?.work_location_id) {
+    detailParams.push(scope.work_location_id);
+    scopeFilters.push(`ji.work_location_id = $${detailParams.length}`);
+  }
+
   const result = await pool.query(
     `
       SELECT
@@ -539,6 +561,7 @@ export async function getEmployeeById(employeeId) {
         u.id AS account_user_id,
         u.email AS account_email,
         u.role_id AS account_role_id,
+        COALESCE(u.is_active, true) AS account_is_active,
         u.must_change_password AS account_must_change_password,
         photo.file_path AS profile_photo_url
       FROM public.employee_info ei
@@ -565,17 +588,21 @@ export async function getEmployeeById(employeeId) {
         LIMIT 1
       ) photo ON true
       WHERE ei.employee_id = $1
+      ${scopeFilters.length ? `AND ${scopeFilters.join(' AND ')}` : ''}
       LIMIT 1
     `,
-    [employeeId]
+    detailParams
   );
 
   if (result.rowCount === 0) {
+    if (scope) {
+      throw new AppError(403, 'OUTSIDE_DEPARTMENT_SCOPE', 'Employee is outside your assigned department scope.');
+    }
     throw new AppError(404, 'NOT_FOUND', 'Employee not found.');
   }
 
   const row = result.rows[0];
-  
+
   const salaryResult = await pool.query(
     `
       SELECT * FROM public.employee_salary
@@ -611,6 +638,7 @@ export async function getEmployeeById(employeeId) {
       id: row.account_user_id,
       email: row.account_email,
       role_id: row.account_role_id,
+      is_active: row.account_is_active,
       must_change_password: row.account_must_change_password,
     } : null,
     allowances: allowancesResult.rows,
@@ -1261,6 +1289,189 @@ export async function addSalaryRevision(employeeId, data, createdByUserId) {
 
     await client.query('COMMIT');
     return result.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function addCareerMovement(employeeId, data, createdByUserId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const currentResult = await client.query(
+      `
+        SELECT *
+        FROM public.job_info
+        WHERE employee_id = $1
+        FOR UPDATE
+      `,
+      [employeeId]
+    );
+
+    if (currentResult.rowCount === 0) {
+      throw new AppError(404, 'NOT_FOUND', 'Employee job info not found.');
+    }
+
+    const current = currentResult.rows[0];
+    const newDepartmentId = data.department_id || current.department_id;
+    const newDesignationId = data.designation_id || current.designation_id;
+    const newWorkLocationId = data.work_location_id || current.work_location_id;
+    const effectiveDate = data.effective_date;
+    const jobChanged =
+      newDepartmentId !== current.department_id ||
+      newDesignationId !== current.designation_id ||
+      newWorkLocationId !== current.work_location_id;
+
+    const movementResult = await client.query(
+      `
+        INSERT INTO public.employee_career_movements (
+          employee_id,
+          movement_type,
+          effective_date,
+          previous_department_id,
+          previous_designation_id,
+          previous_work_location_id,
+          new_department_id,
+          new_designation_id,
+          new_work_location_id,
+          reason,
+          created_by
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING *
+      `,
+      [
+        employeeId,
+        data.movement_type,
+        effectiveDate,
+        current.department_id,
+        current.designation_id,
+        current.work_location_id,
+        newDepartmentId,
+        newDesignationId,
+        newWorkLocationId,
+        data.reason,
+        createdByUserId,
+      ]
+    );
+
+    if (jobChanged) {
+      await client.query(
+        `
+          INSERT INTO public.employee_job_history (
+            employee_id,
+            department_id,
+            designation_id,
+            manager_emp_id,
+            start_date,
+            end_date
+          )
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `,
+        [
+          employeeId,
+          current.department_id,
+          current.designation_id,
+          current.manager_emp_id || null,
+          current.date_of_joining,
+          effectiveDate,
+        ]
+      );
+
+      await client.query(
+        `
+          UPDATE public.job_info
+          SET department_id = $2,
+              designation_id = $3,
+              work_location_id = $4,
+              updated_at = now()
+          WHERE employee_id = $1
+          RETURNING employee_id, department_id, designation_id, work_location_id
+        `,
+        [employeeId, newDepartmentId, newDesignationId, newWorkLocationId]
+      );
+    }
+
+    let salaryRevision = null;
+    if (data.salaryInfo) {
+      await client.query(
+        `
+          UPDATE public.employee_salary
+          SET is_current = false, effective_to = $2
+          WHERE employee_id = $1 AND is_current = true
+        `,
+        [employeeId, effectiveDate]
+      );
+
+      const salaryResult = await client.query(
+        `
+          INSERT INTO public.employee_salary (
+            employee_id,
+            basic_salary,
+            currency,
+            effective_from,
+            is_current,
+            is_active,
+            revision_type,
+            revision_percent,
+            revision_reason,
+            created_by
+          )
+          VALUES ($1, $2, $3, $4, true, true, $5, $6, $7, $8)
+          RETURNING *
+        `,
+        [
+          employeeId,
+          data.salaryInfo.base_salary,
+          data.salaryInfo.currency || 'PKR',
+          data.salaryInfo.effective_from || effectiveDate,
+          data.salaryInfo.revision_type || data.movement_type,
+          data.salaryInfo.revision_percent || null,
+          data.salaryInfo.revision_reason || data.reason,
+          createdByUserId,
+        ]
+      );
+      salaryRevision = salaryResult.rows[0] || null;
+
+      if (salaryRevision?.id) {
+        await client.query(
+          `
+            UPDATE public.employee_career_movements
+            SET salary_revision_id = $2, updated_at = now()
+            WHERE id = $1
+          `,
+          [movementResult.rows[0].id, salaryRevision.id]
+        );
+      }
+    }
+
+    await client.query(
+      `
+        INSERT INTO public.notifications (user_id, type, message, created_by)
+        SELECT u.id,
+               'career_movement',
+               $2,
+               $3
+        FROM public.users u
+        WHERE u.employee_id = $1
+        LIMIT 1
+      `,
+      [
+        employeeId,
+        `Your career record was updated: ${data.movement_type}.`,
+        createdByUserId || null,
+      ]
+    );
+
+    await client.query('COMMIT');
+    return {
+      movement: movementResult.rows[0],
+      salaryRevision,
+    };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

@@ -105,6 +105,50 @@ describe('penalties service', () => {
     expect(query.mock.calls[0][0]).toContain('COALESCE(ep.applied_amount_pkr, pr.amount_pkr) AS amount_pkr');
   });
 
+  it('filters penalty lists by Department Head department and location scope', async () => {
+    query.mockResolvedValueOnce({ rows: [] });
+
+    const { listPenalties } = await import('./penalties.service.js');
+    await listPenalties({
+      scope: {
+        department_id: 'dept-engineering',
+        work_location_id: 'location-lahore',
+      },
+    });
+
+    expect(query.mock.calls[0][0]).toContain('JOIN public.job_info ji');
+    expect(query.mock.calls[0][0]).toContain('ji.department_id = $1');
+    expect(query.mock.calls[0][0]).toContain('ji.work_location_id = $2');
+    expect(query.mock.calls[0][1]).toEqual(['dept-engineering', 'location-lahore']);
+  });
+
+  it('rejects a Department Head penalty proposal for an out-of-scope employee', async () => {
+    query.mockResolvedValueOnce({
+      rows: [{
+        department_id: 'dept-sales',
+        work_location_id: 'location-lahore',
+      }],
+    });
+
+    const { proposePenalty } = await import('./penalties.service.js');
+
+    await expect(proposePenalty({
+      employee_id: 'EMP0099',
+      rule_id: 'rule-id',
+      date: '2026-06-09',
+      reason: 'Repeated lateness',
+      proposed_by: 'user-head',
+      scope: {
+        department_id: 'dept-engineering',
+        work_location_id: 'location-lahore',
+      },
+    })).rejects.toMatchObject({
+      statusCode: 403,
+      code: 'OUTSIDE_DEPARTMENT_SCOPE',
+    });
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
   it('can include inactive penalty rules for configuration management and orders active rules first', async () => {
     query.mockResolvedValueOnce({
       rows: [

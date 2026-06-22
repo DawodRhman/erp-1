@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { verifyToken } from '../../middleware/auth.js';
-import { requirePermission } from '../../middleware/require-permission.js';
+import { requireAnyPermission, requirePermission } from '../../middleware/require-permission.js';
 import { validateParams } from '../../middleware/validate.js';
 import {
   getPenaltyRules,
@@ -23,13 +23,13 @@ const uuidParamSchema = z.object({
 
 router.use(verifyToken);
 
-router.get('/penalty-rules', requirePermission('penalties:propose'), getPenaltyRules);
+router.get('/penalty-rules', requireAnyPermission('penalties:propose', 'penalties:department_propose'), getPenaltyRules);
 router.post('/penalty-rules', requirePermission('penalty_rules:write'), createPenaltyRule);
 router.patch('/penalty-rules/:id', requirePermission('penalty_rules:write'), validateParams(uuidParamSchema), updatePenaltyRule);
 
-router.get('/penalties', requirePermission('penalties:read_all'), getPenalties);
+router.get('/penalties', requireAnyPermission('penalties:read_all', 'penalties:department_read'), getPenalties);
 router.get('/penalties/mine', requirePermission('penalties:read_own'), getMyPenalties);
-router.post('/penalties', requirePermission('penalties:propose'), proposePenalty);
+router.post('/penalties', requireAnyPermission('penalties:propose', 'penalties:department_propose'), proposePenalty);
 router.patch('/penalties/:id/approve', requirePermission('penalties:review'), validateParams(uuidParamSchema), approvePenalty);
 router.patch('/penalties/:id/reject', requirePermission('penalties:review'), validateParams(uuidParamSchema), rejectPenalty);
 router.patch('/penalties/:id/ack', validateParams(uuidParamSchema), acknowledgePenalty);

@@ -180,3 +180,34 @@ export const createEmployeeAccountSchema = z.object({
   email: z.string().email(),
   role_id: z.string().uuid(),
 });
+
+export const careerMovementSchema = z.object({
+  movement_type: z.enum([
+    'Promotion',
+    'Demotion',
+    'Transfer',
+    'Department Change',
+    'Designation Change',
+    'Correction',
+  ]),
+  effective_date: z.string().min(8),
+  department_id: z.string().uuid().optional().nullable(),
+  designation_id: z.string().uuid().optional().nullable(),
+  work_location_id: z.string().uuid().optional().nullable(),
+  reason: z.string().trim().min(1, 'Reason is mandatory.').max(1000),
+  salaryInfo: salaryInfoSchema
+    .omit({ effective_from: true })
+    .extend({
+      effective_from: z.string().min(8).optional(),
+    })
+    .optional()
+    .nullable(),
+}).superRefine((value, ctx) => {
+  if (!value.department_id && !value.designation_id && !value.work_location_id && !value.salaryInfo) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['movement_type'],
+      message: 'At least one job or salary change is mandatory.',
+    });
+  }
+});

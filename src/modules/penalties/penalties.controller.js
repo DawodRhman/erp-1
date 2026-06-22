@@ -3,6 +3,15 @@ import { sendSuccess } from '../../utils/respond.js';
 import { AppError } from '../../utils/errors.js';
 import * as penaltiesService from './penalties.service.js';
 import { recordRequestActivity } from '../audit/audit.service.js';
+import { resolveDepartmentScope } from '../department-scope/department-scope.service.js';
+
+async function getRequestScope(req) {
+  return resolveDepartmentScope({
+    roleId: req.user.role_id,
+    userId: req.user.user_id,
+    employeeId: req.user.employee_id,
+  });
+}
 
 const ruleSchema = z.object({
   name: z.string().min(1),
@@ -91,9 +100,11 @@ export async function updatePenaltyRule(req, res, next) {
 
 export async function getPenalties(req, res, next) {
   try {
+    const scope = await getRequestScope(req);
     const result = await penaltiesService.listPenalties({
       status: req.query.status,
       employee_id: req.query.employee_id,
+      scope,
     });
     return sendSuccess(res, result, 200);
   } catch (error) {
@@ -124,9 +135,11 @@ export async function proposePenalty(req, res, next) {
       });
     }
 
+    const scope = await getRequestScope(req);
     const result = await penaltiesService.proposePenalty({
       ...parsed.data,
       proposed_by: req.user.user_id,
+      scope,
     });
     await recordRequestActivity(req, {
       action: 'PENALTY_PROPOSED',

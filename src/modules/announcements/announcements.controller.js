@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { sendSuccess } from '../../utils/respond.js';
 import * as announcementsService from './announcements.service.js';
 import { recordRequestActivity } from '../audit/audit.service.js';
+import { resolveDepartmentScope } from '../department-scope/department-scope.service.js';
 
 const announcementSchema = z.object({
   title: z.string().min(1).max(255),
@@ -15,6 +16,14 @@ const announcementSchema = z.object({
 });
 
 const announcementPatchSchema = announcementSchema.partial();
+
+function getRequestScope(req) {
+  return resolveDepartmentScope({
+    roleId: req.user.role_id,
+    userId: req.user.user_id,
+    employeeId: req.user.employee_id,
+  });
+}
 
 export async function getAnnouncements(req, res, next) {
   try {
@@ -47,9 +56,11 @@ export async function createAnnouncement(req, res, next) {
       });
     }
 
+    const scope = await getRequestScope(req);
     const result = await announcementsService.createAnnouncement({
       ...parsed.data,
       userId: req.user.user_id,
+      scope,
     });
     await recordRequestActivity(req, {
       action: 'ANNOUNCEMENT_CREATED',
@@ -77,10 +88,12 @@ export async function updateAnnouncement(req, res, next) {
       });
     }
 
+    const scope = await getRequestScope(req);
     const result = await announcementsService.updateAnnouncement(
       req.params.id,
       parsed.data,
-      req.user.user_id
+      req.user.user_id,
+      scope
     );
     await recordRequestActivity(req, {
       action: 'ANNOUNCEMENT_UPDATED',
@@ -88,6 +101,30 @@ export async function updateAnnouncement(req, res, next) {
       entityId: req.params.id,
       meta: { announcement_id: req.params.id, updated_fields: Object.keys(parsed.data) },
     });
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function markAnnouncementRead(req, res, next) {
+  try {
+    const result = await announcementsService.markAnnouncementRead(req.params.id, {
+      userId: req.user.user_id,
+      employeeId: req.user.employee_id,
+    });
+
+    await recordRequestActivity(req, {
+      action: 'ANNOUNCEMENT_READ',
+      entityType: 'announcement_read_receipts',
+      entityId: result?.id || null,
+      meta: {
+        announcement_id: req.params.id,
+        receipt_id: result?.id || null,
+        employee_id: req.user.employee_id || null,
+      },
+    });
+
     return sendSuccess(res, result, 200);
   } catch (error) {
     return next(error);

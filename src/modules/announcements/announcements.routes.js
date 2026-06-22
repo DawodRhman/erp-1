@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { verifyToken } from '../../middleware/auth.js';
-import { requirePermission } from '../../middleware/require-permission.js';
+import { requireAnyPermission, requirePermission } from '../../middleware/require-permission.js';
 import { validateParams } from '../../middleware/validate.js';
 import {
   createAnnouncement,
   getAnnouncements,
+  markAnnouncementRead,
   updateAnnouncement,
 } from './announcements.controller.js';
 
@@ -18,7 +19,8 @@ const uuidParamSchema = z.object({
 router.use(verifyToken);
 
 router.get('/', requirePermission('announcements:read'), getAnnouncements);
-router.post('/', requirePermission('announcements:write'), createAnnouncement);
-router.patch('/:id', requirePermission('announcements:write'), validateParams(uuidParamSchema), updateAnnouncement);
+router.post('/', requireAnyPermission('announcements:write', 'announcements:department_write'), createAnnouncement);
+router.post('/:id/read', requirePermission('announcements:read'), validateParams(uuidParamSchema), markAnnouncementRead);
+router.patch('/:id', requireAnyPermission('announcements:write', 'announcements:department_write'), validateParams(uuidParamSchema), updateAnnouncement);
 
 export default router;
