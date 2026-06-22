@@ -1,4 +1,5 @@
 import pool from '../../config/db.js';
+import { AUDIT_CONFIG } from '../../config/audit.js';
 
 function compactObject(value) {
   return Object.fromEntries(
@@ -17,7 +18,7 @@ function clientIp(req) {
 }
 
 export function buildAuditRequestContext(req, extra = {}) {
-  return compactObject({
+  const context = {
     ip_address: clientIp(req),
     user_agent: header(req, 'user-agent'),
     method: req?.method,
@@ -28,7 +29,16 @@ export function buildAuditRequestContext(req, extra = {}) {
     actor_role_id: req?.user?.role_id,
     actor_email: req?.user?.email,
     ...extra,
-  });
+  };
+
+  if (AUDIT_CONFIG.capturePrivateIp) {
+    context.private_ip_address = header(req, 'x-client-local-ip') || null;
+  }
+  if (AUDIT_CONFIG.captureHostname) {
+    context.hostname = header(req, 'x-client-hostname') || null;
+  }
+
+  return compactObject(context);
 }
 
 export async function recordActivityLog({
@@ -43,13 +53,16 @@ export async function recordActivityLog({
 }) {
   try {
     const auditMeta = compactObject({ ...(meta || {}), ...(requestContext || {}) });
+    const privateIp = auditMeta.private_ip_address || null;
+    const hostname = auditMeta.hostname || null;
+
     const result = await db.query(
       `
-        INSERT INTO public.activity_logs (user_id, action, entity_type, entity_id, meta)
-        VALUES ($1, $2, $3, $4, $5::jsonb)
+        INSERT INTO public.activity_logs (user_id, action, entity_type, entity_id, meta, private_ip_address, hostname)
+        VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
         RETURNING *
       `,
-      [userId || null, action, entityType || null, entityId || null, JSON.stringify(auditMeta)]
+      [userId || null, action, entityType || null, entityId || null, JSON.stringify(auditMeta), privateIp, hostname]
     );
     return result.rows[0];
   } catch (error) {
@@ -156,6 +169,8 @@ export async function listActivityLogs(filters = {}) {
         al.entity_id,
         al.meta,
         al.created_at,
+        al.private_ip_address,
+        al.hostname,
         u.email AS actor_email,
         u.employee_id AS actor_employee_id,
         r.role_name AS actor_role_name,
@@ -185,10 +200,12 @@ export async function listActivityLogs(filters = {}) {
       recordId: row.entity_id || meta.employee_id || '-',
       summary: summarizeActivity(row.action, row.entity_type, row.entity_id, meta),
       ip_address: meta.ip_address || null,
+      private_ip_address: row.private_ip_address || meta.private_ip_address || null,
       user_agent: meta.user_agent || null,
       method: meta.method || null,
       path: meta.path || null,
       request_id: meta.request_id || null,
+      hostname: row.hostname || meta.hostname || null,
       actor_user_id: meta.actor_user_id || row.user_id || null,
       actor_employee_id: meta.actor_employee_id || row.actor_employee_id || null,
       actor_role_id: meta.actor_role_id || null,
