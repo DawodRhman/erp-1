@@ -1,6 +1,6 @@
 import multer from 'multer';
 import { sendSuccess } from '../../utils/respond.js';
-import { listEmployeeAttachments, uploadEmployeeAttachment } from './employees.attachments.service.js';
+import { listEmployeeAttachments, uploadEmployeeAttachment, downloadEmployeeAttachment } from './employees.attachments.service.js';
 import { buildAuditRequestContext } from '../audit/audit.service.js';
 
 export const attachmentUpload = multer({
@@ -28,6 +28,20 @@ export async function uploadAttachment(req, res, next) {
       requestContext: buildAuditRequestContext(req),
     });
     return sendSuccess(res, result, 201);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function downloadAttachment(req, res, next) {
+  try {
+    const { buffer, originalFilename, mimeType } = await downloadEmployeeAttachment(
+      req.params.employeeId,
+      req.params.attachmentId
+    );
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${originalFilename}"`);
+    return res.send(buffer);
   } catch (error) {
     return next(error);
   }

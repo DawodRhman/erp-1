@@ -27,6 +27,7 @@ import {
   attachmentUpload,
   getEmployeeAttachments,
   uploadAttachment,
+  downloadAttachment,
 } from './employees.attachments.controller.js';
 import {
   createEmployeeSchema,
@@ -91,6 +92,11 @@ router.post(
   requirePermission('employee_attachments:upload'),
   attachmentUpload.single('file'),
   uploadAttachment
+);
+router.get(
+  '/:employeeId/attachments/:attachmentId/download',
+  requirePermissionOrSelf('employee_attachments:read', 'employees:self_read'),
+  downloadAttachment
 );
 router.post('/', requirePermission('employees:write'), validate(createEmployeeSchema), createEmployee);
 router.patch(

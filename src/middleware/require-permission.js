@@ -1,13 +1,28 @@
 import pool from '../config/db.js';
 import { sendError } from '../utils/respond.js';
 
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
 const rolePermissionCache = new Map();
 const roleNameCache = new Map();
 
-async function getRoleName(roleId) {
-  if (roleNameCache.has(roleId)) {
-    return roleNameCache.get(roleId);
+function cacheGet(map, key) {
+  const entry = map.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+    map.delete(key);
+    return null;
   }
+  return entry.value;
+}
+
+function cacheSet(map, key, value) {
+  map.set(key, { value, timestamp: Date.now() });
+}
+
+async function getRoleName(roleId) {
+  const cached = cacheGet(roleNameCache, roleId);
+  if (cached !== null) return cached;
 
   const result = await pool.query(
     `SELECT role_name FROM public.roles WHERE id = $1 LIMIT 1`,
@@ -15,14 +30,13 @@ async function getRoleName(roleId) {
   );
 
   const roleName = result.rows[0]?.role_name || null;
-  roleNameCache.set(roleId, roleName);
+  cacheSet(roleNameCache, roleId, roleName);
   return roleName;
 }
 
 async function getPermissionsForRole(roleId) {
-  if (rolePermissionCache.has(roleId)) {
-    return rolePermissionCache.get(roleId);
-  }
+  const cached = cacheGet(rolePermissionCache, roleId);
+  if (cached !== null) return cached;
 
   const result = await pool.query(
     `
@@ -35,7 +49,7 @@ async function getPermissionsForRole(roleId) {
   );
 
   const permissionSet = new Set(result.rows.map((row) => row.permission_key));
-  rolePermissionCache.set(roleId, permissionSet);
+  cacheSet(rolePermissionCache, roleId, permissionSet);
   return permissionSet;
 }
 

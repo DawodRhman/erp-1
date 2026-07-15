@@ -12,9 +12,13 @@ function header(req, name) {
 }
 
 function clientIp(req) {
+  // req.ip is populated by Express based on 'trust proxy' setting.
+  // It is the correct client IP when behind a trusted proxy.
+  // Only fall back to raw x-forwarded-for parsing when req.ip is unavailable.
+  if (req?.ip) return req.ip;
   const forwardedFor = header(req, 'x-forwarded-for');
   if (forwardedFor) return String(forwardedFor).split(',')[0].trim();
-  return req?.ip || req?.socket?.remoteAddress || req?.connection?.remoteAddress || null;
+  return req?.socket?.remoteAddress || req?.connection?.remoteAddress || null;
 }
 
 export function buildAuditRequestContext(req, extra = {}) {
@@ -32,7 +36,24 @@ export function buildAuditRequestContext(req, extra = {}) {
   };
 
   if (AUDIT_CONFIG.capturePrivateIp) {
-    context.private_ip_address = header(req, 'x-client-local-ip') || null;
+    // Priority order for private IP:
+    // 1. x-client-local-ip (from frontend WebRTC detection)
+    // 2. x-client-private-ip (from corporate proxy/VPN/load balancer)
+    // 3. x-forwarded-for first hop (if it's a private IP)
+    const fromFrontend = header(req, 'x-client-local-ip');
+    const fromProxy = header(req, 'x-client-private-ip');
+    const forwardedFor = header(req, 'x-forwarded-for');
+    let privateIp = fromFrontend || fromProxy || null;
+
+    // Check if first x-forwarded-for is a private IP (enterprise proxy case)
+    if (!privateIp && forwardedFor) {
+      const firstHop = String(forwardedFor).split(',')[0].trim();
+      if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(firstHop)) {
+        privateIp = firstHop;
+      }
+    }
+
+    context.private_ip_address = privateIp;
   }
   if (AUDIT_CONFIG.captureHostname) {
     context.hostname = header(req, 'x-client-hostname') || null;
@@ -147,7 +168,8 @@ export async function listActivityLogs(filters = {}) {
       al.action ILIKE $${params.length}
       OR al.entity_type ILIKE $${params.length}
       OR al.entity_id ILIKE $${params.length}
-      OR al.meta::text ILIKE $${params.length}
+      OR al.private_ip_address::text ILIKE $${params.length}
+      OR al.hostname ILIKE $${params.length}
       OR u.email ILIKE $${params.length}
       OR ei.name ILIKE $${params.length}
     )`);

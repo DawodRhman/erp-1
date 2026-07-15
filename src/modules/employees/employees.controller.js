@@ -69,8 +69,20 @@ export async function getEmployeeById(req, res, next) {
   }
 }
 
+async function assertScope(req, employeeId) {
+  const scope = withoutLocationScope(await resolveDepartmentScope({
+    roleId: req.user.role_id,
+    userId: req.user.user_id,
+    employeeId: req.user.employee_id,
+  }));
+  if (scope) {
+    await assertEmployeeInScope(employeeId, scope);
+  }
+}
+
 export async function updatePersonalInfo(req, res, next) {
   try {
+    await assertScope(req, req.params.employeeId);
     const result = await employeesService.updatePersonalInfo(req.params.employeeId, req.body);
     await recordRequestActivity(req, {
       action: 'EMPLOYEE_PERSONAL_UPDATED',
@@ -86,6 +98,7 @@ export async function updatePersonalInfo(req, res, next) {
 
 export async function updateJobInfo(req, res, next) {
   try {
+    await assertScope(req, req.params.employeeId);
     const result = await employeesService.updateJobInfo(req.params.employeeId, req.body);
     await recordRequestActivity(req, {
       action: 'EMPLOYEE_JOB_UPDATED',
@@ -101,6 +114,7 @@ export async function updateJobInfo(req, res, next) {
 
 export async function updateExtraInfo(req, res, next) {
   try {
+    await assertScope(req, req.params.employeeId);
     const { employeeContact, emergencyContacts, bankInfo, medicalInfo } = req.body;
     const results = {};
 
@@ -132,6 +146,7 @@ export async function updateExtraInfo(req, res, next) {
 
 export async function resendCredentials(req, res, next) {
   try {
+    await assertScope(req, req.params.employeeId);
     const result = await employeesService.resendCredentials(req.params.employeeId);
     await recordRequestActivity(req, {
       action: 'EMPLOYEE_CREDENTIALS_RESET',
@@ -147,6 +162,7 @@ export async function resendCredentials(req, res, next) {
 
 export async function createEmployeeAccount(req, res, next) {
   try {
+    await assertScope(req, req.params.employeeId);
     const result = await employeesService.createEmployeeAccount(
       req.params.employeeId,
       req.body,
@@ -161,6 +177,7 @@ export async function createEmployeeAccount(req, res, next) {
 
 export async function addSalaryRevision(req, res, next) {
   try {
+    await assertScope(req, req.params.employeeId);
     const result = await employeesService.addSalaryRevision(req.params.employeeId, req.body, req.user.user_id);
     await recordRequestActivity(req, {
       action: 'EMPLOYEE_SALARY_REVISION_ADDED',
@@ -176,6 +193,7 @@ export async function addSalaryRevision(req, res, next) {
 
 export async function addCareerMovement(req, res, next) {
   try {
+    await assertScope(req, req.params.employeeId);
     const result = await employeesService.addCareerMovement(
       req.params.employeeId,
       req.body,
@@ -200,6 +218,7 @@ export async function addCareerMovement(req, res, next) {
 
 export async function updateAllowances(req, res, next) {
   try {
+    await assertScope(req, req.params.employeeId);
     const result = await employeesService.updateAllowances(req.params.employeeId, req.body.allowances, req.user.user_id);
     await recordRequestActivity(req, {
       action: 'EMPLOYEE_ALLOWANCES_UPDATED',

@@ -5,7 +5,7 @@ import pool from '../../config/db.js';
 import { AppError } from '../../utils/errors.js';
 import { recordActivityLog } from '../audit/audit.service.js';
 
-const uploadRoot = path.resolve('public', 'uploads', 'employees');
+const uploadRoot = path.resolve('private', 'uploads', 'employees');
 const allowedMimeTypes = new Set([
   'image/jpeg',
   'image/png',
@@ -35,7 +35,7 @@ export async function listEmployeeAttachments(employeeId) {
   );
   return result.rows.map((row) => ({
     ...row,
-    url: row.file_path.startsWith('/') ? row.file_path : `/${row.file_path}`,
+    url: `/api/employees/${row.employee_id}/attachments/${row.id}/download`,
   }));
 }
 
@@ -58,7 +58,7 @@ export async function uploadEmployeeAttachment({ employeeId, file, kind = 'docum
   const storedFilename = `${randomUUID()}${ext}`;
   const absolutePath = path.join(folder, storedFilename);
   await fs.writeFile(absolutePath, file.buffer);
-  const publicPath = `/uploads/employees/${employeeId}/${kind === 'profile_photo' ? 'profile' : 'documents'}/${storedFilename}`;
+  const relativePath = `${employeeId}/${kind === 'profile_photo' ? 'profile' : 'documents'}/${storedFilename}`;
 
   const result = await pool.query(
     `
@@ -75,7 +75,7 @@ export async function uploadEmployeeAttachment({ employeeId, file, kind = 'docum
       documentType || null,
       file.originalname,
       storedFilename,
-      publicPath,
+      relativePath,
       file.mimetype,
       file.size,
       uploadedBy || null,
@@ -98,5 +98,34 @@ export async function uploadEmployeeAttachment({ employeeId, file, kind = 'docum
     bestEffort: true,
   });
 
-  return { ...result.rows[0], url: publicPath };
+  return { ...result.rows[0], url: `/api/employees/${employeeId}/attachments/${result.rows[0].id}/download` };
+}
+
+export async function downloadEmployeeAttachment(employeeId, attachmentId) {
+  const result = await pool.query(
+    `SELECT id, employee_id, stored_filename, original_filename, mime_type, file_path, kind
+     FROM public.employee_attachments
+     WHERE id = $1 AND employee_id = $2
+     LIMIT 1`,
+    [attachmentId, employeeId]
+  );
+  if (result.rows.length === 0) {
+    throw new AppError(404, 'NOT_FOUND', 'Attachment not found.');
+  }
+
+  const row = result.rows[0];
+  const absolutePath = path.resolve(uploadRoot, row.file_path);
+
+  let buffer;
+  try {
+    buffer = await fs.readFile(absolutePath);
+  } catch {
+    throw new AppError(404, 'FILE_MISSING', 'Attachment file no longer exists on disk.');
+  }
+
+  return {
+    buffer,
+    originalFilename: row.original_filename,
+    mimeType: row.mime_type,
+  };
 }

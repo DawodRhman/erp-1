@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
 import cookieParser from 'cookie-parser';
-import path from 'node:path';
 
 import authRoutes from './modules/auth/auth.routes.js';
 import attendanceRoutes from './modules/attendance/attendance.routes.js';
@@ -18,40 +20,61 @@ import configModuleRoutes from './modules/config/config.routes.js';
 import penaltiesModuleRoutes from './modules/penalties/penalties.routes.js';
 import directoryModuleRoutes from './modules/directory/directory.routes.js';
 import pool from './config/db.js';
+import { logger } from './utils/logger.js';
+
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
+  : null;
 
 const app = express();
 
 app.set('trust proxy', 1);
 
-const debugMiddleware = (req, res, next) => {
-	console.log('[DEBUG] Request:', req.method, req.url, 'cookies:', Object.keys(req.cookies || {}), 'auth:', req.headers.authorization ? 'present' : 'none');
-	next();
-};
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+}));
 
-app.use(debugMiddleware);
+// Response compression
+app.use(compression());
+
+// Request ID + structured logging
+app.use((req, res, next) => {
+  req.id = req.headers['x-request-id'] || req.headers['x-correlation-id'] || randomUUID();
+  res.setHeader('x-request-id', req.id);
+  logger.info({ requestId: req.id, method: req.method, url: req.url }, 'incoming request');
+  next();
+});
 
 app.use(
-	cors({
-		origin: function (origin, callback) {
-			// In development, we allow all origins and echo them back
-			// to support 'credentials: true' which doesn't allow wildcards.
-			callback(null, true);
-		},
-		credentials: true,
-		allowedHeaders: [
-			'Content-Type',
-			'Authorization',
-			'x-client-local-ip',
-			'x-client-hostname',
-			'x-request-id',
-			'x-correlation-id',
-		],
-		exposedHeaders: ['x-request-id'],
-	})
-);
-app.use(express.json());
+		cors({
+			origin: function (origin, callback) {
+				const isDev = process.env.NODE_ENV !== 'production';
+				const isLocalhost = origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+				if (isDev || isLocalhost || !origin) {
+					callback(null, true);
+				} else if (ALLOWED_ORIGINS) {
+					callback(null, ALLOWED_ORIGINS.includes(origin));
+				} else {
+					logger.warn({ origin }, 'CORS origin rejected in production');
+					callback(new Error('Not allowed by CORS'));
+				}
+			},
+			credentials: true,
+			allowedHeaders: [
+				'Content-Type',
+				'Authorization',
+				'x-client-local-ip',
+				'x-client-private-ip',
+				'x-client-hostname',
+				'x-request-id',
+				'x-correlation-id',
+			],
+			exposedHeaders: ['x-request-id'],
+		})
+	);
+app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
-app.use('/uploads', express.static(path.resolve('public', 'uploads')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/attendance', attendanceRoutes);
