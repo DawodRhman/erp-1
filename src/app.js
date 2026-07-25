@@ -76,22 +76,6 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
 
-app.use('/api/auth', authRoutes);
-app.use('/api/attendance', attendanceRoutes);
-app.use('/api/leave-requests', leaveRequestRoutes);
-app.use('/api/calendar-events', calendarEventRoutes);
-app.use('/api/announcements', announcementRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/dashboard', dashboardMetricsRoutes);
-app.use('/api/audit', auditRoutes);
-app.use('/api/accounts', accountsRoutes);
-app.use('/api/employees', employeesModuleRoutes);
-app.use('/api/config', configModuleRoutes);
-app.use('/api', penaltiesModuleRoutes);
-app.use('/api/directory', directoryModuleRoutes);
-app.use('/api/inventory', inventoryRoutes);
-app.use('/api/matrix', matrixRoutes);
-
 app.get('/', (req, res) => {
 	res.status(200).json({ success: true, data: { message: 'server is running' } });
 });
@@ -111,6 +95,22 @@ app.get('/api/health/db', async (req, res, next) => {
 		next(error);
 	}
 });
+
+app.use('/api/auth', authRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/leave-requests', leaveRequestRoutes);
+app.use('/api/calendar-events', calendarEventRoutes);
+app.use('/api/announcements', announcementRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/dashboard', dashboardMetricsRoutes);
+app.use('/api/audit', auditRoutes);
+app.use('/api/accounts', accountsRoutes);
+app.use('/api/employees', employeesModuleRoutes);
+app.use('/api/config', configModuleRoutes);
+app.use('/api', penaltiesModuleRoutes);
+app.use('/api/directory', directoryModuleRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/matrix', matrixRoutes);
 
 app.use(errorHandler);
 
