@@ -568,68 +568,120 @@ export default function Inventory() {
           </div>
 
           {/* Quick Actions & Recent Workflow Summary */}
-          <div className="space-y-6">
-            <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-              <h3 className="text-base font-bold mb-2">Quick Management Actions</h3>
-              <button
-                onClick={() => setShowAddProductModal(true)}
-                className="w-full flex items-center justify-between p-3.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/50 dark:hover:bg-slate-800 rounded-xl text-sm font-semibold transition"
-              >
-                <span className="flex items-center gap-2">
-                  <Box className="w-4 h-4 text-indigo-500" /> Create Product
-                </span>
-                <Plus className="w-4 h-4 text-slate-400" />
-              </button>
+          <div>
+            <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0f172a', marginBottom: '14px' }}>Quick Management Actions</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <button
+                  onClick={() => setShowAddProductModal(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justify: 'space-between',
+                    padding: '12px 16px',
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '10px',
+                    fontSize: '13.5px',
+                    fontWeight: '700',
+                    color: '#0f172a',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Box size={18} style={{ color: '#6366f1' }} /> Create Product
+                  </span>
+                  <Plus size={16} style={{ color: '#94a3b8' }} />
+                </button>
 
-              <button
-                onClick={() => setShowAddSerialModal(true)}
-                className="w-full flex items-center justify-between p-3.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/50 dark:hover:bg-slate-800 rounded-xl text-sm font-semibold transition"
-              >
-                <span className="flex items-center gap-2">
-                  <Barcode className="w-4 h-4 text-emerald-500" /> Log Serial / IMEI Item
-                </span>
-                <Plus className="w-4 h-4 text-slate-400" />
-              </button>
+                <button
+                  onClick={() => setShowAddSerialModal(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justify: 'space-between',
+                    padding: '12px 16px',
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '10px',
+                    fontSize: '13.5px',
+                    fontWeight: '700',
+                    color: '#0f172a',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Barcode size={18} style={{ color: '#10b981' }} /> Log Serial / IMEI Item
+                  </span>
+                  <Plus size={16} style={{ color: '#94a3b8' }} />
+                </button>
 
-              <button
-                onClick={() => setShowCustomerModal(true)}
-                className="w-full flex items-center justify-between p-3.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/50 dark:hover:bg-slate-800 rounded-xl text-sm font-semibold transition"
-              >
-                <span className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-blue-500" /> Register Customer
-                </span>
-                <Plus className="w-4 h-4 text-slate-400" />
-              </button>
+                <button
+                  onClick={() => setShowInstallationModal(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justify: 'space-between',
+                    padding: '12px 16px',
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '10px',
+                    fontSize: '13.5px',
+                    fontWeight: '700',
+                    color: '#0f172a',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Wrench size={18} style={{ color: '#8b5cf6' }} /> Log Tracker Installation
+                  </span>
+                  <Plus size={16} style={{ color: '#94a3b8' }} />
+                </button>
 
-              <button
-                onClick={() => setShowInstallationModal(true)}
-                className="w-full flex items-center justify-between p-3.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/50 dark:hover:bg-slate-800 rounded-xl text-sm font-semibold transition"
-              >
-                <span className="flex items-center gap-2">
-                  <Wrench className="w-4 h-4 text-violet-500" /> Log Tracker Installation
-                </span>
-                <Plus className="w-4 h-4 text-slate-400" />
-              </button>
+                <button
+                  onClick={() => setShowComplaintModal(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justify: 'space-between',
+                    padding: '12px 16px',
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '10px',
+                    fontSize: '13.5px',
+                    fontWeight: '700',
+                    color: '#0f172a',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <ShieldAlert size={18} style={{ color: '#f43f5e' }} /> Log Customer Complaint Ticket
+                  </span>
+                  <Plus size={16} style={{ color: '#94a3b8' }} />
+                </button>
 
-              <button
-                onClick={() => setShowComplaintModal(true)}
-                className="w-full flex items-center justify-between p-3.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/50 dark:hover:bg-slate-800 rounded-xl text-sm font-semibold transition"
-              >
-                <span className="flex items-center gap-2">
-                  <ShieldAlert className="w-4 h-4 text-rose-500" /> Log Customer Complaint Ticket
-                </span>
-                <Plus className="w-4 h-4 text-slate-400" />
-              </button>
-
-              <button
-                onClick={() => setShowReplacementModal(true)}
-                className="w-full flex items-center justify-between p-3.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/50 dark:hover:bg-slate-800 rounded-xl text-sm font-semibold transition"
-              >
-                <span className="flex items-center gap-2">
-                  <ArrowRightLeft className="w-4 h-4 text-amber-500" /> Record Device Swap / Replacement
-                </span>
-                <Plus className="w-4 h-4 text-slate-400" />
-              </button>
+                <button
+                  onClick={() => setShowReplacementModal(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justify: 'space-between',
+                    padding: '12px 16px',
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '10px',
+                    fontSize: '13.5px',
+                    fontWeight: '700',
+                    color: '#0f172a',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <ArrowRightLeft size={18} style={{ color: '#f59e0b' }} /> Record Device Swap / Replacement
+                  </span>
+                  <Plus size={16} style={{ color: '#94a3b8' }} />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -637,67 +689,75 @@ export default function Inventory() {
 
       {/* TAB 2: PRODUCTS */}
       {activeTab === 'products' && (
-        <div className="space-y-4">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Enhanced Filter Bar */}
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
-            <div className="relative w-full md:w-80">
-              <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+          <div
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '14px',
+              border: '1px solid #e2e8f0',
+              padding: '16px',
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              boxShadow: '0 2px 8px rgba(15,23,42,0.04)',
+            }}
+          >
+            <div style={{ position: 'relative', flex: '1', minWidth: '240px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: '#94a3b8' }} />
               <input
                 type="text"
                 placeholder="Search products..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                style={{ width: '100%', padding: '10px 12px 10px 38px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '13.5px', fontWeight: '600' }}
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none"
-              >
-                <option value="">All Categories</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.category_name}
-                  </option>
-                ))}
-              </select>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '13.5px', fontWeight: '600' }}
+            >
+              <option value="">All Categories</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>{cat.category_name}</option>
+              ))}
+            </select>
 
-              <select
-                value={selectedProductType}
-                onChange={(e) => setSelectedProductType(e.target.value)}
-                className="px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none"
-              >
-                <option value="">All Product Types</option>
-                <option value="ASSET">ASSET</option>
-                <option value="CONSUMABLE">CONSUMABLE</option>
-                <option value="SERVICE">SERVICE</option>
-              </select>
+            <select
+              value={selectedProductType}
+              onChange={(e) => setSelectedProductType(e.target.value)}
+              style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '13.5px', fontWeight: '600' }}
+            >
+              <option value="">All Product Types</option>
+              <option value="ASSET">ASSET</option>
+              <option value="CONSUMABLE">CONSUMABLE</option>
+              <option value="SERVICE">SERVICE</option>
+            </select>
 
-              <select
-                value={selectedTrackingType}
-                onChange={(e) => setSelectedTrackingType(e.target.value)}
-                className="px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none"
-              >
-                <option value="">All Tracking Types</option>
-                <option value="SERIAL">SERIAL</option>
-                <option value="IMEI">IMEI</option>
-                <option value="NONE">NONE</option>
-              </select>
+            <select
+              value={selectedTrackingType}
+              onChange={(e) => setSelectedTrackingType(e.target.value)}
+              style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '13.5px', fontWeight: '600' }}
+            >
+              <option value="">All Tracking Types</option>
+              <option value="SERIAL">SERIAL</option>
+              <option value="IMEI">IMEI</option>
+              <option value="NONE">NONE</option>
+            </select>
 
-              <select
-                value={selectedStockStatus}
-                onChange={(e) => setSelectedStockStatus(e.target.value)}
-                className="px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none"
-              >
-                <option value="">All Stock Levels</option>
-                <option value="in_stock">In Stock (&gt;0)</option>
-                <option value="low_stock">Low Stock (At/Below Min)</option>
-                <option value="out_of_stock">Out of Stock (=0)</option>
-              </select>
-            </div>
+            <select
+              value={selectedStockStatus}
+              onChange={(e) => setSelectedStockStatus(e.target.value)}
+              style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '13.5px', fontWeight: '600' }}
+            >
+              <option value="">All Stock Levels</option>
+              <option value="in_stock">In Stock (&gt;0)</option>
+              <option value="low_stock">Low Stock (At/Below Min)</option>
+              <option value="out_of_stock">Out of Stock (=0)</option>
+            </select>
           </div>
 
           {/* Products Table */}

@@ -72,6 +72,7 @@ export default function Sidebar() {
     { to: "/crm", icon: Users, label: "CRM & Sales" },
     { to: "/inventory", icon: Package, label: "Inventory Logistics" },
     { to: "/client-invoicing", icon: DollarSign, label: "Client Invoicing & Summaries" },
+    { to: "/accounts", icon: ShieldCheck, label: "Finance & Accounts" },
     { to: "/matrix-operations", icon: GitBranch, label: "Matrix Operations (V2.1)" },
     { to: "/employees", icon: Users, label: "Employees" },
     { to: "/attendance", icon: CalendarCheck, label: "Attendance" },
