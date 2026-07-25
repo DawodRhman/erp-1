@@ -14,7 +14,7 @@ export function getApiBaseUrl(): string {
 
   // When deployed on Vercel / Cloud Host: Fallback to deployed production API
   if (!envUrl || envUrl.includes('localhost') || envUrl.includes('127.0.0.1')) {
-    return 'https://ems-backend-api-dawoods-projects-93aa3b1c.vercel.app/api';
+    return 'https://ems-backend-api-hazel.vercel.app/api';
   }
 
   return envUrl;

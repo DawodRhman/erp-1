@@ -69,8 +69,10 @@ export default function Sidebar() {
     // Active/Enabled first
     { to: "/launchpad", icon: Zap, label: "Launchpad" },
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/crm", icon: Users, label: "CRM & Sales" },
+    { to: "/inventory", icon: Package, label: "Inventory Logistics" },
+    { to: "/client-invoicing", icon: DollarSign, label: "Client Invoicing & Summaries" },
     { to: "/matrix-operations", icon: GitBranch, label: "Matrix Operations (V2.1)" },
-    { to: "/inventory", icon: Package, label: "Inventory & Invoicing" },
     { to: "/employees", icon: Users, label: "Employees" },
     { to: "/attendance", icon: CalendarCheck, label: "Attendance" },
     { to: "/leave", icon: CalendarDays, label: "Leave" },

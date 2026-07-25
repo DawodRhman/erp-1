@@ -46,6 +46,8 @@ const PenaltyLedger = lazy(() => import("./pages/PenaltyLedger"));
 const AnnouncementsFeed = lazy(() => import("./pages/AnnouncementsFeed"));
 const Directory = lazy(() => import("./pages/Directory"));
 const Inventory = lazy(() => import("./pages/Inventory"));
+const CRM = lazy(() => import("./pages/CRM"));
+const ClientInvoicing = lazy(() => import("./pages/ClientInvoicing"));
 const MatrixOperations = lazy(() => import("./pages/MatrixOperations"));
 const EmployeeWidgets = lazy(() => import("./pages/EmployeeWidgets"));
 const Calendar = lazy(() => import("./pages/Calendar"));
@@ -225,8 +227,10 @@ const App = () => (
                   <Route path="/launchpad" element={<Launchpad />} />
                 </Route>
                 <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/matrix-operations" element={<MatrixOperations />} />
+                <Route path="/crm" element={<CRM />} />
                 <Route path="/inventory" element={<Inventory />} />
+                <Route path="/client-invoicing" element={<ClientInvoicing />} />
+                <Route path="/matrix-operations" element={<MatrixOperations />} />
                 <Route path="/directory" element={<Directory />} />
                 <Route path="/employees" element={<Employees />} />
                 <Route
