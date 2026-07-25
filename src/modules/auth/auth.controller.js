@@ -21,8 +21,11 @@ export const changePasswordSchema = z.object({
 });
 
 function signToken(payload) {
-  return jwt.sign(payload, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '1d',
+  const secret =
+    process.env.JWT_SECRET ||
+    'a0fc62d9c6bf47dfa93b2efdf69d0cb86e67d24bbd40f06e6eaf92ce4c92a4e3738dc8bf413a4515f1ffea2d921487e4851ec168f7b2b06eddac1f624ba7c239f0e8cd802cbfc7a89be24cecb8231bd493356d871b32b789d2af22b67cbcdfe391e93f05';
+  return jwt.sign(payload, secret, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '8h',
   });
 }
 

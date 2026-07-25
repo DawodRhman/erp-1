@@ -44,7 +44,7 @@ export async function login(email, password) {
         u.email,
         u.employee_id,
         u.role_id,
-        u.password,
+        COALESCE(u.password, u.password_hash) AS password,
         u.must_change_password,
         COALESCE(u.is_active, true) AS is_active,
         js.status_name AS job_status_name

@@ -19,6 +19,8 @@ import employeesModuleRoutes from './modules/employees/employees.routes.js';
 import configModuleRoutes from './modules/config/config.routes.js';
 import penaltiesModuleRoutes from './modules/penalties/penalties.routes.js';
 import directoryModuleRoutes from './modules/directory/directory.routes.js';
+import inventoryRoutes from './modules/inventory/inventory.routes.js';
+import matrixRoutes from './modules/matrix/matrix.routes.js';
 import pool from './config/db.js';
 import { logger } from './utils/logger.js';
 
@@ -30,12 +32,37 @@ const app = express();
 
 app.set('trust proxy', 1);
 
-// Security headers
-app.use(helmet({
-  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
-}));
+// 1. CORS MUST BE FIRST SO ALL PREFLIGHT OPTIONS & ROUTE RESPONSES GAIN CORS HEADERS
+const corsOptions = {
+  origin: true, // Mirror incoming origin (allows credentials to work with any Vercel domain or localhost)
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'x-client-local-ip',
+    'x-client-private-ip',
+    'x-client-hostname',
+    'x-request-id',
+    'x-correlation-id',
+  ],
+  exposedHeaders: ['x-request-id'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+};
 
-// Response compression
+// Explicit preflight handler — runs BEFORE anything else
+// Express 5 requires named wildcard: {*path} instead of bare *
+app.options('/{*path}', cors(corsOptions));
+app.use(cors(corsOptions));
+
+// Security & Audit headers — disable cross-origin blocking that conflicts with CORS
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: false,
+  crossOriginOpenerPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
 app.use(compression());
 
 // Request ID + structured logging
@@ -46,33 +73,6 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(
-		cors({
-			origin: function (origin, callback) {
-				const isDev = process.env.NODE_ENV !== 'production';
-				const isLocalhost = origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-				if (isDev || isLocalhost || !origin) {
-					callback(null, true);
-				} else if (ALLOWED_ORIGINS) {
-					callback(null, ALLOWED_ORIGINS.includes(origin));
-				} else {
-					logger.warn({ origin }, 'CORS origin rejected in production');
-					callback(new Error('Not allowed by CORS'));
-				}
-			},
-			credentials: true,
-			allowedHeaders: [
-				'Content-Type',
-				'Authorization',
-				'x-client-local-ip',
-				'x-client-private-ip',
-				'x-client-hostname',
-				'x-request-id',
-				'x-correlation-id',
-			],
-			exposedHeaders: ['x-request-id'],
-		})
-	);
 app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
 
@@ -89,6 +89,8 @@ app.use('/api/employees', employeesModuleRoutes);
 app.use('/api/config', configModuleRoutes);
 app.use('/api', penaltiesModuleRoutes);
 app.use('/api/directory', directoryModuleRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/matrix', matrixRoutes);
 
 app.get('/', (req, res) => {
 	res.status(200).json({ success: true, data: { message: 'server is running' } });
