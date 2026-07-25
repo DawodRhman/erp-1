@@ -27,6 +27,8 @@ import {
   ChevronDown,
   ChevronRight,
   Zap,
+  Package,
+  GitBranch,
 } from "lucide-react";
 import { useData } from "../../context/DataContext";
 import { useToastContext } from "../../context/ToastContext";
@@ -67,6 +69,8 @@ export default function Sidebar() {
     // Active/Enabled first
     { to: "/launchpad", icon: Zap, label: "Launchpad" },
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/matrix-operations", icon: GitBranch, label: "Matrix Operations (V2.1)" },
+    { to: "/inventory", icon: Package, label: "Inventory & Invoicing" },
     { to: "/employees", icon: Users, label: "Employees" },
     { to: "/attendance", icon: CalendarCheck, label: "Attendance" },
     { to: "/leave", icon: CalendarDays, label: "Leave" },
@@ -161,10 +165,29 @@ export default function Sidebar() {
     { to: "/directory", icon: MapPin, label: "Directory" },
   ];
 
+  const inventoryOfficerLinks: SidebarLink[] = [
+    { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/inventory", icon: Package, label: "Inventory & Invoicing" },
+    { to: "/matrix-operations", icon: GitBranch, label: "Matrix Operations (V2.1)" },
+    { to: "/directory", icon: MapPin, label: "Directory" },
+  ];
+
+  const financeOfficerLinks: SidebarLink[] = [
+    { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/accounts", icon: ShieldCheck, label: "Finance & Accounts" },
+    { to: "/inventory", icon: Package, label: "Invoices & Billing" },
+    { to: "/matrix-operations", icon: GitBranch, label: "Matrix Settlement" },
+    { to: "/directory", icon: MapPin, label: "Directory" },
+  ];
+
   // Select menu based on role
   const mainLinks =
-    activeRole === "super_admin"
+    activeRole === "super_admin" || activeRole === "inv_fin_admin"
       ? superAdminLinks
+      : activeRole === "inventory_officer"
+        ? inventoryOfficerLinks
+      : activeRole === "finance_officer"
+        ? financeOfficerLinks
       : activeRole === "ceo"
         ? ceoLinks
       : activeRole === "head_hr"

@@ -45,6 +45,8 @@ const LeaveWalletHistory = lazy(() => import("./pages/LeaveWalletHistory"));
 const PenaltyLedger = lazy(() => import("./pages/PenaltyLedger"));
 const AnnouncementsFeed = lazy(() => import("./pages/AnnouncementsFeed"));
 const Directory = lazy(() => import("./pages/Directory"));
+const Inventory = lazy(() => import("./pages/Inventory"));
+const MatrixOperations = lazy(() => import("./pages/MatrixOperations"));
 const EmployeeWidgets = lazy(() => import("./pages/EmployeeWidgets"));
 const Calendar = lazy(() => import("./pages/Calendar"));
 import FeaturePlaceholder from "./components/FeaturePlaceholder";
@@ -208,6 +210,9 @@ const App = () => (
                     "department_head",
                     "hr_manager",
                     "hr_executive",
+                    "inventory_officer",
+                    "finance_officer",
+                    "inv_fin_admin",
                   ]}
                 />
               }
@@ -220,6 +225,8 @@ const App = () => (
                   <Route path="/launchpad" element={<Launchpad />} />
                 </Route>
                 <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/matrix-operations" element={<MatrixOperations />} />
+                <Route path="/inventory" element={<Inventory />} />
                 <Route path="/directory" element={<Directory />} />
                 <Route path="/employees" element={<Employees />} />
                 <Route

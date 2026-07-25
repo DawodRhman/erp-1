@@ -1,7 +1,39 @@
-super_admin — email: superadmin@esspl.com.pk — password: SuperAdmin@123!
-hr_manager (EMP004) — email: zainabsiddiqui4@esspl.com.pk — password: HrManager@123!
-hr_executive (EMP005) — email: hiranawaz5@esspl.com.pk — password: Esspl@2024!
-employee (EMP002) — email: faisallatif2@esspl.com.pk — password: Esspl@2024!
-employee (EMP003) — email: palwashaali3@esspl.com.pk — password: Esspl@2024!
+# TRACK360 ERP — Demo User Accounts & Credentials
 
-check these if it didn't work then see the C:\frontend-2\seeds this folder understood 
+## 1. Dedicated Inventory Officer (Inventory Access Only)
+- **Role**: `inventory_officer`
+- **Email**: `inventory.officer@esspl.com.pk`
+- **Password**: `InventoryPass@123!`
+- **Access Capabilities**:
+  - `/inventory` (Catalog Products, Serials, Stock Tracking, PO, Invoices, Trackers, Complaints)
+  - `/matrix-operations` (Phase 2 & Phase 3 Operations & Stock Out)
+
+---
+
+## 2. Dedicated Finance Officer (Finance Access Only)
+- **Role**: `finance_officer`
+- **Email**: `finance.officer@esspl.com.pk`
+- **Password**: `FinancePass@123!`
+- **Access Capabilities**:
+  - `/accounts` (Chart of Accounts, General Ledger, Financial Statements)
+  - `/matrix-operations` (Phase 5 Virtual Debt Cash Reconciliation & Settlement)
+
+---
+
+## 3. Joint Access Admin (Both Inventory & Finance Access)
+- **Role**: `inv_fin_admin`
+- **Email**: `inv.fin.admin@esspl.com.pk`
+- **Password**: `InvFinAdmin@123!`
+- **Access Capabilities**:
+  - **FULL DUAL ACCESS** to both `/inventory` and `/accounts` and `/matrix-operations`
+
+---
+
+## 4. System Super Admin (Full ERP Access)
+- **Role**: `super_admin`
+- **Email**: `superadmin@esspl.com.pk`
+- **Password**: `SuperAdmin@123!`
+
+
+
+##creating demo has problem w

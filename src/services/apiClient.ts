@@ -3,9 +3,10 @@ import { useAuthStore } from "../store/useAuthStore";
 import { getLocalIp, prewarmLocalIpDetection } from "../utils/getLocalIp";
 import { getHostname, prewarmHostnameDetection } from "../utils/getHostname";
 import { AUDIT_FEATURES } from "../config/audit";
+import { getApiBaseUrl } from "../config/apiConfig";
 
-// Use env var or fallback to absolute API URL
-const baseURL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+// Use dynamic API URL resolution based on local vs production Vercel deployment
+const baseURL = getApiBaseUrl();
 
 export const apiClient = axios.create({
   baseURL,
