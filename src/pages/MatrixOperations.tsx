@@ -203,16 +203,28 @@ export default function MatrixOperations() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto min-h-screen text-slate-800 dark:text-slate-100">
+    <div style={{ padding: '24px', maxWidth: '1600px', margin: '0 auto', fontFamily: "'Outfit', sans-serif" }}>
       {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 p-6 rounded-2xl text-white shadow-xl border border-indigo-800/40">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-indigo-600/30 border border-indigo-500/40 rounded-xl backdrop-blur-sm">
-            <GitBranch className="w-8 h-8 text-indigo-400" />
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%)',
+          color: '#ffffff',
+          padding: '24px 32px',
+          borderRadius: '16px',
+          marginBottom: '24px',
+          display: 'flex',
+          justify: 'space-between',
+          alignItems: 'center',
+          boxShadow: '0 8px 24px rgba(15,23,42,0.15)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ padding: '12px', backgroundColor: 'rgba(99, 102, 241, 0.2)', border: '1px solid rgba(129, 140, 248, 0.3)', borderRadius: '12px' }}>
+            <GitBranch size={28} style={{ color: '#818cf8' }} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">TRACK360 ERP — Matrix Operational Control</h1>
-            <p className="text-sm text-indigo-200/80">
+            <h1 style={{ fontSize: '24px', fontWeight: '800', margin: 0, letterSpacing: '-0.02em' }}>TRACK360 ERP — Matrix Operational Control</h1>
+            <p style={{ color: '#c7d2fe', marginTop: '6px', fontSize: '14px' }}>
               Integrated Sales CRM → Project Activation → Operations PR → Digital OTP Handshake → Finance Settlement.
             </p>
           </div>
@@ -220,14 +232,25 @@ export default function MatrixOperations() {
 
         <button
           onClick={loadMatrixData}
-          className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-sm font-medium transition backdrop-blur-sm"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 18px',
+            backgroundColor: 'rgba(255,255,255,0.1)',
+            color: '#fff',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: '10px',
+            fontWeight: '600',
+            cursor: 'pointer',
+          }}
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh Matrix
+          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Refresh Matrix
         </button>
       </div>
 
       {/* 5 Phase Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 overflow-x-auto pb-1">
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', backgroundColor: '#f1f5f9', padding: '6px', borderRadius: '12px', overflowX: 'auto' }}>
         {[
           { id: 'sales', label: 'Phase 1: Sales & CRM', icon: Target },
           { id: 'operations', label: 'Phase 2: Operations & PR', icon: Briefcase },
@@ -241,13 +264,22 @@ export default function MatrixOperations() {
             <button
               key={tab.id}
               onClick={() => setActivePhase(tab.id as any)}
-              className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold whitespace-nowrap transition ${
-                isActive
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: isActive ? '#6366f1' : 'transparent',
+                color: isActive ? '#ffffff' : '#64748b',
+                fontWeight: '700',
+                cursor: 'pointer',
+                boxShadow: isActive ? '0 4px 12px rgba(99,102,241,0.3)' : 'none',
+                whiteSpace: 'nowrap',
+              }}
             >
-              <Icon className="w-4 h-4" />
+              <Icon size={16} />
               {tab.label}
             </button>
           );

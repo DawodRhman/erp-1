@@ -332,118 +332,150 @@ export default function Inventory() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto min-h-screen text-slate-800 dark:text-slate-100">
+    <div style={{ padding: '24px', maxWidth: '1600px', margin: '0 auto', fontFamily: "'Outfit', sans-serif" }}>
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-2xl text-white shadow-xl border border-indigo-900/40">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-indigo-600/30 border border-indigo-500/40 rounded-xl backdrop-blur-sm">
-              <Package className="w-8 h-8 text-indigo-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Inventory & Invoicing Management</h1>
-              <p className="text-sm text-indigo-200/80">
-                Real-time stock tracking, serial/IMEI management, procurement, sales, and tracker installations.
-              </p>
-            </div>
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+          color: '#ffffff',
+          padding: '24px 32px',
+          borderRadius: '16px',
+          marginBottom: '24px',
+          display: 'flex',
+          justify: 'space-between',
+          alignItems: 'center',
+          boxShadow: '0 8px 24px rgba(15,23,42,0.15)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ padding: '12px', backgroundColor: 'rgba(59, 130, 246, 0.2)', border: '1px solid rgba(147, 197, 253, 0.3)', borderRadius: '12px' }}>
+            <Package size={28} style={{ color: '#60a5fa' }} />
+          </div>
+          <div>
+            <h1 style={{ fontSize: '24px', fontWeight: '800', margin: 0, letterSpacing: '-0.02em' }}>Inventory & Stock Logistics Management</h1>
+            <p style={{ color: '#94a3b8', marginTop: '6px', fontSize: '14px' }}>
+              Real-time warehouse catalog, serial/IMEI tracking, vendor stock-in, and installer field dispatch reconciliations.
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
+        <div style={{ display: 'flex', gap: '12px' }}>
           <button
             onClick={loadData}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-sm font-medium transition backdrop-blur-sm"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 18px',
+              backgroundColor: 'rgba(255,255,255,0.1)',
+              color: '#fff',
+              border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: '10px',
+              fontWeight: '600',
+              cursor: 'pointer',
+            }}
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
           <button
             onClick={() => setShowAddCategoryModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600/80 hover:bg-indigo-600 text-white rounded-xl text-sm font-medium shadow-md transition"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 18px',
+              backgroundColor: '#6366f1',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '10px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(99,102,241,0.3)',
+            }}
           >
-            <Layers className="w-4 h-4" />
-            + Category
+            <Layers size={16} /> + Category
           </button>
           <button
             onClick={() => setShowAddProductModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium shadow-md transition"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 18px',
+              backgroundColor: '#10b981',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '10px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(16,185,129,0.3)',
+            }}
           >
-            <Plus className="w-4 h-4" />
-            + New Product
+            <Plus size={16} /> + New Product
           </button>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Catalog Products</span>
-            <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-xl">
-              <Box className="w-5 h-5" />
-            </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+        <div style={{ backgroundColor: '#ffffff', borderRadius: '14px', padding: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Total Catalog Products</span>
+            <div style={{ padding: '8px', backgroundColor: '#e0e7ff', color: '#4338ca', borderRadius: '10px' }}><Box size={20} /></div>
           </div>
-          <div className="mt-4">
-            <span className="text-2xl font-bold text-slate-900 dark:text-white">{summary?.total_products || 0}</span>
-            <div className="text-xs text-slate-500 mt-1">Value: {formatCurrency(summary?.total_inventory_value)}</div>
+          <div style={{ marginTop: '14px' }}>
+            <span style={{ fontSize: '26px', fontWeight: '800', color: '#0f172a' }}>{summary?.total_products || 0}</span>
+            <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>Value: {formatCurrency(summary?.total_inventory_value)}</div>
           </div>
         </div>
 
-        <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Low Stock Warnings</span>
-            <div className="p-2.5 bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 rounded-xl">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
+        <div style={{ backgroundColor: '#ffffff', borderRadius: '14px', padding: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Low Stock Warnings</span>
+            <div style={{ padding: '8px', backgroundColor: '#fef3c7', color: '#b45309', borderRadius: '10px' }}><AlertTriangle size={20} /></div>
           </div>
-          <div className="mt-4">
-            <span className="text-2xl font-bold text-amber-600 dark:text-amber-400">{summary?.low_stock_count || 0}</span>
-            <div className="text-xs text-slate-500 mt-1">At or below reorder minimums</div>
+          <div style={{ marginTop: '14px' }}>
+            <span style={{ fontSize: '26px', fontWeight: '800', color: '#b45309' }}>{summary?.low_stock_count || 0}</span>
+            <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>At or below reorder minimums</div>
           </div>
         </div>
 
-        <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Serials / IMEIs</span>
-            <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 rounded-xl">
-              <Barcode className="w-5 h-5" />
-            </div>
+        <div style={{ backgroundColor: '#ffffff', borderRadius: '14px', padding: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Total Serials / IMEIs</span>
+            <div style={{ padding: '8px', backgroundColor: '#dcfce7', color: '#15803d', borderRadius: '10px' }}><Barcode size={20} /></div>
           </div>
-          <div className="mt-4">
-            <span className="text-2xl font-bold text-slate-900 dark:text-white">{summary?.total_serials || 0}</span>
-            <div className="text-xs text-slate-500 mt-1">
-              Available: <span className="font-semibold text-emerald-600">{summary?.available_serials || 0}</span> | Installed:{' '}
-              <span className="font-semibold text-indigo-600">{summary?.installed_serials || 0}</span>
+          <div style={{ marginTop: '14px' }}>
+            <span style={{ fontSize: '26px', fontWeight: '800', color: '#0f172a' }}>{summary?.total_serials || 0}</span>
+            <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
+              Available: <span style={{ fontWeight: '700', color: '#16a34a' }}>{summary?.available_serials || 0}</span> | Installed: <span style={{ fontWeight: '700', color: '#2563eb' }}>{summary?.installed_serials || 0}</span>
             </div>
           </div>
         </div>
 
-        <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Active Complaints / Inst.</span>
-            <div className="p-2.5 bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-xl">
-              <Wrench className="w-5 h-5" />
-            </div>
+        <div style={{ backgroundColor: '#ffffff', borderRadius: '14px', padding: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Active Complaints / Inst.</span>
+            <div style={{ padding: '8px', backgroundColor: '#ffe4e6', color: '#be123c', borderRadius: '10px' }}><Wrench size={20} /></div>
           </div>
-          <div className="mt-4">
-            <span className="text-2xl font-bold text-slate-900 dark:text-white">{summary?.active_complaints || 0}</span>
-            <div className="text-xs text-slate-500 mt-1">
-              Pending Installations: <span className="font-semibold text-indigo-600">{summary?.pending_installations || 0}</span>
+          <div style={{ marginTop: '14px' }}>
+            <span style={{ fontSize: '26px', fontWeight: '800', color: '#0f172a' }}>{summary?.active_complaints || 0}</span>
+            <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
+              Pending Installations: <span style={{ fontWeight: '700', color: '#2563eb' }}>{summary?.pending_installations || 0}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Tabs Bar */}
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 overflow-x-auto pb-1">
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', backgroundColor: '#f1f5f9', padding: '6px', borderRadius: '12px', overflowX: 'auto' }}>
         {[
           { id: 'overview', label: 'Overview & Alerts', icon: TrendingUp },
           { id: 'products', label: `Products (${products.length})`, icon: Box },
           { id: 'serials', label: `Serial Tracking (${items.length})`, icon: Barcode },
           { id: 'po', label: `Purchase Orders (${purchaseOrders.length})`, icon: ShoppingCart },
-          { id: 'invoices', label: `Sales Invoices (${invoices.length})`, icon: Receipt },
-          { id: 'customers', label: `Customers (${customers.length})`, icon: Users },
-          { id: 'installations', label: `Tracker Installations (${installations.length})`, icon: Wrench },
+          { id: 'invoices', label: `Vendor Stock Receipts (${invoices.length})`, icon: Receipt },
+          { id: 'installations', label: `Field Dispatches (${installations.length})`, icon: Wrench },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -451,13 +483,22 @@ export default function Inventory() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition ${
-                isActive
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: isActive ? '#0f172a' : 'transparent',
+                color: isActive ? '#ffffff' : '#64748b',
+                fontWeight: '700',
+                cursor: 'pointer',
+                boxShadow: isActive ? '0 4px 12px rgba(15,23,42,0.2)' : 'none',
+                whiteSpace: 'nowrap',
+              }}
             >
-              <Icon className="w-4 h-4" />
+              <Icon size={16} />
               {tab.label}
             </button>
           );
