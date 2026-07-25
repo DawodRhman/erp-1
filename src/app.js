@@ -21,6 +21,8 @@ import penaltiesModuleRoutes from './modules/penalties/penalties.routes.js';
 import directoryModuleRoutes from './modules/directory/directory.routes.js';
 import inventoryRoutes from './modules/inventory/inventory.routes.js';
 import matrixRoutes from './modules/matrix/matrix.routes.js';
+import crmRoutes from './modules/crm/crm.routes.js';
+import invoicingRoutes from './modules/invoicing/invoicing.routes.js';
 import pool from './config/db.js';
 import { logger } from './utils/logger.js';
 
@@ -111,6 +113,8 @@ app.use('/api', penaltiesModuleRoutes);
 app.use('/api/directory', directoryModuleRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/matrix', matrixRoutes);
+app.use('/api/crm', crmRoutes);
+app.use('/api/invoicing', invoicingRoutes);
 
 app.use(errorHandler);
 

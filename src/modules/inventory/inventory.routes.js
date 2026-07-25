@@ -55,4 +55,11 @@ router.get('/customers/:customer_id/invoice-draft', requirePermission('inventory
 router.put('/customers/:customer_id/invoice-draft', requirePermission('inventory:write'), inventoryController.updateCustomerInvoiceDraft);
 router.post('/customers/:customer_id/generate-draft-invoice', requirePermission('inventory:write'), inventoryController.generateDraftInvoiceFromTemplate);
 
+// Installer Field Dispatches & Reconciliations
+import * as logisticsController from './field-logistics.controller.js';
+router.get('/dispatches', logisticsController.listDispatches);
+router.get('/dispatches/:id', logisticsController.getDispatch);
+router.post('/dispatches', logisticsController.createDispatch);
+router.post('/dispatches/:id/reconcile', logisticsController.reconcileDispatch);
+
 export default router;
