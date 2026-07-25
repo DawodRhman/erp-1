@@ -230,6 +230,24 @@ export default function CRM() {
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
+            onClick={() => setShowLeadModal(true)}
+            style={{
+              backgroundColor: '#6366f1',
+              color: '#fff',
+              padding: '10px 18px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontWeight: '600',
+              boxShadow: '0 2px 8px rgba(99,102,241,0.3)',
+            }}
+          >
+            <Plus size={18} /> + Add Sales Lead
+          </button>
+          <button
             onClick={() => setShowCustomerModal(true)}
             style={{
               backgroundColor: '#0284c7',
@@ -500,6 +518,86 @@ export default function CRM() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* SOLID Crisp Modal: Add Sales Lead */}
+      {showLeadModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', padding: '28px', width: '520px', boxShadow: '0 20px 40px rgba(0,0,0,0.25)', border: '1px solid #e2e8f0' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#0f172a', marginBottom: '18px' }}>+ Add Sales Lead / Inquiry</h2>
+            <form onSubmit={handleCreateLead}>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Select Registered Client (Optional)</label>
+                <select
+                  value={leadForm.customer_id}
+                  onChange={(e) => {
+                    const selId = e.target.value;
+                    const cust = customers.find((c) => c.id === selId);
+                    setLeadForm({
+                      ...leadForm,
+                      customer_id: selId,
+                      contact_name: cust ? cust.contact_person || cust.customer_name : leadForm.contact_name,
+                      contact_email: cust ? cust.email || '' : leadForm.contact_email,
+                      contact_phone: cust ? cust.phone || '' : leadForm.contact_phone,
+                    });
+                  }}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
+                >
+                  <option value="">-- Or Select Existing Registered Client --</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.customer_name} ({c.contact_person || 'Client'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Lead Title / Inquiry</label>
+                <input
+                  required
+                  type="text"
+                  placeholder="e.g. 50 CCTV Camera Installation for New Branch"
+                  value={leadForm.title}
+                  onChange={(e) => setLeadForm({ ...leadForm, title: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Contact Person</label>
+                  <input
+                    type="text"
+                    placeholder="Name"
+                    value={leadForm.contact_name}
+                    onChange={(e) => setLeadForm({ ...leadForm, contact_name: e.target.value })}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Phone</label>
+                  <input
+                    type="text"
+                    placeholder="Phone number"
+                    value={leadForm.contact_phone}
+                    onChange={(e) => setLeadForm({ ...leadForm, contact_phone: e.target.value })}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+                <button type="button" onClick={() => setShowLeadModal(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: '600', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button type="submit" style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#6366f1', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>
+                  Create Sales Lead
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
