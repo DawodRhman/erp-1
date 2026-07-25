@@ -1139,43 +1139,116 @@ export default function ClientInvoicing() {
             </form>
           </div>
 
-          {/* Live Preview Panel of Designed Template */}
-          <div style={{ backgroundColor: '#ffffff', padding: '32px', borderRadius: '14px', border: '1px solid #cbd5e1', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #000', paddingBottom: '12px', marginBottom: '20px' }}>
-              <div>
+          {/* Live Preview Panel of Designed Template with DIRECT INLINE EDITING */}
+          <div style={{ backgroundColor: '#ffffff', padding: '32px', borderRadius: '14px', border: '2px solid #6366f1', boxShadow: '0 4px 20px rgba(99,102,241,0.12)', position: 'relative' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#e0e7ff', padding: '8px 14px', borderRadius: '8px', marginBottom: '20px', fontSize: '12px', fontWeight: '700', color: '#4338ca' }}>
+              <span>✏️ DIRECT VISUAL DESIGNER: Click any title, header, bank detail, or disclaimer directly on this sheet to edit!</span>
+              <button
+                type="button"
+                onClick={handleSaveDesignerTemplate}
+                style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: '800', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <Save size={14} /> SAVE TEMPLATE
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #000', paddingBottom: '14px', marginBottom: '20px' }}>
+              <div style={{ width: '65%' }}>
                 <span style={{ backgroundColor: '#6366f1', color: '#fff', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: '800' }}>
-                  LIVE TEMPLATE PREVIEW
+                  TEMPLATE: {designerForm.template_name || 'CUSTOM FORMAT'}
                 </span>
-                <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#000', marginTop: '8px', textTransform: 'uppercase' }}>
-                  {designerForm.header_title || 'Document Header Title'}
-                </h2>
-                <p style={{ fontSize: '13px', color: '#334155' }}>Customer: <strong>{designerForm.customer_name}</strong></p>
-                {designerForm.show_ntn_gst && (
-                  <p style={{ fontSize: '12px', color: '#64748b' }}>{designerForm.ntn_number} | {designerForm.gst_number}</p>
-                )}
+                
+                {/* DIRECT EDITABLE HEADER TITLE */}
+                <input
+                  type="text"
+                  value={designerForm.header_title}
+                  onChange={(e) => setDesignerForm({ ...designerForm, header_title: e.target.value })}
+                  placeholder="Click to Edit Document Title..."
+                  style={{
+                    width: '100%',
+                    fontSize: '19px',
+                    fontWeight: '900',
+                    color: '#000000',
+                    marginTop: '8px',
+                    textTransform: 'uppercase',
+                    border: '1px dashed #6366f1',
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    backgroundColor: '#faf5ff',
+                    fontFamily: 'inherit',
+                  }}
+                />
+
+                {/* DIRECT EDITABLE CUSTOMER NAME */}
+                <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#334155' }}>
+                  <strong>Customer:</strong>
+                  <input
+                    type="text"
+                    value={designerForm.customer_name}
+                    onChange={(e) => setDesignerForm({ ...designerForm, customer_name: e.target.value })}
+                    style={{ border: '1px dashed #6366f1', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#faf5ff', fontWeight: '700', fontSize: '13px', color: '#0f172a', width: '220px' }}
+                  />
+                </div>
+
+                {/* DIRECT EDITABLE NTN & TAX NUMBERS */}
+                <div style={{ marginTop: '6px', display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={designerForm.ntn_number}
+                    onChange={(e) => setDesignerForm({ ...designerForm, ntn_number: e.target.value })}
+                    placeholder="NTN Number..."
+                    style={{ border: '1px dashed #cbd5e1', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', color: '#475569', width: '130px' }}
+                  />
+                  <input
+                    type="text"
+                    value={designerForm.gst_number}
+                    onChange={(e) => setDesignerForm({ ...designerForm, gst_number: e.target.value })}
+                    placeholder="Tax Reg Number..."
+                    style={{ border: '1px dashed #cbd5e1', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', color: '#475569', width: '170px' }}
+                  />
+                </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <p style={{ fontWeight: '900', fontSize: '16px' }}>INVOICE #: INV-2026-SAMPLE</p>
-                <p style={{ fontSize: '13px', color: '#475569' }}>Date: {new Date().toLocaleDateString()}</p>
-                <p style={{ fontSize: '12px', color: '#0284c7', fontWeight: '700' }}>Currency: {designerForm.currency}</p>
+
+              <div style={{ textAlign: 'right', width: '30%' }}>
+                <p style={{ fontWeight: '900', fontSize: '15px' }}>INVOICE #: INV-2026-SAMPLE</p>
+                <p style={{ fontSize: '12px', color: '#475569', marginTop: '2px' }}>Date: {new Date().toLocaleDateString()}</p>
+                <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Currency:</span>
+                  <select
+                    value={designerForm.currency}
+                    onChange={(e) => setDesignerForm({ ...designerForm, currency: e.target.value })}
+                    style={{ border: '1px dashed #0284c7', borderRadius: '4px', padding: '2px 6px', fontSize: '12px', fontWeight: '800', color: '#0284c7', backgroundColor: '#f0f9ff' }}
+                  >
+                    <option value="PKR">PKR</option>
+                    <option value="USD">USD</option>
+                    <option value="QAR">QAR</option>
+                    <option value="SAR">SAR</option>
+                    <option value="AED">AED</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                  </select>
+                </div>
               </div>
             </div>
 
+            {/* EDITABLE TABLE HEADERS */}
             <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '2px solid #000' }}>
                   <th style={{ padding: '8px', textAlign: 'left' }}>S#</th>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>Description</th>
+                  <th style={{ padding: '8px', textAlign: 'left' }}>Description / Item Specifications</th>
                   <th style={{ padding: '8px', textAlign: 'right' }}>Qty</th>
-                  <th style={{ padding: '8px', textAlign: 'right' }}>Unit Price</th>
-                  <th style={{ padding: '8px', textAlign: 'right' }}>Tax ({designerForm.tax_type} {designerForm.tax_rate}%)</th>
+                  <th style={{ padding: '8px', textAlign: 'right' }}>Unit Price ({designerForm.currency})</th>
+                  <th style={{ padding: '8px', textAlign: 'right' }}>
+                    Tax ({designerForm.tax_type} {designerForm.tax_rate}%)
+                  </th>
                   <th style={{ padding: '8px', textAlign: 'right' }}>Total With Tax</th>
                 </tr>
               </thead>
               <tbody>
                 <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
                   <td style={{ padding: '8px' }}>1</td>
-                  <td style={{ padding: '8px', fontWeight: '600' }}>Sample CCTV Camera System Installation</td>
+                  <td style={{ padding: '8px', fontWeight: '600' }}>Supply & Installation of 16-CH CCTV Cameras & DVR</td>
                   <td style={{ padding: '8px', textAlign: 'right' }}>1</td>
                   <td style={{ padding: '8px', textAlign: 'right' }}>150,000</td>
                   <td style={{ padding: '8px', textAlign: 'right' }}>{((150000 * designerForm.tax_rate) / 100).toLocaleString()}</td>
@@ -1184,16 +1257,53 @@ export default function ClientInvoicing() {
               </tbody>
             </table>
 
+            {/* DIRECT EDITABLE BANK DETAILS & DISCLAIMERS */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '20px' }}>
-              <div>
-                <p style={{ fontSize: '12px', color: '#475569', fontWeight: '600' }}>{designerForm.bank_account}</p>
-                <p style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', fontStyle: 'italic' }}>{designerForm.footer_disclaimer}</p>
+              <div style={{ width: '65%' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#6366f1', marginBottom: '2px' }}>Editable Bank Account String:</label>
+                <input
+                  type="text"
+                  value={designerForm.bank_account}
+                  onChange={(e) => setDesignerForm({ ...designerForm, bank_account: e.target.value })}
+                  placeholder="Click to Edit Bank Account Info..."
+                  style={{ width: '100%', border: '1px dashed #6366f1', padding: '4px 8px', borderRadius: '6px', backgroundColor: '#faf5ff', fontSize: '12px', fontWeight: '600', color: '#334155' }}
+                />
+
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#6366f1', marginTop: '8px', marginBottom: '2px' }}>Editable Footer Notes:</label>
+                <input
+                  type="text"
+                  value={designerForm.footer_disclaimer}
+                  onChange={(e) => setDesignerForm({ ...designerForm, footer_disclaimer: e.target.value })}
+                  placeholder="Click to Edit Payment Disclaimer..."
+                  style={{ width: '100%', border: '1px dashed #6366f1', padding: '4px 8px', borderRadius: '6px', backgroundColor: '#faf5ff', fontSize: '11px', fontStyle: 'italic', color: '#64748b' }}
+                />
               </div>
-              <div style={{ width: '220px', fontSize: '13px' }}>
+
+              <div style={{ width: '30%', fontSize: '13px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid #000', paddingTop: '6px', fontWeight: 'bold' }}>
                   <span>Total Amount:</span>
                   <span>{(150000 + (150000 * designerForm.tax_rate) / 100).toLocaleString()}</span>
                 </div>
+              </div>
+            </div>
+
+            {/* DIRECT EDITABLE SIGNATURE TITLES */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '36px', paddingTop: '16px', borderTop: '1px dashed #cbd5e1', fontSize: '12px' }}>
+              <div>
+                <p>_______________________</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                  <span>Prepared By:</span>
+                  <input
+                    type="text"
+                    value={designerForm.prepared_by}
+                    onChange={(e) => setDesignerForm({ ...designerForm, prepared_by: e.target.value })}
+                    style={{ border: '1px dashed #6366f1', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: '700', color: '#0f172a', backgroundColor: '#faf5ff' }}
+                  />
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p>_______________________</p>
+                <p style={{ fontWeight: 'bold', marginTop: '4px' }}>Client Stamp & Signature</p>
               </div>
             </div>
           </div>
