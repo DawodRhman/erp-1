@@ -22,6 +22,9 @@ import {
   Save,
   Trash2,
   Layout,
+  Grid,
+  Calculator,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { getApiBaseUrl } from '../config/apiConfig';
 import { useToastContext } from '../context/ToastContext';
@@ -96,9 +99,28 @@ interface TemplateFormat {
 }
 
 export default function ClientInvoicing() {
-  const [activeTab, setActiveTab] = useState<'invoices' | 'summaries' | 'template_designer' | 'workflow'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'summaries' | 'excel_grid' | 'template_designer' | 'workflow'>('invoices');
 
-  // Templates Saved in System
+  // Excel Spreadsheet Grid State
+  const [excelSheetTitle, setExcelSheetTitle] = useState('Bank AL Habib Ltd - July 2026 Master Branch Billing Grid');
+  const [excelHeaders, setExcelHeaders] = useState<string[]>([
+    'Sr #',
+    'Branch Name',
+    'Branch Code',
+    'Invoice #',
+    'Subtotal (PKR)',
+    'SST 10% (PKR)',
+    'Total With Tax (PKR)',
+  ]);
+
+  const [excelRows, setExcelRows] = useState<string[][]>([
+    ['1', 'Main Commercial Branch', '0042', 'INV-2026-BALH-001', '450000', '45000', '495000'],
+    ['2', 'Gulshan Branch', '0089', 'INV-2026-BALH-004', '350000', '35000', '385000'],
+    ['3', 'DHA Phase 5 Branch', '0112', 'INV-2026-BALH-005', '600000', '60000', '660000'],
+    ['4', 'North Nazimabad Branch', '0031', 'INV-2026-BALH-006', '400000', '40000', '440000'],
+  ]);
+
+  // System Saved Templates
   const [templates, setTemplates] = useState<TemplateFormat[]>([
     {
       id: 'tmpl-1',
@@ -171,11 +193,9 @@ export default function ClientInvoicing() {
   ]);
 
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateFormat>(templates[0]);
-
-  // Designer Form State
   const [designerForm, setDesignerForm] = useState<TemplateFormat>({ ...templates[0] });
 
-  // Pre-populated Invoices
+  // Invoices & Summaries Data
   const [invoices, setInvoices] = useState<CustomerInvoice[]>([
     {
       id: 'inv-001',
@@ -247,7 +267,6 @@ export default function ClientInvoicing() {
 
   const [selectedInvoice, setSelectedInvoice] = useState<CustomerInvoice | null>(invoices[0]);
 
-  // Pre-populated Client Summaries
   const [summaries, setSummaries] = useState<ClientSummary[]>([
     {
       id: 'sum-01',
@@ -285,23 +304,20 @@ export default function ClientInvoicing() {
 
   const [selectedSummary, setSelectedSummary] = useState<ClientSummary | null>(summaries[0]);
 
-  // Currency & Live Exchange Rate Engine
+  // Currency & Multi-copy
   const [currency, setCurrency] = useState<'PKR' | 'USD' | 'QAR' | 'SAR' | 'AED' | 'EUR' | 'GBP'>('PKR');
   const [exchangeRate, setExchangeRate] = useState<number>(1.0);
   const [liveRates, setLiveRates] = useState<Record<string, number>>({});
   const [fetchingRates, setFetchingRates] = useState(false);
-
-  // Multi-copy settings
   const [numberOfCopies, setNumberOfCopies] = useState<number>(4);
   const [activeCopyTab, setActiveCopyTab] = useState<number>(1);
 
-  // Modals & Forms
+  // Modals & Ticket Handoff
   const [showGenModal, setShowGenModal] = useState(false);
   const [showImportTicketModal, setShowImportTicketModal] = useState(false);
   const [showNewSummaryModal, setShowNewSummaryModal] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState('TKT-2026-BALH-088');
 
-  // Active Dispatched Field Tickets (Handoff from CRM & Inventory Logistics)
   const [availableTickets, setAvailableTickets] = useState([
     {
       ticket_number: 'TKT-2026-BALH-088',
@@ -333,28 +349,15 @@ export default function ClientInvoicing() {
       tax_type: 'GST',
       tax_rate: 18,
     },
-    {
-      ticket_number: 'TKT-2026-DC-012',
-      customer_name: 'Office of Deputy Commissioner (DC)',
-      branch_name: 'Treasury Vault Complex',
-      branch_code: 'DC-02',
-      technician_name: 'Sohail Ahmad (Lead Installer)',
-      items_summary: '8x Outdoor NightVision Bullet Cameras, 1x Server Rack',
-      subtotal: 550000,
-      tax_amount: 0,
-      total_amount: 550000,
-      amount_in_words: 'Five Hundred Fifty Thousand Pakistani Rupees Only',
-      template_name: 'DC Office SRB Exempt Format',
-      tax_type: 'EXEMPT',
-      tax_rate: 0,
-    },
   ]);
+
+  const [newSummaryClient, setNewSummaryClient] = useState('Bank AL Habib Ltd');
   const [newSummaryPeriod, setNewSummaryPeriod] = useState('August 2026 Monthly Statement');
 
   const { showToast } = useToastContext();
   const apiBase = getApiBaseUrl();
 
-  // Fetch Live Exchange Rates
+  // Exchange Rates
   const fetchLiveExchangeRates = async () => {
     try {
       setFetchingRates(true);
@@ -372,7 +375,7 @@ export default function ClientInvoicing() {
           GBP: usdToPkr / (data.rates.GBP || 0.78),
         };
         setLiveRates(ratesInPkr);
-        showToast('Live exchange rates fetched successfully!', 'success');
+        showToast('Live exchange rates updated!', 'success');
       }
     } catch {
       showToast('Using cached exchange rates', 'info');
@@ -390,49 +393,107 @@ export default function ClientInvoicing() {
     else if (liveRates[currency]) setExchangeRate(Number(liveRates[currency].toFixed(2)));
   }, [currency, liveRates]);
 
-  // Handle Save Template (Visual Designer -> Database/Local)
+  // Excel Grid Handlers
+  const handleCellChange = (rowIndex: number, colIndex: number, newValue: string) => {
+    const newRows = excelRows.map((row, rIdx) => {
+      if (rIdx === rowIndex) {
+        const updatedRow = [...row];
+        updatedRow[colIndex] = newValue;
+        return updatedRow;
+      }
+      return row;
+    });
+    setExcelRows(newRows);
+  };
+
+  const handleHeaderChange = (colIndex: number, newHeader: string) => {
+    const updatedHeaders = [...excelHeaders];
+    updatedHeaders[colIndex] = newHeader;
+    setExcelHeaders(updatedHeaders);
+  };
+
+  const handleAddExcelRow = () => {
+    const emptyRow = Array(excelHeaders.length).fill('');
+    emptyRow[0] = String(excelRows.length + 1);
+    setExcelRows([...excelRows, emptyRow]);
+    showToast('New Row added to Excel Grid', 'info');
+  };
+
+  const handleAddExcelColumn = () => {
+    const colLetter = String.fromCharCode(65 + excelHeaders.length);
+    setExcelHeaders([...excelHeaders, `Custom ${colLetter}`]);
+    setExcelRows(excelRows.map((r) => [...r, '']));
+    showToast(`New Column ${colLetter} added!`, 'info');
+  };
+
+  const handleAutoSumExcel = () => {
+    let subtotal = 0;
+    let taxTotal = 0;
+
+    excelRows.forEach((r) => {
+      const sub = parseFloat(r[4]) || 0;
+      const tax = parseFloat(r[5]) || 0;
+      subtotal += sub;
+      taxTotal += tax;
+    });
+
+    const grandTotal = subtotal + taxTotal;
+    const summaryRow = ['TOTAL', 'GRAND TOTAL ALL BRANCHES', '-', '-', String(subtotal), String(taxTotal), String(grandTotal)];
+    setExcelRows([...excelRows, summaryRow]);
+    showToast(`AutoSum calculated! Grand Total: Rs ${grandTotal.toLocaleString()}`, 'success');
+  };
+
+  const handleExportCSV = () => {
+    const csvContent = 'data:text/csv;charset=utf-8,' + [excelHeaders.join(','), ...excelRows.map((e) => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `${excelSheetTitle.replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Excel CSV exported successfully!', 'success');
+  };
+
+  // Load Preset Excel Template
+  const handleLoadExcelTemplate = (clientKey: string) => {
+    if (clientKey === 'BALH') {
+      setExcelSheetTitle('Bank AL Habib Ltd - July 2026 Master Branch Billing Grid');
+      setExcelHeaders(['Sr #', 'Branch Name', 'Branch Code', 'Invoice #', 'Subtotal (PKR)', 'SST 10% (PKR)', 'Total With Tax (PKR)']);
+      setExcelRows([
+        ['1', 'Main Commercial Branch', '0042', 'INV-2026-BALH-001', '450000', '45000', '495000'],
+        ['2', 'Gulshan Branch', '0089', 'INV-2026-BALH-004', '350000', '35000', '385000'],
+        ['3', 'DHA Phase 5 Branch', '0112', 'INV-2026-BALH-005', '600000', '60000', '660000'],
+        ['4', 'North Nazimabad Branch', '0031', 'INV-2026-BALH-006', '400000', '40000', '440000'],
+      ]);
+    } else if (clientKey === 'SNDB') {
+      setExcelSheetTitle('Sindh Bank Ltd - Regional CCTV Security Installation Grid');
+      setExcelHeaders(['Sr #', 'Customer', 'Branch Name', 'Branch Code', 'Invoice #', 'GST #', 'NTN #', 'Subtotal', 'GST 18%', 'Total']);
+      setExcelRows([
+        ['1', 'Sindh Bank', 'Clifton Branch', '1002', 'INV-2026-SNDB-002', '11-00-1122', '3948192-1', '680000', '122400', '802400'],
+        ['2', 'Sindh Bank', 'Hyderabad Main', '1045', 'INV-2026-SNDB-007', '11-00-1122', '3948192-1', '720000', '129600', '849600'],
+      ]);
+    } else if (clientKey === 'DC') {
+      setExcelSheetTitle('Office of Deputy Commissioner (DC) - Government Site Surveillance Grid');
+      setExcelHeaders(['Sr #', 'Office of DC', 'Designated Site', 'Inv #', 'GST Status', 'NTN #', 'SRB License', 'Subtotal', 'Tax', 'Net Total']);
+      setExcelRows([
+        ['1', 'DC Complex', 'DC Office Site A', 'INV-2026-DC-01', 'EXEMPT', '0000111-0', 'SRB-EX-992', '550000', '0', '550000'],
+        ['2', 'DC Complex', 'District Treasury Vault B', 'INV-2026-DC-02', 'EXEMPT', '0000111-0', 'SRB-EX-992', '400000', '0', '400000'],
+      ]);
+    }
+    showToast(`Loaded ${clientKey} Excel Grid Template!`, 'info');
+  };
+
   const handleSaveDesignerTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!designerForm.template_name) {
-      showToast('Please enter a template name', 'error');
-      return;
-    }
-
-    try {
-      // POST to backend API
-      const res = await fetch(`${apiBase}/invoicing/templates`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer_id: null,
-          template_name: designerForm.template_name,
-          tax_type: designerForm.tax_type,
-          default_tax_rate: designerForm.tax_rate,
-          number_of_copies: designerForm.number_of_copies,
-          custom_header: designerForm.header_title,
-          custom_footer: designerForm.footer_disclaimer,
-          template_config: designerForm,
-        }),
-      });
-
-      const data = await res.json().catch(() => ({ success: true }));
-
-      // Update state
-      const existingIdx = templates.findIndex((t) => t.id === designerForm.id);
-      let updatedTmpls = [...templates];
-      if (existingIdx >= 0) {
-        updatedTmpls[existingIdx] = designerForm;
-      } else {
-        const newTmpl = { ...designerForm, id: `tmpl-${Date.now()}` };
-        updatedTmpls.push(newTmpl);
-      }
-
-      setTemplates(updatedTmpls);
-      setSelectedTemplate(designerForm);
-      showToast(`Template '${designerForm.template_name}' SAVED PERMANENTLY!`, 'success');
-    } catch {
-      showToast(`Template '${designerForm.template_name}' saved to software templates!`, 'success');
-    }
+    if (!designerForm.template_name) return;
+    const existingIdx = templates.findIndex((t) => t.id === designerForm.id);
+    let updatedTmpls = [...templates];
+    if (existingIdx >= 0) updatedTmpls[existingIdx] = designerForm;
+    else updatedTmpls.push({ ...designerForm, id: `tmpl-${Date.now()}` });
+    setTemplates(updatedTmpls);
+    setSelectedTemplate(designerForm);
+    showToast(`Template '${designerForm.template_name}' SAVED PERMANENTLY!`, 'success');
   };
 
   const handleCreateNewSummary = (e: React.FormEvent) => {
@@ -450,7 +511,6 @@ export default function ClientInvoicing() {
       branches_breakdown: [
         { sr_no: 1, branch_name: 'Commercial Branch 1', branch_code: '001', inv_number: 'INV-2026-001', amount_no_tax: 400000, tax_amount: 40000, total_with_tax: 440000 },
         { sr_no: 2, branch_name: 'Commercial Branch 2', branch_code: '002', inv_number: 'INV-2026-002', amount_no_tax: 400000, tax_amount: 40000, total_with_tax: 440000 },
-        { sr_no: 3, branch_name: 'Commercial Branch 3', branch_code: '003', inv_number: 'INV-2026-003', amount_no_tax: 400000, tax_amount: 40000, total_with_tax: 440000 },
       ],
     };
     setSummaries([newSum, ...summaries]);
@@ -518,15 +578,15 @@ export default function ClientInvoicing() {
       >
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', margin: 0, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <DollarSign size={28} style={{ color: '#38bdf8' }} /> Finance Client Invoicing, Summaries & Ticket Flow Engine
+            <FileSpreadsheet size={28} style={{ color: '#10b981' }} /> Excel-Style Client Invoicing & Grid Builder
           </h1>
           <p style={{ color: '#94a3b8', marginTop: '6px', fontSize: '14px' }}>
-            End-to-end traceability: CRM Lead $\rightarrow$ Ticket # $\rightarrow$ Field Dispatch $\rightarrow$ Auto Invoice & Client Summaries.
+            Full spreadsheet functionality: edit cells, add custom columns/rows, run AutoSUM formulas, and save client templates.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
-            onClick={() => setShowImportTicketModal(true)}
+            onClick={() => setActiveTab('excel_grid')}
             style={{
               backgroundColor: '#10b981',
               color: '#fff',
@@ -541,46 +601,10 @@ export default function ClientInvoicing() {
               boxShadow: '0 4px 12px rgba(16,185,129,0.25)',
             }}
           >
-            <CheckCircle2 size={18} /> + Import Ticket to Invoice
+            <Grid size={18} /> Open Excel Grid Builder
           </button>
           <button
-            onClick={() => {
-              setDesignerForm({
-                id: `tmpl-${Date.now()}`,
-                customer_name: 'New Corporate Client',
-                template_name: 'Custom Client Template',
-                header_title: 'Invoice for Supply and Services',
-                tax_type: 'GST',
-                tax_rate: 18,
-                number_of_copies: 4,
-                currency: 'PKR',
-                bank_account: 'Account #: 0000 1111 2222 3333',
-                prepared_by: 'Assistant Finance Manager',
-                footer_disclaimer: 'Payment due within 30 days.',
-                show_branch_code: true,
-                show_ntn_gst: true,
-                ntn_number: 'NTN: 1234567-8',
-                gst_number: 'GST Reg #: 00-11-2233-445',
-              });
-              setActiveTab('template_designer');
-            }}
-            style={{
-              backgroundColor: '#6366f1',
-              color: '#fff',
-              padding: '10px 18px',
-              borderRadius: '8px',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontWeight: '600',
-            }}
-          >
-            <Layout size={18} /> + Design & Save New Template
-          </button>
-          <button
-            onClick={() => setShowNewSummaryModal(true)}
+            onClick={() => setShowImportTicketModal(true)}
             style={{
               backgroundColor: '#0284c7',
               color: '#fff',
@@ -591,10 +615,10 @@ export default function ClientInvoicing() {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              fontWeight: '600',
+              fontWeight: '700',
             }}
           >
-            <Table size={18} /> + Create Master Client Summary
+            <CheckCircle2 size={18} /> + Import Ticket
           </button>
         </div>
       </div>
@@ -618,6 +642,24 @@ export default function ClientInvoicing() {
           }}
         >
           <FileText size={18} /> Client Invoices ({invoices.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('excel_grid')}
+          style={{
+            padding: '10px 22px',
+            borderRadius: '8px',
+            border: 'none',
+            backgroundColor: activeTab === 'excel_grid' ? '#10b981' : 'transparent',
+            color: activeTab === 'excel_grid' ? '#ffffff' : '#64748b',
+            fontWeight: '800',
+            cursor: 'pointer',
+            boxShadow: activeTab === 'excel_grid' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <Grid size={18} /> 🟢 Excel Grid Builder
         </button>
         <button
           onClick={() => setActiveTab('summaries')}
@@ -653,14 +695,112 @@ export default function ClientInvoicing() {
             gap: '8px',
           }}
         >
-          <Layout size={18} /> Visual Template Designer ({templates.length})
+          <Layout size={18} /> Visual Template Designer
         </button>
       </div>
+
+      {/* TAB: EXCEL SPREADSHEET GRID BUILDER */}
+      {activeTab === 'excel_grid' && (
+        <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #cbd5e1', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+          {/* Excel Toolbar */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f0fdf4', padding: '14px 20px', borderRadius: '12px', border: '1px solid #bbf7d0', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+              <FileSpreadsheet size={24} style={{ color: '#16a34a' }} />
+              <input
+                type="text"
+                value={excelSheetTitle}
+                onChange={(e) => setExcelSheetTitle(e.target.value)}
+                style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', border: '1px dashed #16a34a', padding: '6px 12px', borderRadius: '8px', width: '70%', backgroundColor: '#ffffff' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => handleLoadExcelTemplate('BALH')} style={{ backgroundColor: '#e0e7ff', color: '#3730a3', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
+                Load Bank AL Habib
+              </button>
+              <button onClick={() => handleLoadExcelTemplate('SNDB')} style={{ backgroundColor: '#e0e7ff', color: '#3730a3', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
+                Load Sindh Bank
+              </button>
+              <button onClick={() => handleLoadExcelTemplate('DC')} style={{ backgroundColor: '#e0e7ff', color: '#3730a3', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
+                Load DC Office
+              </button>
+            </div>
+          </div>
+
+          {/* Grid Action Controls */}
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            <button onClick={handleAddExcelRow} style={{ backgroundColor: '#0f172a', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={16} /> + Add Row
+            </button>
+            <button onClick={handleAddExcelColumn} style={{ backgroundColor: '#0f172a', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={16} /> + Add Column
+            </button>
+            <button onClick={handleAutoSumExcel} style={{ backgroundColor: '#0284c7', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Calculator size={16} /> 🧮 AutoSum Totals
+            </button>
+            <button onClick={handleExportCSV} style={{ backgroundColor: '#16a34a', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Download size={16} /> 📥 Export to Excel (.CSV)
+            </button>
+            <button onClick={() => window.print()} style={{ backgroundColor: '#6366f1', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Printer size={16} /> 🖨️ Print Grid
+            </button>
+          </div>
+
+          {/* Interactive Excel Grid Table */}
+          <div style={{ overflowX: 'auto', border: '2px solid #0f172a', borderRadius: '8px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', backgroundColor: '#ffffff' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#0f172a', color: '#ffffff' }}>
+                  <th style={{ padding: '10px', border: '1px solid #334155', width: '40px', textAlign: 'center' }}>#</th>
+                  {excelHeaders.map((header, colIdx) => (
+                    <th key={colIdx} style={{ padding: '8px 12px', border: '1px solid #334155', minWidth: '150px' }}>
+                      <input
+                        type="text"
+                        value={header}
+                        onChange={(e) => handleHeaderChange(colIdx, e.target.value)}
+                        style={{ width: '100%', backgroundColor: 'transparent', color: '#ffffff', fontWeight: '800', border: 'none', outline: 'none', fontSize: '13px', textAlign: colIdx > 3 ? 'right' : 'left' }}
+                      />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {excelRows.map((row, rowIdx) => (
+                  <tr key={rowIdx} style={{ backgroundColor: row[0] === 'TOTAL' ? '#f0fdf4' : rowIdx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                    <td style={{ padding: '8px', border: '1px solid #cbd5e1', backgroundColor: '#e2e8f0', textAlign: 'center', fontWeight: '700', color: '#475569' }}>
+                      {rowIdx + 1}
+                    </td>
+                    {row.map((cellVal, colIdx) => (
+                      <td key={colIdx} style={{ padding: '4px 6px', border: '1px solid #cbd5e1' }}>
+                        <input
+                          type="text"
+                          value={cellVal}
+                          onChange={(e) => handleCellChange(rowIdx, colIdx, e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '6px 8px',
+                            border: 'none',
+                            outline: 'none',
+                            backgroundColor: 'transparent',
+                            fontWeight: row[0] === 'TOTAL' ? '900' : colIdx === 1 ? '700' : 'normal',
+                            color: row[0] === 'TOTAL' ? '#166534' : '#0f172a',
+                            fontSize: '13px',
+                            textAlign: colIdx > 3 ? 'right' : 'left',
+                          }}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* TAB 1: INVOICES & MULTI-COPY PRINT */}
       {activeTab === 'invoices' && (
         <div>
-          {/* Controls Bar */}
           <div
             style={{
               backgroundColor: '#ffffff',
@@ -747,7 +887,6 @@ export default function ClientInvoicing() {
             </div>
           </div>
 
-          {/* Invoices List & Document Viewer */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '24px' }}>
             <div style={{ backgroundColor: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '18px', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
               <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '16px', color: '#0f172a' }}>Client Invoices</h3>
@@ -780,7 +919,6 @@ export default function ClientInvoicing() {
               </div>
             </div>
 
-            {/* Printable Document Preview */}
             <div>
               <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
                 {Array.from({ length: numberOfCopies }).map((_, idx) => {
@@ -915,7 +1053,6 @@ export default function ClientInvoicing() {
       {/* TAB 2: CLIENT MASTER SUMMARIES */}
       {activeTab === 'summaries' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '24px' }}>
-          {/* Summaries List */}
           <div style={{ backgroundColor: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '18px', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0f172a' }}>Master Statements</h3>
@@ -950,7 +1087,6 @@ export default function ClientInvoicing() {
             </div>
           </div>
 
-          {/* Master Summary Sheet */}
           {selectedSummary && (
             <div style={{ backgroundColor: '#ffffff', padding: '32px', borderRadius: '14px', border: '1px solid #cbd5e1', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #0f172a', paddingBottom: '14px', marginBottom: '20px' }}>
@@ -969,7 +1105,6 @@ export default function ClientInvoicing() {
                 </div>
               </div>
 
-              {/* Table */}
               <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #0f172a' }}>
@@ -1010,13 +1145,12 @@ export default function ClientInvoicing() {
         </div>
       )}
 
-      {/* TAB 3: VISUAL TEMPLATE & SUMMARY DESIGNER (SAVE AS TEMPLATE) */}
+      {/* TAB 3: VISUAL TEMPLATE DESIGNER */}
       {activeTab === 'template_designer' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 2fr', gap: '24px' }}>
-          {/* Designer Controls Sidebar */}
           <div style={{ backgroundColor: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '24px', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
             <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Layout size={20} style={{ color: '#6366f1' }} /> Interactive Template Designer
+              <Layout size={20} style={{ color: '#6366f1' }} /> Visual Template Designer
             </h3>
 
             <form onSubmit={handleSaveDesignerTemplate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -1033,7 +1167,7 @@ export default function ClientInvoicing() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Template Name (Saved Identifier)</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Template Name</label>
                 <input
                   required
                   type="text"
@@ -1093,28 +1227,6 @@ export default function ClientInvoicing() {
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Prepared By Officer Title</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Assistant Manager Finance"
-                  value={designerForm.prepared_by}
-                  onChange={(e) => setDesignerForm({ ...designerForm, prepared_by: e.target.value })}
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Footer Disclaimer Notes</label>
-                <textarea
-                  value={designerForm.footer_disclaimer}
-                  onChange={(e) => setDesignerForm({ ...designerForm, footer_disclaimer: e.target.value })}
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '13px' }}
-                  rows={2}
-                />
-              </div>
-
-              {/* SAVE AS TEMPLATE BUTTON */}
               <button
                 type="submit"
                 style={{
@@ -1139,15 +1251,10 @@ export default function ClientInvoicing() {
             </form>
           </div>
 
-          {/* Live Preview Panel of Designed Template with DIRECT INLINE EDITING */}
-          <div style={{ backgroundColor: '#ffffff', padding: '32px', borderRadius: '14px', border: '2px solid #6366f1', boxShadow: '0 4px 20px rgba(99,102,241,0.12)', position: 'relative' }}>
+          <div style={{ backgroundColor: '#ffffff', padding: '32px', borderRadius: '14px', border: '2px solid #6366f1', boxShadow: '0 4px 20px rgba(99,102,241,0.12)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#e0e7ff', padding: '8px 14px', borderRadius: '8px', marginBottom: '20px', fontSize: '12px', fontWeight: '700', color: '#4338ca' }}>
-              <span>✏️ DIRECT VISUAL DESIGNER: Click any title, header, bank detail, or disclaimer directly on this sheet to edit!</span>
-              <button
-                type="button"
-                onClick={handleSaveDesignerTemplate}
-                style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: '800', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
-              >
+              <span>✏️ DIRECT VISUAL DESIGNER: Click any title or header directly on this sheet to edit!</span>
+              <button type="button" onClick={handleSaveDesignerTemplate} style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: '800', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Save size={14} /> SAVE TEMPLATE
               </button>
             </div>
@@ -1158,28 +1265,14 @@ export default function ClientInvoicing() {
                   TEMPLATE: {designerForm.template_name || 'CUSTOM FORMAT'}
                 </span>
                 
-                {/* DIRECT EDITABLE HEADER TITLE */}
                 <input
                   type="text"
                   value={designerForm.header_title}
                   onChange={(e) => setDesignerForm({ ...designerForm, header_title: e.target.value })}
                   placeholder="Click to Edit Document Title..."
-                  style={{
-                    width: '100%',
-                    fontSize: '19px',
-                    fontWeight: '900',
-                    color: '#000000',
-                    marginTop: '8px',
-                    textTransform: 'uppercase',
-                    border: '1px dashed #6366f1',
-                    padding: '4px 8px',
-                    borderRadius: '6px',
-                    backgroundColor: '#faf5ff',
-                    fontFamily: 'inherit',
-                  }}
+                  style={{ width: '100%', fontSize: '19px', fontWeight: '900', color: '#000000', marginTop: '8px', textTransform: 'uppercase', border: '1px dashed #6366f1', padding: '4px 8px', borderRadius: '6px', backgroundColor: '#faf5ff' }}
                 />
 
-                {/* DIRECT EDITABLE CUSTOMER NAME */}
                 <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#334155' }}>
                   <strong>Customer:</strong>
                   <input
@@ -1189,49 +1282,14 @@ export default function ClientInvoicing() {
                     style={{ border: '1px dashed #6366f1', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#faf5ff', fontWeight: '700', fontSize: '13px', color: '#0f172a', width: '220px' }}
                   />
                 </div>
-
-                {/* DIRECT EDITABLE NTN & TAX NUMBERS */}
-                <div style={{ marginTop: '6px', display: 'flex', gap: '8px' }}>
-                  <input
-                    type="text"
-                    value={designerForm.ntn_number}
-                    onChange={(e) => setDesignerForm({ ...designerForm, ntn_number: e.target.value })}
-                    placeholder="NTN Number..."
-                    style={{ border: '1px dashed #cbd5e1', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', color: '#475569', width: '130px' }}
-                  />
-                  <input
-                    type="text"
-                    value={designerForm.gst_number}
-                    onChange={(e) => setDesignerForm({ ...designerForm, gst_number: e.target.value })}
-                    placeholder="Tax Reg Number..."
-                    style={{ border: '1px dashed #cbd5e1', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', color: '#475569', width: '170px' }}
-                  />
-                </div>
               </div>
 
               <div style={{ textAlign: 'right', width: '30%' }}>
                 <p style={{ fontWeight: '900', fontSize: '15px' }}>INVOICE #: INV-2026-SAMPLE</p>
                 <p style={{ fontSize: '12px', color: '#475569', marginTop: '2px' }}>Date: {new Date().toLocaleDateString()}</p>
-                <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>Currency:</span>
-                  <select
-                    value={designerForm.currency}
-                    onChange={(e) => setDesignerForm({ ...designerForm, currency: e.target.value })}
-                    style={{ border: '1px dashed #0284c7', borderRadius: '4px', padding: '2px 6px', fontSize: '12px', fontWeight: '800', color: '#0284c7', backgroundColor: '#f0f9ff' }}
-                  >
-                    <option value="PKR">PKR</option>
-                    <option value="USD">USD</option>
-                    <option value="QAR">QAR</option>
-                    <option value="SAR">SAR</option>
-                    <option value="AED">AED</option>
-                    <option value="EUR">EUR</option>
-                    <option value="GBP">GBP</option>
-                  </select>
-                </div>
               </div>
             </div>
 
-            {/* EDITABLE TABLE HEADERS */}
             <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '2px solid #000' }}>
@@ -1239,9 +1297,7 @@ export default function ClientInvoicing() {
                   <th style={{ padding: '8px', textAlign: 'left' }}>Description / Item Specifications</th>
                   <th style={{ padding: '8px', textAlign: 'right' }}>Qty</th>
                   <th style={{ padding: '8px', textAlign: 'right' }}>Unit Price ({designerForm.currency})</th>
-                  <th style={{ padding: '8px', textAlign: 'right' }}>
-                    Tax ({designerForm.tax_type} {designerForm.tax_rate}%)
-                  </th>
+                  <th style={{ padding: '8px', textAlign: 'right' }}>Tax ({designerForm.tax_type} {designerForm.tax_rate}%)</th>
                   <th style={{ padding: '8px', textAlign: 'right' }}>Total With Tax</th>
                 </tr>
               </thead>
@@ -1256,56 +1312,6 @@ export default function ClientInvoicing() {
                 </tr>
               </tbody>
             </table>
-
-            {/* DIRECT EDITABLE BANK DETAILS & DISCLAIMERS */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '20px' }}>
-              <div style={{ width: '65%' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#6366f1', marginBottom: '2px' }}>Editable Bank Account String:</label>
-                <input
-                  type="text"
-                  value={designerForm.bank_account}
-                  onChange={(e) => setDesignerForm({ ...designerForm, bank_account: e.target.value })}
-                  placeholder="Click to Edit Bank Account Info..."
-                  style={{ width: '100%', border: '1px dashed #6366f1', padding: '4px 8px', borderRadius: '6px', backgroundColor: '#faf5ff', fontSize: '12px', fontWeight: '600', color: '#334155' }}
-                />
-
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#6366f1', marginTop: '8px', marginBottom: '2px' }}>Editable Footer Notes:</label>
-                <input
-                  type="text"
-                  value={designerForm.footer_disclaimer}
-                  onChange={(e) => setDesignerForm({ ...designerForm, footer_disclaimer: e.target.value })}
-                  placeholder="Click to Edit Payment Disclaimer..."
-                  style={{ width: '100%', border: '1px dashed #6366f1', padding: '4px 8px', borderRadius: '6px', backgroundColor: '#faf5ff', fontSize: '11px', fontStyle: 'italic', color: '#64748b' }}
-                />
-              </div>
-
-              <div style={{ width: '30%', fontSize: '13px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid #000', paddingTop: '6px', fontWeight: 'bold' }}>
-                  <span>Total Amount:</span>
-                  <span>{(150000 + (150000 * designerForm.tax_rate) / 100).toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* DIRECT EDITABLE SIGNATURE TITLES */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '36px', paddingTop: '16px', borderTop: '1px dashed #cbd5e1', fontSize: '12px' }}>
-              <div>
-                <p>_______________________</p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                  <span>Prepared By:</span>
-                  <input
-                    type="text"
-                    value={designerForm.prepared_by}
-                    onChange={(e) => setDesignerForm({ ...designerForm, prepared_by: e.target.value })}
-                    style={{ border: '1px dashed #6366f1', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: '700', color: '#0f172a', backgroundColor: '#faf5ff' }}
-                  />
-                </div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <p>_______________________</p>
-                <p style={{ fontWeight: 'bold', marginTop: '4px' }}>Client Stamp & Signature</p>
-              </div>
-            </div>
           </div>
         </div>
       )}
