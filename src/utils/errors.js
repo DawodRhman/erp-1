@@ -52,8 +52,7 @@ export function errorHandler(err, req, res, next) {
     success: false,
     error: {
       code,
-      message: err.message || message,
-      stack: err.stack,
+      message,
       ...(details ? { details } : {}),
     },
   });
