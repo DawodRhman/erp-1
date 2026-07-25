@@ -297,9 +297,58 @@ export default function ClientInvoicing() {
 
   // Modals & Forms
   const [showGenModal, setShowGenModal] = useState(false);
+  const [showImportTicketModal, setShowImportTicketModal] = useState(false);
   const [showNewSummaryModal, setShowNewSummaryModal] = useState(false);
-  const [selectedDispatchId, setSelectedDispatchId] = useState('');
-  const [newSummaryClient, setNewSummaryClient] = useState('Bank AL Habib Ltd');
+  const [selectedTicketId, setSelectedTicketId] = useState('TKT-2026-BALH-088');
+
+  // Active Dispatched Field Tickets (Handoff from CRM & Inventory Logistics)
+  const [availableTickets, setAvailableTickets] = useState([
+    {
+      ticket_number: 'TKT-2026-BALH-088',
+      customer_name: 'Bank AL Habib Ltd',
+      branch_name: 'DHA Phase 5 Branch',
+      branch_code: '0112',
+      technician_name: 'Tariq Mehmood (Senior Installer)',
+      items_summary: '1x 32-CH NVR, 4x 4MP IP Cameras, 300ft CAT6 Cable used',
+      subtotal: 600000,
+      tax_amount: 60000,
+      total_amount: 660000,
+      amount_in_words: 'Six Hundred Sixty Thousand Pakistani Rupees Only',
+      template_name: 'Bank AL Habib SST 10% Format',
+      tax_type: 'SST',
+      tax_rate: 10,
+    },
+    {
+      ticket_number: 'TKT-2026-SNDB-045',
+      customer_name: 'Sindh Bank Ltd',
+      branch_name: 'Hyderabad Main Branch',
+      branch_code: '1045',
+      technician_name: 'Kamran Shah (Field Engineer)',
+      items_summary: '1x Biometric Gate Barrier, 2x Motion Detectors',
+      subtotal: 720000,
+      tax_amount: 129600,
+      total_amount: 849600,
+      amount_in_words: 'Eight Hundred Forty Nine Thousand Six Hundred Pakistani Rupees Only',
+      template_name: 'Sindh Bank GST 18% Format',
+      tax_type: 'GST',
+      tax_rate: 18,
+    },
+    {
+      ticket_number: 'TKT-2026-DC-012',
+      customer_name: 'Office of Deputy Commissioner (DC)',
+      branch_name: 'Treasury Vault Complex',
+      branch_code: 'DC-02',
+      technician_name: 'Sohail Ahmad (Lead Installer)',
+      items_summary: '8x Outdoor NightVision Bullet Cameras, 1x Server Rack',
+      subtotal: 550000,
+      tax_amount: 0,
+      total_amount: 550000,
+      amount_in_words: 'Five Hundred Fifty Thousand Pakistani Rupees Only',
+      template_name: 'DC Office SRB Exempt Format',
+      tax_type: 'EXEMPT',
+      tax_rate: 0,
+    },
+  ]);
   const [newSummaryPeriod, setNewSummaryPeriod] = useState('August 2026 Monthly Statement');
 
   const { showToast } = useToastContext();
@@ -410,6 +459,45 @@ export default function ClientInvoicing() {
     showToast(`Master Summary Statement created for ${newSummaryClient}!`, 'success');
   };
 
+  const handleImportTicketToInvoice = (e: React.FormEvent) => {
+    e.preventDefault();
+    const ticket = availableTickets.find((t) => t.ticket_number === selectedTicketId) || availableTickets[0];
+    const newInv: CustomerInvoice = {
+      id: `inv-${Date.now()}`,
+      invoice_number: `INV-2026-${ticket.ticket_number.split('-')[2] || 'TKT'}-${Math.floor(Math.random() * 900 + 100)}`,
+      customer_name: ticket.customer_name,
+      branch_name: ticket.branch_name,
+      branch_code: ticket.branch_code,
+      currency: 'PKR',
+      exchange_rate: 1.0,
+      template_name: ticket.template_name,
+      tax_type: ticket.tax_type,
+      tax_rate: ticket.tax_rate,
+      subtotal: ticket.subtotal,
+      tax_amount: ticket.tax_amount,
+      total_amount: ticket.total_amount,
+      amount_in_words: ticket.amount_in_words,
+      number_of_copies: 4,
+      status: 'APPROVED',
+      created_at: new Date().toISOString(),
+      items: [
+        {
+          description: `Dispatched Field Ticket #${ticket.ticket_number}: ${ticket.items_summary}`,
+          quantity: 1,
+          unit_price: ticket.subtotal,
+          total_without_tax: ticket.subtotal,
+          tax_amount: ticket.tax_amount,
+          total_with_tax: ticket.total_amount,
+        },
+      ],
+    };
+
+    setInvoices([newInv, ...invoices]);
+    setSelectedInvoice(newInv);
+    setShowImportTicketModal(false);
+    showToast(`Invoice ${newInv.invoice_number} generated from Ticket ${ticket.ticket_number}!`, 'success');
+  };
+
   const copyLabels = ['Customer Copy', 'Finance Copy', 'Audit Copy', 'Bank Copy', 'Archive Copy', 'Record Copy'];
 
   return (
@@ -430,13 +518,31 @@ export default function ClientInvoicing() {
       >
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', margin: 0, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <DollarSign size={28} style={{ color: '#38bdf8' }} /> Finance Client Invoicing, Summaries & Template Designer
+            <DollarSign size={28} style={{ color: '#38bdf8' }} /> Finance Client Invoicing, Summaries & Ticket Flow Engine
           </h1>
           <p style={{ color: '#94a3b8', marginTop: '6px', fontSize: '14px' }}>
-            Design client-specific invoice & summary templates, save templates permanently, fetch live multi-currency exchange rates, and export multi-copy prints.
+            End-to-end traceability: CRM Lead $\rightarrow$ Ticket # $\rightarrow$ Field Dispatch $\rightarrow$ Auto Invoice & Client Summaries.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={() => setShowImportTicketModal(true)}
+            style={{
+              backgroundColor: '#10b981',
+              color: '#fff',
+              padding: '10px 18px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontWeight: '700',
+              boxShadow: '0 4px 12px rgba(16,185,129,0.25)',
+            }}
+          >
+            <CheckCircle2 size={18} /> + Import Ticket to Invoice
+          </button>
           <button
             onClick={() => {
               setDesignerForm({
@@ -1130,6 +1236,43 @@ export default function ClientInvoicing() {
                 </button>
                 <button type="submit" style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#0284c7', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>
                   Generate Master Summary
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Import Ticket to Invoice */}
+      {showImportTicketModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', padding: '28px', width: '560px', boxShadow: '0 20px 40px rgba(0,0,0,0.25)', border: '1px solid #e2e8f0' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#0f172a', marginBottom: '8px' }}>+ Import Dispatched Job Ticket to Invoice</h2>
+            <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px' }}>
+              Select a completed field installation ticket handoff from CRM & Inventory to auto-generate a client invoice.
+            </p>
+            <form onSubmit={handleImportTicketToInvoice}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>Active Dispatched Field Tickets</label>
+                <select
+                  value={selectedTicketId}
+                  onChange={(e) => setSelectedTicketId(e.target.value)}
+                  style={{ width: '100%', padding: '12px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontWeight: '700' }}
+                >
+                  {availableTickets.map((t) => (
+                    <option key={t.ticket_number} value={t.ticket_number}>
+                      {t.ticket_number} - {t.customer_name} ({t.branch_name}) [Rs {t.total_amount.toLocaleString()}]
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+                <button type="button" onClick={() => setShowImportTicketModal(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: '600', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button type="submit" style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>
+                  Generate Invoice from Ticket
                 </button>
               </div>
             </form>
