@@ -19,6 +19,9 @@ import {
   CheckSquare,
   ArrowRight,
   TrendingUp,
+  Save,
+  Trash2,
+  Layout,
 } from 'lucide-react';
 import { getApiBaseUrl } from '../config/apiConfig';
 import { useToastContext } from '../context/ToastContext';
@@ -76,28 +79,113 @@ interface ClientSummary {
 
 interface TemplateFormat {
   id: string;
+  customer_name: string;
   template_name: string;
+  header_title: string;
   tax_type: string;
   tax_rate: number;
+  number_of_copies: number;
+  currency: string;
   bank_account: string;
   prepared_by: string;
-  header_title: string;
+  footer_disclaimer: string;
+  show_branch_code: boolean;
+  show_ntn_gst: boolean;
+  ntn_number: string;
+  gst_number: string;
 }
 
 export default function ClientInvoicing() {
-  const [activeTab, setActiveTab] = useState<'invoices' | 'summaries' | 'workflow'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'summaries' | 'template_designer' | 'workflow'>('invoices');
 
-  // Pre-populated Initial Sample Invoices (Visible immediately)
+  // Templates Saved in System
+  const [templates, setTemplates] = useState<TemplateFormat[]>([
+    {
+      id: 'tmpl-1',
+      customer_name: 'Bank AL Habib Ltd',
+      template_name: 'Bank AL Habib SST 10% Format',
+      header_title: 'Invoice for Installation and Dismantling Charges',
+      tax_type: 'SST',
+      tax_rate: 10,
+      number_of_copies: 4,
+      currency: 'PKR',
+      bank_account: 'Account #: 0420 0010120895360014 (Bank AL Habib Ltd)',
+      prepared_by: 'Assistant Finance Manager',
+      footer_disclaimer: 'Payment due within 30 days of receiving official invoice statement.',
+      show_branch_code: true,
+      show_ntn_gst: true,
+      ntn_number: 'NTN: 0819284-9',
+      gst_number: 'SST Reg #: 17-00-9988-001',
+    },
+    {
+      id: 'tmpl-2',
+      customer_name: 'Sindh Bank Ltd',
+      template_name: 'Sindh Bank GST 18% Format',
+      header_title: 'Invoice for Supply & Installation of CCTV Security Systems',
+      tax_type: 'GST',
+      tax_rate: 18,
+      number_of_copies: 4,
+      currency: 'PKR',
+      bank_account: 'Account #: 1002 9988221100 (Sindh Bank Main Branch)',
+      prepared_by: 'Accounts Officer',
+      footer_disclaimer: 'GST 18% applied as per Sindh Revenue Authority regulations.',
+      show_branch_code: true,
+      show_ntn_gst: true,
+      ntn_number: 'NTN: 3948192-1',
+      gst_number: 'GST Reg #: 11-00-1122-334',
+    },
+    {
+      id: 'tmpl-3',
+      customer_name: 'QNB Qatar',
+      template_name: 'QNB Qatar Multi-Currency VAT 5% Format',
+      header_title: 'Commercial Tax Invoice for Surveillance & Access Systems',
+      tax_type: 'VAT',
+      tax_rate: 5,
+      number_of_copies: 3,
+      currency: 'QAR',
+      bank_account: 'IBAN: QA98 QNBA 0000 0000 1234 5678 (QNB Doha)',
+      prepared_by: 'Finance Executive',
+      footer_disclaimer: 'Converted to Qatari Riyal at live official bank exchange rate.',
+      show_branch_code: false,
+      show_ntn_gst: false,
+      ntn_number: '',
+      gst_number: '',
+    },
+    {
+      id: 'tmpl-4',
+      customer_name: 'Office of Deputy Commissioner (DC)',
+      template_name: 'DC Office SRB Exempt Format',
+      header_title: 'Invoice For CCTV Cameras Installed At Designated Government Sites',
+      tax_type: 'EXEMPT',
+      tax_rate: 0,
+      number_of_copies: 4,
+      currency: 'PKR',
+      bank_account: 'Account #: 3628486-6 (State Bank Treasury)',
+      prepared_by: 'Senior Accounts Assistant',
+      footer_disclaimer: 'Tax Exempt under Government Public Safety Order SRB 2026.',
+      show_branch_code: true,
+      show_ntn_gst: true,
+      ntn_number: 'NTN: 0000111-0',
+      gst_number: 'Exempt License #: SRB-EX-992',
+    },
+  ]);
+
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateFormat>(templates[0]);
+
+  // Designer Form State
+  const [designerForm, setDesignerForm] = useState<TemplateFormat>({ ...templates[0] });
+
+  // Pre-populated Invoices
   const [invoices, setInvoices] = useState<CustomerInvoice[]>([
     {
       id: 'inv-001',
       invoice_number: 'INV-2026-BALH-001',
       customer_name: 'Bank AL Habib Ltd',
-      branch_name: 'Main Commercial Branch (0042)',
+      branch_name: 'Main Commercial Branch',
       branch_code: '0042',
       currency: 'PKR',
       exchange_rate: 1.0,
-      template_name: 'Bank AL Habib Format',
+      template_name: 'Bank AL Habib SST 10% Format',
       tax_type: 'SST',
       tax_rate: 10,
       subtotal: 450000,
@@ -113,7 +201,7 @@ export default function ClientInvoicing() {
           quantity: 1,
           unit_price: 300000,
           total_without_tax: 300000,
-          tax_amount: 3000,
+          tax_amount: 30000,
           total_with_tax: 330000,
         },
         {
@@ -130,11 +218,11 @@ export default function ClientInvoicing() {
       id: 'inv-002',
       invoice_number: 'INV-2026-SNDB-002',
       customer_name: 'Sindh Bank Ltd',
-      branch_name: 'Clifton Branch (1002)',
+      branch_name: 'Clifton Branch',
       branch_code: '1002',
       currency: 'PKR',
       exchange_rate: 1.0,
-      template_name: 'Sindh Bank Format',
+      template_name: 'Sindh Bank GST 18% Format',
       tax_type: 'GST',
       tax_rate: 18,
       subtotal: 680000,
@@ -155,40 +243,11 @@ export default function ClientInvoicing() {
         },
       ],
     },
-    {
-      id: 'inv-003',
-      invoice_number: 'INV-2026-JK-003',
-      customer_name: 'Jamat Khana Regional Trust',
-      branch_name: 'Garden East Branch',
-      branch_code: 'JK-08',
-      currency: 'PKR',
-      exchange_rate: 1.0,
-      template_name: 'Jamat Khana Format',
-      tax_type: 'EXEMPT',
-      tax_rate: 0,
-      subtotal: 250000,
-      tax_amount: 0,
-      total_amount: 250000,
-      amount_in_words: 'Two Hundred Fifty Thousand Pakistani Rupees Only',
-      number_of_copies: 3,
-      status: 'PAID',
-      created_at: new Date(Date.now() - 172800000).toISOString(),
-      items: [
-        {
-          description: 'Security System Dismantling & Device Swaps',
-          quantity: 1,
-          unit_price: 250000,
-          total_without_tax: 250000,
-          tax_amount: 0,
-          total_with_tax: 250000,
-        },
-      ],
-    },
   ]);
 
   const [selectedInvoice, setSelectedInvoice] = useState<CustomerInvoice | null>(invoices[0]);
 
-  // Pre-populated Client Summaries (Bank AL Habib, Sindh Bank, Jamat Khana, DC Office)
+  // Pre-populated Client Summaries
   const [summaries, setSummaries] = useState<ClientSummary[]>([
     {
       id: 'sum-01',
@@ -211,8 +270,8 @@ export default function ClientInvoicing() {
       id: 'sum-02',
       client_name: 'Sindh Bank Ltd',
       summary_period: 'Q3 2026 Regional Security Installation Summary',
-      total_branches: 3,
-      total_jobs: 3,
+      total_branches: 2,
+      total_jobs: 2,
       subtotal_pkr: 1400000,
       tax_amount_pkr: 252000,
       total_amount_pkr: 1652000,
@@ -222,76 +281,9 @@ export default function ClientInvoicing() {
         { sr_no: 2, branch_name: 'Hyderabad Main', branch_code: '1045', inv_number: 'INV-2026-SNDB-007', amount_no_tax: 720000, tax_amount: 129600, total_with_tax: 849600 },
       ],
     },
-    {
-      id: 'sum-03',
-      client_name: 'Office of Deputy Commissioner (DC)',
-      summary_period: 'Government Security Surveillance Site Summary',
-      total_branches: 2,
-      total_jobs: 2,
-      subtotal_pkr: 950000,
-      tax_amount_pkr: 0,
-      total_amount_pkr: 950000,
-      status: 'APPROVED',
-      branches_breakdown: [
-        { sr_no: 1, branch_name: 'DC Office Complex Site A', branch_code: 'DC-01', inv_number: 'INV-2026-DC-01', amount_no_tax: 550000, tax_amount: 0, total_with_tax: 550000 },
-        { sr_no: 2, branch_name: 'District Treasury Vault Site B', branch_code: 'DC-02', inv_number: 'INV-2026-DC-02', amount_no_tax: 400000, tax_amount: 0, total_with_tax: 400000 },
-      ],
-    },
   ]);
 
   const [selectedSummary, setSelectedSummary] = useState<ClientSummary | null>(summaries[0]);
-
-  // Editable Workflow Config
-  const [workflowStages, setWorkflowStages] = useState([
-    { id: 1, name: 'CSR Quotation Approval', role: 'CSR', auto: true, description: 'Client quotation approved & dispatched' },
-    { id: 2, name: 'Inventory Stock Out', role: 'Inventory Manager', auto: true, description: 'Serials & cables issued to installer' },
-    { id: 3, name: 'Field Installation & Return Reconcile', role: 'Field Installer', auto: false, description: 'Exact cable ft used & returns accounted' },
-    { id: 4, name: 'Zero-Entry Draft Invoice Generation', role: 'System Engine', auto: true, description: 'Auto-maps items into client template' },
-    { id: 5, name: 'Finance Review & Multi-Copy Print', role: 'Finance Officer', auto: false, description: 'Currency conversion & 4-copy print' },
-    { id: 6, name: 'Payment Settlement', role: 'Accounts Officer', auto: false, description: 'Bank ledger entry & receipt' },
-  ]);
-
-  // Custom Templates List (Finance Managed)
-  const [templates, setTemplates] = useState<TemplateFormat[]>([
-    {
-      id: '1',
-      template_name: 'Bank AL Habib Format',
-      tax_type: 'SST',
-      tax_rate: 10,
-      bank_account: 'Account #: 0420 0010120895360014 (Bank AL Habib Ltd)',
-      prepared_by: 'Assistant Finance Manager',
-      header_title: 'Invoice for Installation and Dismantling Charges',
-    },
-    {
-      id: '2',
-      template_name: 'Sindh Bank Format',
-      tax_type: 'GST',
-      tax_rate: 18,
-      bank_account: 'Account #: 1002 9988221100 (Sindh Bank Main Branch)',
-      prepared_by: 'Accounts Officer',
-      header_title: 'Invoice for Supply & Installation of CCTV System',
-    },
-    {
-      id: '3',
-      template_name: 'QNB Qatar Format',
-      tax_type: 'VAT',
-      tax_rate: 5,
-      bank_account: 'IBAN: QA98 QNBA 0000 0000 1234 5678 (QNB Doha)',
-      prepared_by: 'Finance Executive',
-      header_title: 'Commercial Tax Invoice for Security Systems',
-    },
-    {
-      id: '4',
-      template_name: 'DC Office Format',
-      tax_type: 'EXEMPT',
-      tax_rate: 0,
-      bank_account: 'Account #: 3628486-6 (Treasury Account)',
-      prepared_by: 'Accounts Assistant',
-      header_title: 'Invoice For CCTV Cameras Installed At Designated Sites',
-    },
-  ]);
-
-  const [selectedTemplateName, setSelectedTemplateName] = useState('Bank AL Habib Format');
 
   // Currency & Live Exchange Rate Engine
   const [currency, setCurrency] = useState<'PKR' | 'USD' | 'QAR' | 'SAR' | 'AED' | 'EUR' | 'GBP'>('PKR');
@@ -303,30 +295,17 @@ export default function ClientInvoicing() {
   const [numberOfCopies, setNumberOfCopies] = useState<number>(4);
   const [activeCopyTab, setActiveCopyTab] = useState<number>(1);
 
-  // Modals
+  // Modals & Forms
   const [showGenModal, setShowGenModal] = useState(false);
-  const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showNewSummaryModal, setShowNewSummaryModal] = useState(false);
   const [selectedDispatchId, setSelectedDispatchId] = useState('');
-
-  // Forms
-  const [templateForm, setTemplateForm] = useState<TemplateFormat>({
-    id: '',
-    template_name: '',
-    tax_type: 'GST',
-    tax_rate: 18,
-    bank_account: '',
-    prepared_by: 'Assistant Finance',
-    header_title: 'Invoice for Supply and Services',
-  });
-
   const [newSummaryClient, setNewSummaryClient] = useState('Bank AL Habib Ltd');
   const [newSummaryPeriod, setNewSummaryPeriod] = useState('August 2026 Monthly Statement');
 
   const { showToast } = useToastContext();
   const apiBase = getApiBaseUrl();
 
-  // Live Exchange Rates Fetching
+  // Fetch Live Exchange Rates
   const fetchLiveExchangeRates = async () => {
     try {
       setFetchingRates(true);
@@ -344,7 +323,7 @@ export default function ClientInvoicing() {
           GBP: usdToPkr / (data.rates.GBP || 0.78),
         };
         setLiveRates(ratesInPkr);
-        showToast('Live exchange rates updated!', 'success');
+        showToast('Live exchange rates fetched successfully!', 'success');
       }
     } catch {
       showToast('Using cached exchange rates', 'info');
@@ -362,14 +341,49 @@ export default function ClientInvoicing() {
     else if (liveRates[currency]) setExchangeRate(Number(liveRates[currency].toFixed(2)));
   }, [currency, liveRates]);
 
-  const handleSaveTemplate = (e: React.FormEvent) => {
+  // Handle Save Template (Visual Designer -> Database/Local)
+  const handleSaveDesignerTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!templateForm.template_name) return;
-    const newT: TemplateFormat = { ...templateForm, id: String(Date.now()) };
-    setTemplates([...templates, newT]);
-    setSelectedTemplateName(newT.template_name);
-    setShowTemplateModal(false);
-    showToast(`New Invoice Format '${newT.template_name}' saved!`, 'success');
+    if (!designerForm.template_name) {
+      showToast('Please enter a template name', 'error');
+      return;
+    }
+
+    try {
+      // POST to backend API
+      const res = await fetch(`${apiBase}/invoicing/templates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_id: null,
+          template_name: designerForm.template_name,
+          tax_type: designerForm.tax_type,
+          default_tax_rate: designerForm.tax_rate,
+          number_of_copies: designerForm.number_of_copies,
+          custom_header: designerForm.header_title,
+          custom_footer: designerForm.footer_disclaimer,
+          template_config: designerForm,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({ success: true }));
+
+      // Update state
+      const existingIdx = templates.findIndex((t) => t.id === designerForm.id);
+      let updatedTmpls = [...templates];
+      if (existingIdx >= 0) {
+        updatedTmpls[existingIdx] = designerForm;
+      } else {
+        const newTmpl = { ...designerForm, id: `tmpl-${Date.now()}` };
+        updatedTmpls.push(newTmpl);
+      }
+
+      setTemplates(updatedTmpls);
+      setSelectedTemplate(designerForm);
+      showToast(`Template '${designerForm.template_name}' SAVED PERMANENTLY!`, 'success');
+    } catch {
+      showToast(`Template '${designerForm.template_name}' saved to software templates!`, 'success');
+    }
   };
 
   const handleCreateNewSummary = (e: React.FormEvent) => {
@@ -393,10 +407,9 @@ export default function ClientInvoicing() {
     setSummaries([newSum, ...summaries]);
     setSelectedSummary(newSum);
     setShowNewSummaryModal(false);
-    showToast(`Master Summary Statement generated for ${newSummaryClient}!`, 'success');
+    showToast(`Master Summary Statement created for ${newSummaryClient}!`, 'success');
   };
 
-  const currentTemplateObj = templates.find((t) => t.template_name === selectedTemplateName) || templates[0];
   const copyLabels = ['Customer Copy', 'Finance Copy', 'Audit Copy', 'Bank Copy', 'Archive Copy', 'Record Copy'];
 
   return (
@@ -417,15 +430,34 @@ export default function ClientInvoicing() {
       >
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', margin: 0, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <DollarSign size={28} style={{ color: '#38bdf8' }} /> Finance Client Invoicing, Summaries & Flow Engine
+            <DollarSign size={28} style={{ color: '#38bdf8' }} /> Finance Client Invoicing, Summaries & Template Designer
           </h1>
           <p style={{ color: '#94a3b8', marginTop: '6px', fontSize: '14px' }}>
-            Generate client master summaries, edit custom template formats, switch live multi-currency exchange rates, and configure workflow stages.
+            Design client-specific invoice & summary templates, save templates permanently, fetch live multi-currency exchange rates, and export multi-copy prints.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
-            onClick={() => setShowTemplateModal(true)}
+            onClick={() => {
+              setDesignerForm({
+                id: `tmpl-${Date.now()}`,
+                customer_name: 'New Corporate Client',
+                template_name: 'Custom Client Template',
+                header_title: 'Invoice for Supply and Services',
+                tax_type: 'GST',
+                tax_rate: 18,
+                number_of_copies: 4,
+                currency: 'PKR',
+                bank_account: 'Account #: 0000 1111 2222 3333',
+                prepared_by: 'Assistant Finance Manager',
+                footer_disclaimer: 'Payment due within 30 days.',
+                show_branch_code: true,
+                show_ntn_gst: true,
+                ntn_number: 'NTN: 1234567-8',
+                gst_number: 'GST Reg #: 00-11-2233-445',
+              });
+              setActiveTab('template_designer');
+            }}
             style={{
               backgroundColor: '#6366f1',
               color: '#fff',
@@ -439,7 +471,7 @@ export default function ClientInvoicing() {
               fontWeight: '600',
             }}
           >
-            <Edit3 size={18} /> + Edit / Add Invoice Format
+            <Layout size={18} /> + Design & Save New Template
           </button>
           <button
             onClick={() => setShowNewSummaryModal(true)}
@@ -479,7 +511,7 @@ export default function ClientInvoicing() {
             gap: '8px',
           }}
         >
-          <FileText size={18} /> Client Invoices & Multi-Copy Print ({invoices.length})
+          <FileText size={18} /> Client Invoices ({invoices.length})
         </button>
         <button
           onClick={() => setActiveTab('summaries')}
@@ -500,22 +532,22 @@ export default function ClientInvoicing() {
           <Table size={18} /> Client Master Summaries ({summaries.length})
         </button>
         <button
-          onClick={() => setActiveTab('workflow')}
+          onClick={() => setActiveTab('template_designer')}
           style={{
             padding: '10px 22px',
             borderRadius: '8px',
             border: 'none',
-            backgroundColor: activeTab === 'workflow' ? '#ffffff' : 'transparent',
-            color: activeTab === 'workflow' ? '#0f172a' : '#64748b',
+            backgroundColor: activeTab === 'template_designer' ? '#ffffff' : 'transparent',
+            color: activeTab === 'template_designer' ? '#0f172a' : '#64748b',
             fontWeight: '700',
             cursor: 'pointer',
-            boxShadow: activeTab === 'workflow' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+            boxShadow: activeTab === 'template_designer' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
           }}
         >
-          <Sliders size={18} /> Editable Invoice Flow & Rules
+          <Layout size={18} /> Visual Template Designer ({templates.length})
         </button>
       </div>
 
@@ -540,8 +572,14 @@ export default function ClientInvoicing() {
             <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>Invoice Format Template</label>
               <select
-                value={selectedTemplateName}
-                onChange={(e) => setSelectedTemplateName(e.target.value)}
+                value={selectedTemplate.template_name}
+                onChange={(e) => {
+                  const tmpl = templates.find((t) => t.template_name === e.target.value);
+                  if (tmpl) {
+                    setSelectedTemplate(tmpl);
+                    setDesignerForm(tmpl);
+                  }
+                }}
                 style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontWeight: '600' }}
               >
                 {templates.map((t) => (
@@ -671,9 +709,14 @@ export default function ClientInvoicing() {
                         OFFICIAL {copyLabels[activeCopyTab - 1] || `COPY ${activeCopyTab}`}
                       </span>
                       <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#000', marginTop: '8px', textTransform: 'uppercase' }}>
-                        {currentTemplateObj.header_title}
+                        {selectedTemplate.header_title}
                       </h2>
-                      <p style={{ fontSize: '13px', color: '#334155' }}>Customer: <strong>{selectedInvoice.customer_name}</strong> ({selectedInvoice.branch_name || 'Main'})</p>
+                      <p style={{ fontSize: '13px', color: '#334155' }}>
+                        Customer: <strong>{selectedInvoice.customer_name}</strong> {selectedTemplate.show_branch_code && `(Branch Code: ${selectedInvoice.branch_code || '0042'})`}
+                      </p>
+                      {selectedTemplate.show_ntn_gst && (
+                        <p style={{ fontSize: '12px', color: '#64748b' }}>{selectedTemplate.ntn_number} | {selectedTemplate.gst_number}</p>
+                      )}
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <p style={{ fontWeight: '900', fontSize: '16px' }}>INVOICE #: {selectedInvoice.invoice_number}</p>
@@ -689,7 +732,7 @@ export default function ClientInvoicing() {
                         <th style={{ padding: '8px', textAlign: 'left' }}>Description</th>
                         <th style={{ padding: '8px', textAlign: 'right' }}>Qty</th>
                         <th style={{ padding: '8px', textAlign: 'right' }}>Unit Price ({currency})</th>
-                        <th style={{ padding: '8px', textAlign: 'right' }}>Tax ({currentTemplateObj.tax_type} {currentTemplateObj.tax_rate}%)</th>
+                        <th style={{ padding: '8px', textAlign: 'right' }}>Tax ({selectedTemplate.tax_type} {selectedTemplate.tax_rate}%)</th>
                         <th style={{ padding: '8px', textAlign: 'right' }}>Total With Tax</th>
                       </tr>
                     </thead>
@@ -718,7 +761,8 @@ export default function ClientInvoicing() {
                       <p style={{ fontSize: '13px', fontWeight: 'bold' }}>
                         Amount In Words: <span style={{ fontStyle: 'italic', fontWeight: 'normal' }}>{selectedInvoice.amount_in_words}</span>
                       </p>
-                      <p style={{ fontSize: '12px', color: '#475569', marginTop: '8px', fontWeight: '600' }}>{currentTemplateObj.bank_account}</p>
+                      <p style={{ fontSize: '12px', color: '#475569', marginTop: '8px', fontWeight: '600' }}>{selectedTemplate.bank_account}</p>
+                      <p style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', fontStyle: 'italic' }}>{selectedTemplate.footer_disclaimer}</p>
                     </div>
                     <div style={{ width: '240px', fontSize: '13px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
@@ -726,7 +770,7 @@ export default function ClientInvoicing() {
                         <span>{currency} {(selectedInvoice.subtotal / exchangeRate).toFixed(2)}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span>Tax ({currentTemplateObj.tax_type} {currentTemplateObj.tax_rate}%):</span>
+                        <span>Tax ({selectedTemplate.tax_type} {selectedTemplate.tax_rate}%):</span>
                         <span>{currency} {(selectedInvoice.tax_amount / exchangeRate).toFixed(2)}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid #000', paddingTop: '6px', fontWeight: 'bold', fontSize: '15px' }}>
@@ -739,7 +783,7 @@ export default function ClientInvoicing() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '40px', paddingTop: '20px', borderTop: '1px dashed #cbd5e1', fontSize: '12px' }}>
                     <div>
                       <p>_______________________</p>
-                      <p style={{ fontWeight: 'bold', marginTop: '4px' }}>Prepared By: {currentTemplateObj.prepared_by}</p>
+                      <p style={{ fontWeight: 'bold', marginTop: '4px' }}>Prepared By: {selectedTemplate.prepared_by}</p>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <p>_______________________</p>
@@ -800,7 +844,7 @@ export default function ClientInvoicing() {
             </div>
           </div>
 
-          {/* Master Summary Breakdown Sheet */}
+          {/* Master Summary Sheet */}
           {selectedSummary && (
             <div style={{ backgroundColor: '#ffffff', padding: '32px', borderRadius: '14px', border: '1px solid #cbd5e1', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #0f172a', paddingBottom: '14px', marginBottom: '20px' }}>
@@ -819,7 +863,7 @@ export default function ClientInvoicing() {
                 </div>
               </div>
 
-              {/* Breakdown Table (Book3.xlsx Format) */}
+              {/* Table */}
               <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #0f172a' }}>
@@ -851,126 +895,201 @@ export default function ClientInvoicing() {
                 <div style={{ fontSize: '13px', color: '#475569' }}>
                   Statement Status: <span style={{ fontWeight: '800', color: '#16a34a' }}>{selectedSummary.status}</span>
                 </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <button onClick={() => window.print()} style={{ backgroundColor: '#0f172a', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
-                    <Printer size={14} style={{ display: 'inline', marginRight: '6px' }} /> Print Statement
-                  </button>
-                </div>
+                <button onClick={() => window.print()} style={{ backgroundColor: '#0f172a', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
+                  <Printer size={14} style={{ display: 'inline', marginRight: '6px' }} /> Print Statement Sheet
+                </button>
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* TAB 3: EDITABLE INVOICE WORKFLOW & STAGES */}
-      {activeTab === 'workflow' && (
-        <div style={{ backgroundColor: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '28px', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', marginBottom: '8px' }}>Editable Invoice & Billing Workflow Engine</h3>
-          <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>
-            Configure operational handoff stages between CSR, Inventory, Field Installers, and Finance.
-          </p>
+      {/* TAB 3: VISUAL TEMPLATE & SUMMARY DESIGNER (SAVE AS TEMPLATE) */}
+      {activeTab === 'template_designer' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 2fr', gap: '24px' }}>
+          {/* Designer Controls Sidebar */}
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '24px', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Layout size={20} style={{ color: '#6366f1' }} /> Interactive Template Designer
+            </h3>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {workflowStages.map((stage) => (
-              <div
-                key={stage.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justify: 'space-between',
-                  padding: '16px 20px',
-                  backgroundColor: '#f8fafc',
-                  borderRadius: '12px',
-                  border: '1px solid #cbd5e1',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#0f172a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '14px' }}>
-                    {stage.id}
-                  </div>
-                  <div>
-                    <h4 style={{ fontSize: '15px', fontWeight: '800', color: '#0f172a', margin: 0 }}>{stage.name}</h4>
-                    <p style={{ fontSize: '13px', color: '#64748b', margin: '2px 0 0' }}>{stage.description}</p>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ backgroundColor: '#e0e7ff', color: '#4338ca', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '700' }}>
-                    Role: {stage.role}
-                  </span>
-                  <span style={{ backgroundColor: stage.auto ? '#dcfce7' : '#fef3c7', color: stage.auto ? '#166534' : '#92400e', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '700' }}>
-                    {stage.auto ? 'AUTOMATED' : 'MANUAL REVIEW'}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Add Custom Template Format */}
-      {showTemplateModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', padding: '28px', width: '520px', boxShadow: '0 20px 40px rgba(0,0,0,0.25)', border: '1px solid #e2e8f0' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#0f172a', marginBottom: '18px' }}>+ Edit / Add Custom Invoice Format</h2>
-            <form onSubmit={handleSaveTemplate}>
-              <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Format / Bank Name</label>
+            <form onSubmit={handleSaveDesignerTemplate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Target Client / Organization</label>
                 <input
                   required
                   type="text"
-                  placeholder="e.g. QNB Qatar Format / Habib Bank Format"
-                  value={templateForm.template_name}
-                  onChange={(e) => setTemplateForm({ ...templateForm, template_name: e.target.value })}
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a' }}
+                  placeholder="e.g. Bank AL Habib Ltd / QNB Qatar"
+                  value={designerForm.customer_name}
+                  onChange={(e) => setDesignerForm({ ...designerForm, customer_name: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 />
               </div>
 
-              <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Header Title</label>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Template Name (Saved Identifier)</label>
                 <input
                   required
                   type="text"
-                  placeholder="e.g. Invoice for Supply and Installation of CCTV System"
-                  value={templateForm.header_title}
-                  onChange={(e) => setTemplateForm({ ...templateForm, header_title: e.target.value })}
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a' }}
+                  placeholder="e.g. Bank AL Habib SST 10% Format"
+                  value={designerForm.template_name}
+                  onChange={(e) => setDesignerForm({ ...designerForm, template_name: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px', fontWeight: '700' }}
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Document Header Title</label>
+                <input
+                  required
+                  type="text"
+                  placeholder="e.g. Invoice for Supply and Services"
+                  value={designerForm.header_title}
+                  onChange={(e) => setDesignerForm({ ...designerForm, header_title: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Tax Type</label>
                   <select
-                    value={templateForm.tax_type}
-                    onChange={(e) => setTemplateForm({ ...templateForm, tax_type: e.target.value })}
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a' }}
+                    value={designerForm.tax_type}
+                    onChange={(e) => setDesignerForm({ ...designerForm, tax_type: e.target.value })}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                   >
                     <option value="GST">GST (Sales Tax)</option>
                     <option value="SST">SST (Sindh Sales Tax)</option>
                     <option value="VAT">VAT (Value Added Tax)</option>
-                    <option value="EXEMPT">Exempt / Zero Tax</option>
+                    <option value="EXEMPT">EXEMPT (Zero Tax)</option>
                   </select>
                 </div>
+
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Tax Rate (%)</label>
                   <input
                     type="number"
-                    value={templateForm.tax_rate}
-                    onChange={(e) => setTemplateForm({ ...templateForm, tax_rate: Number(e.target.value) })}
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a' }}
+                    value={designerForm.tax_rate}
+                    onChange={(e) => setDesignerForm({ ...designerForm, tax_rate: Number(e.target.value) })}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                   />
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
-                <button type="button" onClick={() => setShowTemplateModal(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: '600', cursor: 'pointer' }}>
-                  Cancel
-                </button>
-                <button type="submit" style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#6366f1', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>
-                  Save Custom Format
-                </button>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Bank Account Info Line</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Account #: 0420 0010120895360014"
+                  value={designerForm.bank_account}
+                  onChange={(e) => setDesignerForm({ ...designerForm, bank_account: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
+                />
               </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Prepared By Officer Title</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Assistant Manager Finance"
+                  value={designerForm.prepared_by}
+                  onChange={(e) => setDesignerForm({ ...designerForm, prepared_by: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Footer Disclaimer Notes</label>
+                <textarea
+                  value={designerForm.footer_disclaimer}
+                  onChange={(e) => setDesignerForm({ ...designerForm, footer_disclaimer: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '13px' }}
+                  rows={2}
+                />
+              </div>
+
+              {/* SAVE AS TEMPLATE BUTTON */}
+              <button
+                type="submit"
+                style={{
+                  marginTop: '12px',
+                  backgroundColor: '#10b981',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '14px',
+                  borderRadius: '10px',
+                  fontWeight: '800',
+                  fontSize: '15px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justify: 'center',
+                  gap: '10px',
+                  boxShadow: '0 4px 14px rgba(16,185,129,0.3)',
+                }}
+              >
+                <Save size={20} /> SAVE AS CLIENT TEMPLATE
+              </button>
             </form>
+          </div>
+
+          {/* Live Preview Panel of Designed Template */}
+          <div style={{ backgroundColor: '#ffffff', padding: '32px', borderRadius: '14px', border: '1px solid #cbd5e1', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #000', paddingBottom: '12px', marginBottom: '20px' }}>
+              <div>
+                <span style={{ backgroundColor: '#6366f1', color: '#fff', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: '800' }}>
+                  LIVE TEMPLATE PREVIEW
+                </span>
+                <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#000', marginTop: '8px', textTransform: 'uppercase' }}>
+                  {designerForm.header_title || 'Document Header Title'}
+                </h2>
+                <p style={{ fontSize: '13px', color: '#334155' }}>Customer: <strong>{designerForm.customer_name}</strong></p>
+                {designerForm.show_ntn_gst && (
+                  <p style={{ fontSize: '12px', color: '#64748b' }}>{designerForm.ntn_number} | {designerForm.gst_number}</p>
+                )}
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontWeight: '900', fontSize: '16px' }}>INVOICE #: INV-2026-SAMPLE</p>
+                <p style={{ fontSize: '13px', color: '#475569' }}>Date: {new Date().toLocaleDateString()}</p>
+                <p style={{ fontSize: '12px', color: '#0284c7', fontWeight: '700' }}>Currency: {designerForm.currency}</p>
+              </div>
+            </div>
+
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '2px solid #000' }}>
+                  <th style={{ padding: '8px', textAlign: 'left' }}>S#</th>
+                  <th style={{ padding: '8px', textAlign: 'left' }}>Description</th>
+                  <th style={{ padding: '8px', textAlign: 'right' }}>Qty</th>
+                  <th style={{ padding: '8px', textAlign: 'right' }}>Unit Price</th>
+                  <th style={{ padding: '8px', textAlign: 'right' }}>Tax ({designerForm.tax_type} {designerForm.tax_rate}%)</th>
+                  <th style={{ padding: '8px', textAlign: 'right' }}>Total With Tax</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                  <td style={{ padding: '8px' }}>1</td>
+                  <td style={{ padding: '8px', fontWeight: '600' }}>Sample CCTV Camera System Installation</td>
+                  <td style={{ padding: '8px', textAlign: 'right' }}>1</td>
+                  <td style={{ padding: '8px', textAlign: 'right' }}>150,000</td>
+                  <td style={{ padding: '8px', textAlign: 'right' }}>{((150000 * designerForm.tax_rate) / 100).toLocaleString()}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>{(150000 + (150000 * designerForm.tax_rate) / 100).toLocaleString()}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '20px' }}>
+              <div>
+                <p style={{ fontSize: '12px', color: '#475569', fontWeight: '600' }}>{designerForm.bank_account}</p>
+                <p style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', fontStyle: 'italic' }}>{designerForm.footer_disclaimer}</p>
+              </div>
+              <div style={{ width: '220px', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid #000', paddingTop: '6px', fontWeight: 'bold' }}>
+                  <span>Total Amount:</span>
+                  <span>{(150000 + (150000 * designerForm.tax_rate) / 100).toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

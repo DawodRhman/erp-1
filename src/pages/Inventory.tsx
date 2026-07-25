@@ -1019,51 +1019,49 @@ export default function Inventory() {
 
       {/* MODAL: ADD PRODUCT */}
       {showAddProductModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 max-w-lg w-full shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-lg font-bold">Create New Catalog Product</h3>
-              <button onClick={() => setShowAddProductModal(false)} className="text-slate-400 hover:text-slate-600">
-                <XCircle className="w-5 h-5" />
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '16px' }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', padding: '28px', maxWidth: '520px', width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.25)', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', margin: 0 }}>Create New Catalog Product</h3>
+              <button onClick={() => setShowAddProductModal(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                <XCircle size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleCreateProduct} className="space-y-4 text-sm">
+            <form onSubmit={handleCreateProduct} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label className="block font-medium mb-1">Product Name *</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Product Name *</label>
                 <input
                   type="text"
                   required
                   value={newProduct.product_name}
                   onChange={(e) => setNewProduct({ ...newProduct, product_name: e.target.value })}
                   placeholder="e.g. GPS Tracker GT-900"
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label className="block font-medium mb-1">Category</label>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Category</label>
                   <select
                     value={newProduct.category_id}
                     onChange={(e) => setNewProduct({ ...newProduct, category_id: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                   >
                     <option value="">Select Category</option>
                     {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.category_name}
-                      </option>
+                      <option key={c.id} value={c.id}>{c.category_name}</option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-medium mb-1">Product Type</label>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Product Type</label>
                   <select
                     value={newProduct.product_type}
                     onChange={(e) => setNewProduct({ ...newProduct, product_type: e.target.value as any })}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                   >
                     <option value="ASSET">ASSET</option>
                     <option value="CONSUMABLE">CONSUMABLE</option>
@@ -1072,13 +1070,13 @@ export default function Inventory() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label className="block font-medium mb-1">Tracking Type</label>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Tracking</label>
                   <select
                     value={newProduct.tracking_type}
                     onChange={(e) => setNewProduct({ ...newProduct, tracking_type: e.target.value as any })}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                   >
                     <option value="SERIAL">SERIAL</option>
                     <option value="IMEI">IMEI</option>
@@ -1087,61 +1085,57 @@ export default function Inventory() {
                 </div>
 
                 <div>
-                  <label className="block font-medium mb-1">Stock Qty</label>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Stock Qty</label>
                   <input
                     type="number"
                     min={0}
                     value={newProduct.quantity}
                     onChange={(e) => setNewProduct({ ...newProduct, quantity: Number(e.target.value) })}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                   />
                 </div>
 
                 <div>
-                  <label className="block font-medium mb-1">Min Reorder</label>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Min Reorder</label>
                   <input
                     type="number"
                     min={0}
                     value={newProduct.min_stock_level}
                     onChange={(e) => setNewProduct({ ...newProduct, min_stock_level: Number(e.target.value) })}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label className="block font-medium mb-1">Unit Selling Price (PKR)</label>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Selling Price (PKR)</label>
                   <input
                     type="number"
                     min={0}
                     value={newProduct.unit_price}
                     onChange={(e) => setNewProduct({ ...newProduct, unit_price: Number(e.target.value) })}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                   />
                 </div>
 
                 <div>
-                  <label className="block font-medium mb-1">Cost Price (PKR)</label>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Cost Price (PKR)</label>
                   <input
                     type="number"
                     min={0}
                     value={newProduct.cost_price}
                     onChange={(e) => setNewProduct({ ...newProduct, cost_price: Number(e.target.value) })}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowAddProductModal(false)}
-                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl"
-                >
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px' }}>
+                <button type="button" onClick={() => setShowAddProductModal(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: '600', cursor: 'pointer' }}>
                   Cancel
                 </button>
-                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-xl">
+                <button type="submit" style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>
                   Create Product
                 </button>
               </div>
@@ -1152,35 +1146,35 @@ export default function Inventory() {
 
       {/* MODAL: ADD CATEGORY */}
       {showAddCategoryModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold">Add Item Category</h3>
-            <form onSubmit={handleCreateCategory} className="space-y-4 text-sm">
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '16px' }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', padding: '28px', maxWidth: '480px', width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.25)', border: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', marginBottom: '18px' }}>Add Item Category</h3>
+            <form onSubmit={handleCreateCategory} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label className="block font-medium mb-1">Category Name *</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Category Name *</label>
                 <input
                   type="text"
                   required
                   value={newCategory.category_name}
                   onChange={(e) => setNewCategory({ ...newCategory, category_name: e.target.value })}
                   placeholder="e.g. Trackers, Accessories"
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 />
               </div>
               <div>
-                <label className="block font-medium mb-1">Description</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Description</label>
                 <input
                   type="text"
                   value={newCategory.description}
                   onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowAddCategoryModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px' }}>
+                <button type="button" onClick={() => setShowAddCategoryModal(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: '600', cursor: 'pointer' }}>
                   Cancel
                 </button>
-                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-xl">
+                <button type="submit" style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#6366f1', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>
                   Save Category
                 </button>
               </div>
@@ -1191,110 +1185,60 @@ export default function Inventory() {
 
       {/* MODAL: ADD SERIAL */}
       {showAddSerialModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold">Log Inventory Serial / IMEI</h3>
-            <form onSubmit={handleCreateSerial} className="space-y-4 text-sm">
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '16px' }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', padding: '28px', maxWidth: '480px', width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.25)', border: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', marginBottom: '18px' }}>Log Inventory Serial / IMEI</h3>
+            <form onSubmit={handleCreateSerial} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label className="block font-medium mb-1">Select Product *</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Select Product *</label>
                 <select
                   required
                   value={newSerial.product_id}
                   onChange={(e) => setNewSerial({ ...newSerial, product_id: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 >
                   <option value="">Select Product</option>
                   {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.product_name}
-                    </option>
+                    <option key={p.id} value={p.id}>{p.product_name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block font-medium mb-1">Serial Number</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Serial Number</label>
                 <input
                   type="text"
                   value={newSerial.serial_number}
                   onChange={(e) => setNewSerial({ ...newSerial, serial_number: e.target.value })}
                   placeholder="SN-100203"
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 />
               </div>
               <div>
-                <label className="block font-medium mb-1">IMEI Number</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>IMEI Number</label>
                 <input
                   type="text"
                   value={newSerial.imei}
                   onChange={(e) => setNewSerial({ ...newSerial, imei: e.target.value })}
                   placeholder="86920194819201"
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 />
               </div>
               <div>
-                <label className="block font-medium mb-1">Warehouse Location</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Warehouse Location</label>
                 <input
                   type="text"
                   value={newSerial.location}
                   onChange={(e) => setNewSerial({ ...newSerial, location: e.target.value })}
                   placeholder="Shelf A-3"
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowAddSerialModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px' }}>
+                <button type="button" onClick={() => setShowAddSerialModal(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: '600', cursor: 'pointer' }}>
                   Cancel
                 </button>
-                <button type="submit" className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-xl">
+                <button type="submit" style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>
                   Save Item
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: ADD CUSTOMER */}
-      {showCustomerModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold">Register Customer</h3>
-            <form onSubmit={handleCreateCustomer} className="space-y-4 text-sm">
-              <div>
-                <label className="block font-medium mb-1">Customer / Company Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={newCustomer.customer_name}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, customer_name: e.target.value })}
-                  placeholder="e.g. Apex Logistics"
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
-                />
-              </div>
-              <div>
-                <label className="block font-medium mb-1">Contact Person</label>
-                <input
-                  type="text"
-                  value={newCustomer.contact_person}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, contact_person: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
-                />
-              </div>
-              <div>
-                <label className="block font-medium mb-1">Phone Number</label>
-                <input
-                  type="text"
-                  value={newCustomer.phone}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowCustomerModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">
-                  Cancel
-                </button>
-                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-xl">
-                  Save Customer
                 </button>
               </div>
             </form>
@@ -1304,58 +1248,54 @@ export default function Inventory() {
 
       {/* MODAL: TRACKER INSTALLATION */}
       {showInstallationModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold">Log Tracker Installation</h3>
-            <form onSubmit={handleCreateInstallation} className="space-y-4 text-sm">
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '16px' }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', padding: '28px', maxWidth: '480px', width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.25)', border: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', marginBottom: '18px' }}>Log Tracker Installation</h3>
+            <form onSubmit={handleCreateInstallation} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label className="block font-medium mb-1">Customer *</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Customer *</label>
                 <select
                   required
                   value={newInstallation.customer_id}
                   onChange={(e) => setNewInstallation({ ...newInstallation, customer_id: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 >
                   <option value="">Select Customer</option>
                   {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.customer_name}
-                    </option>
+                    <option key={c.id} value={c.id}>{c.customer_name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block font-medium mb-1">Tracker Device Serial</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Tracker Device Serial</label>
                 <select
                   value={newInstallation.tracker_item_id}
                   onChange={(e) => setNewInstallation({ ...newInstallation, tracker_item_id: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 >
                   <option value="">Select Available Serial</option>
                   {items
                     .filter((i) => i.current_status === 'AVAILABLE')
                     .map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.product_name} - {i.serial_number || i.imei}
-                      </option>
+                      <option key={i.id} value={i.id}>{i.product_name} - {i.serial_number || i.imei}</option>
                     ))}
                 </select>
               </div>
               <div>
-                <label className="block font-medium mb-1">Technician Name</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Technician Name</label>
                 <input
                   type="text"
                   value={newInstallation.technician_name}
                   onChange={(e) => setNewInstallation({ ...newInstallation, technician_name: e.target.value })}
                   placeholder="e.g. Tariq Mehmood"
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowInstallationModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px' }}>
+                <button type="button" onClick={() => setShowInstallationModal(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: '600', cursor: 'pointer' }}>
                   Cancel
                 </button>
-                <button type="submit" className="px-4 py-2 bg-violet-600 text-white font-semibold rounded-xl">
+                <button type="submit" style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#8b5cf6', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>
                   Log Installation
                 </button>
               </div>
@@ -1366,32 +1306,30 @@ export default function Inventory() {
 
       {/* MODAL: COMPLAINT */}
       {showComplaintModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold">Log Customer Complaint</h3>
-            <form onSubmit={handleCreateComplaint} className="space-y-4 text-sm">
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '16px' }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', padding: '28px', maxWidth: '480px', width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.25)', border: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', marginBottom: '18px' }}>Log Customer Complaint</h3>
+            <form onSubmit={handleCreateComplaint} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label className="block font-medium mb-1">Customer *</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Customer *</label>
                 <select
                   required
                   value={newComplaint.customer_id}
                   onChange={(e) => setNewComplaint({ ...newComplaint, customer_id: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 >
                   <option value="">Select Customer</option>
                   {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.customer_name}
-                    </option>
+                    <option key={c.id} value={c.id}>{c.customer_name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block font-medium mb-1">Complaint Type</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Complaint Type</label>
                 <select
                   value={newComplaint.complaint_type}
                   onChange={(e) => setNewComplaint({ ...newComplaint, complaint_type: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 >
                   <option value="DEVICE_OFFLINE">DEVICE_OFFLINE</option>
                   <option value="LOCATION_INACCURATE">LOCATION_INACCURATE</option>
@@ -1400,19 +1338,19 @@ export default function Inventory() {
                 </select>
               </div>
               <div>
-                <label className="block font-medium mb-1">Description</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Description</label>
                 <textarea
                   value={newComplaint.description}
                   onChange={(e) => setNewComplaint({ ...newComplaint, description: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                   rows={3}
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowComplaintModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px' }}>
+                <button type="button" onClick={() => setShowComplaintModal(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: '600', cursor: 'pointer' }}>
                   Cancel
                 </button>
-                <button type="submit" className="px-4 py-2 bg-rose-600 text-white font-semibold rounded-xl">
+                <button type="submit" style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#f43f5e', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>
                   Submit Complaint
                 </button>
               </div>
@@ -1423,17 +1361,17 @@ export default function Inventory() {
 
       {/* MODAL: DEVICE REPLACEMENT / SWAP */}
       {showReplacementModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold">Record Device Swap / Replacement</h3>
-            <form onSubmit={handleCreateReplacement} className="space-y-4 text-sm">
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '16px' }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', padding: '28px', maxWidth: '480px', width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.25)', border: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', marginBottom: '18px' }}>Record Device Swap / Replacement</h3>
+            <form onSubmit={handleCreateReplacement} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label className="block font-medium mb-1">Current/Faulty Device (Old Serial) *</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Current/Faulty Device (Old Serial) *</label>
                 <select
                   required
                   value={newReplacement.old_inventory_item_id}
                   onChange={(e) => setNewReplacement({ ...newReplacement, old_inventory_item_id: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 >
                   <option value="">Select Installed Device</option>
                   {items.map((i) => (
@@ -1445,12 +1383,12 @@ export default function Inventory() {
               </div>
 
               <div>
-                <label className="block font-medium mb-1">Replacement Device (New Available Serial) *</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Replacement Device (New Available Serial) *</label>
                 <select
                   required
                   value={newReplacement.new_inventory_item_id}
                   onChange={(e) => setNewReplacement({ ...newReplacement, new_inventory_item_id: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 >
                   <option value="">Select New Available Device</option>
                   {items
@@ -1464,89 +1402,22 @@ export default function Inventory() {
               </div>
 
               <div>
-                <label className="block font-medium mb-1">Reason for Swap</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Reason for Swap</label>
                 <input
                   type="text"
                   value={newReplacement.reason}
                   onChange={(e) => setNewReplacement({ ...newReplacement, reason: e.target.value })}
-                  placeholder="e.g. Defective GPS module, antenna issue"
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  placeholder="e.g. Defective GPS module"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowReplacementModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px' }}>
+                <button type="button" onClick={() => setShowReplacementModal(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: '600', cursor: 'pointer' }}>
                   Cancel
                 </button>
-                <button type="submit" className="px-4 py-2 bg-amber-600 text-white font-semibold rounded-xl">
+                <button type="submit" style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#f59e0b', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>
                   Complete Device Swap
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: CUSTOMER INVOICE DRAFT TEMPLATE CONFIG */}
-      {showCustomerDraftModal && selectedCustomerForDraft && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 max-w-lg w-full shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div>
-                <h3 className="text-lg font-bold">Special Invoice Draft Template</h3>
-                <p className="text-xs text-slate-500">Configuring default invoice rules for {selectedCustomerForDraft.customer_name}</p>
-              </div>
-              <button onClick={() => setShowCustomerDraftModal(false)} className="text-slate-400 hover:text-slate-600">
-                <XCircle className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveCustomerDraft} className="space-y-4 text-sm">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium mb-1">Payment Terms</label>
-                  <select
-                    value={customerDraftData.payment_terms}
-                    onChange={(e) => setCustomerDraftData({ ...customerDraftData, payment_terms: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
-                  >
-                    <option value="NET15">NET 15 Days</option>
-                    <option value="NET30">NET 30 Days</option>
-                    <option value="DUE_ON_RECEIPT">Due On Receipt</option>
-                    <option value="ADVANCE">Advance Payment</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-medium mb-1">Default Discount %</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.5}
-                    value={customerDraftData.default_discount_pct}
-                    onChange={(e) => setCustomerDraftData({ ...customerDraftData, default_discount_pct: Number(e.target.value) })}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-medium mb-1">Custom Notes / Bank Disclaimers</label>
-                <textarea
-                  value={customerDraftData.custom_notes}
-                  onChange={(e) => setCustomerDraftData({ ...customerDraftData, custom_notes: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl"
-                  rows={3}
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <button type="button" onClick={() => setShowCustomerDraftModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">
-                  Cancel
-                </button>
-                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-xl">
-                  Save Special Draft Rule
                 </button>
               </div>
             </form>
@@ -1556,4 +1427,3 @@ export default function Inventory() {
     </div>
   );
 }
-
