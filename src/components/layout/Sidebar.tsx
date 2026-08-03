@@ -29,6 +29,7 @@ import {
   Zap,
   Package,
   GitBranch,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useData } from "../../context/DataContext";
 import { useToastContext } from "../../context/ToastContext";
@@ -42,6 +43,11 @@ type SidebarLink = {
   badge?: string;
   comingSoon?: boolean;
   disabled?: boolean;
+};
+
+type SidebarSection = {
+  label: string;
+  links: SidebarLink[];
 };
 
 export default function Sidebar() {
@@ -69,10 +75,12 @@ export default function Sidebar() {
     // Active/Enabled first
     { to: "/launchpad", icon: Zap, label: "Launchpad" },
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/crm", icon: Users, label: "CRM & Sales" },
+    { to: "/crm", icon: Users, label: "CSR / CRM" },
+    { to: "/inventory-dashboard", icon: LayoutDashboard, label: "Inventory Dashboard" },
     { to: "/inventory", icon: Package, label: "Inventory Logistics" },
+    { to: "/invoice-builder", icon: FileSpreadsheet, label: "Invoice Builder" },
     { to: "/client-invoicing", icon: DollarSign, label: "Client Invoicing & Summaries" },
-    { to: "/accounts", icon: ShieldCheck, label: "Finance & Accounts" },
+    { to: "/accounts", icon: ShieldCheck, label: "User Accounts" },
     { to: "/matrix-operations", icon: GitBranch, label: "Matrix Operations (V2.1)" },
     { to: "/employees", icon: Users, label: "Employees" },
     { to: "/attendance", icon: CalendarCheck, label: "Attendance" },
@@ -113,8 +121,20 @@ export default function Sidebar() {
     },
   ];
 
-  // Head HR - full active HR access without SuperAdmin-only disabled roadmap links
-  const headHrLinks: SidebarLink[] = superAdminLinks.filter((link) => !link.disabled);
+  const headHrLinks: SidebarLink[] = [
+    { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/employees", icon: Users, label: "Employees" },
+    { to: "/attendance", icon: CalendarCheck, label: "Attendance" },
+    { to: "/leave", icon: CalendarDays, label: "Leave" },
+    { to: "/payroll", icon: DollarSign, label: "Payroll" },
+    { to: "/leave-wallet", icon: Wallet, label: "Leave Wallet" },
+    { to: "/penalty", icon: ClipboardList, label: "Penalty" },
+    { to: "/penalty-workflow", icon: CheckCircle2, label: "Penalty Submissions" },
+    { to: "/announcements", icon: Zap, label: "Announcements" },
+    { to: "/calendar", icon: CalendarRange, label: "Calendar Events" },
+    { to: "/directory", icon: MapPin, label: "Directory" },
+    { to: "/accounts", icon: ShieldCheck, label: "HR Accounts" },
+  ];
 
   // Branch HR - Branch level access (no branch-dashboard link here)
   const branchHrLinks: SidebarLink[] = [
@@ -169,28 +189,48 @@ export default function Sidebar() {
   ];
 
   const inventoryOfficerLinks: SidebarLink[] = [
-    { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/inventory", icon: Package, label: "Inventory & Invoicing" },
-    { to: "/matrix-operations", icon: GitBranch, label: "Matrix Operations (V2.1)" },
+    { to: "/inventory-dashboard", icon: LayoutDashboard, label: "Inventory Dashboard" },
+    { to: "/inventory", icon: Package, label: "Inventory Control" },
+    { to: "/matrix-operations", icon: GitBranch, label: "Operations Matrix" },
     { to: "/directory", icon: MapPin, label: "Directory" },
   ];
 
   const financeOfficerLinks: SidebarLink[] = [
-    { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/accounts", icon: ShieldCheck, label: "Finance & Accounts" },
-    { to: "/inventory", icon: Package, label: "Invoices & Billing" },
+    { to: "/finance-dashboard", icon: LayoutDashboard, label: "Finance Dashboard" },
+    { to: "/invoice-builder", icon: FileSpreadsheet, label: "Invoice Builder" },
+    { to: "/client-invoicing", icon: DollarSign, label: "Client Billing" },
     { to: "/matrix-operations", icon: GitBranch, label: "Matrix Settlement" },
+    { to: "/directory", icon: MapPin, label: "Directory" },
+  ];
+
+  const csrOfficerLinks: SidebarLink[] = [
+    { to: "/crm", icon: Users, label: "CSR / CRM" },
+    { to: "/matrix-operations", icon: GitBranch, label: "Sales Matrix" },
+    { to: "/directory", icon: MapPin, label: "Directory" },
+  ];
+
+  const invFinAdminLinks: SidebarLink[] = [
+    { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/inventory-dashboard", icon: LayoutDashboard, label: "Inventory Dashboard" },
+    { to: "/inventory", icon: Package, label: "Inventory Control" },
+    { to: "/client-invoicing", icon: DollarSign, label: "Client Billing" },
+    { to: "/invoice-builder", icon: FileSpreadsheet, label: "Invoice Builder" },
+    { to: "/matrix-operations", icon: GitBranch, label: "Matrix Operations" },
     { to: "/directory", icon: MapPin, label: "Directory" },
   ];
 
   // Select menu based on role
   const mainLinks =
-    activeRole === "super_admin" || activeRole === "inv_fin_admin"
+    activeRole === "super_admin"
       ? superAdminLinks
+      : activeRole === "inv_fin_admin"
+      ? invFinAdminLinks
       : activeRole === "inventory_officer"
         ? inventoryOfficerLinks
       : activeRole === "finance_officer"
         ? financeOfficerLinks
+      : activeRole === "csr_officer"
+        ? csrOfficerLinks
       : activeRole === "ceo"
         ? ceoLinks
       : activeRole === "head_hr"
@@ -206,6 +246,118 @@ export default function Sidebar() {
                 : activeRole === "department_head"
                 ? departmentHeadLinks
                 : [];
+
+  const sidebarSections: SidebarSection[] = (() => {
+    if (activeRole === "super_admin") {
+      return [
+        {
+          label: "Core Modules",
+          links: [
+            { to: "/launchpad", icon: Zap, label: "Launchpad" },
+            { to: "/dashboard", icon: LayoutDashboard, label: "ERP Dashboard" },
+          ],
+        },
+        {
+          label: "Inventory Service",
+          links: [
+            { to: "/crm", icon: Users, label: "CSR / CRM" },
+            { to: "/inventory-dashboard", icon: LayoutDashboard, label: "Inventory Dashboard" },
+            { to: "/inventory", icon: Package, label: "Inventory Logistics" },
+            { to: "/invoice-builder", icon: FileSpreadsheet, label: "Invoice Builder" },
+            { to: "/client-invoicing", icon: DollarSign, label: "Client Invoicing & Summaries" },
+            { to: "/accounts", icon: ShieldCheck, label: "User Accounts" },
+            { to: "/matrix-operations", icon: GitBranch, label: "Matrix Operations (V2.1)" },
+          ],
+        },
+        {
+          label: "EMS Workspace",
+          links: [
+            { to: "/employees", icon: Users, label: "Employees" },
+            { to: "/attendance", icon: CalendarCheck, label: "Attendance" },
+            { to: "/leave", icon: CalendarDays, label: "Leave" },
+            { to: "/payroll", icon: DollarSign, label: "Payroll", disabled: true },
+            { to: "/leave-wallet", icon: Wallet, label: "Leave Wallet" },
+            { to: "/penalty", icon: ClipboardList, label: "Penalty" },
+            { to: "/penalty-workflow", icon: CheckCircle2, label: "Penalty Submissions" },
+            { to: "/announcements", icon: Zap, label: "Announcements" },
+            { to: "/calendar", icon: CalendarRange, label: "Calendar Events" },
+            { to: "/directory", icon: MapPin, label: "Directory" },
+          ],
+        },
+        {
+          label: "HR Review",
+          links: [
+            { to: "/hr/branch-dashboard", icon: Building2, label: "Branch HR Dashboard", disabled: true },
+            { to: "/overview", icon: Monitor, label: "Overview", disabled: true },
+            { to: "/saved-reports", icon: ScrollText, label: "Saved Reports", disabled: true },
+            { to: "/attendance-head-review", icon: ShieldCheck, label: "Head HR Review", disabled: true },
+            { to: "/attendance-report", icon: ClipboardList, label: "Final Attendance Report", disabled: true },
+          ],
+        },
+      ];
+    }
+
+    if (activeRole === "inventory_officer") {
+      return [
+        {
+          label: "Inventory Service",
+          links: [
+            { to: "/inventory-dashboard", icon: LayoutDashboard, label: "Inventory Dashboard" },
+            { to: "/inventory", icon: Package, label: "Inventory Control" },
+            { to: "/matrix-operations", icon: GitBranch, label: "Operations Matrix" },
+          ],
+        },
+        { label: "Reference", links: [{ to: "/directory", icon: MapPin, label: "Directory" }] },
+      ];
+    }
+
+    if (activeRole === "finance_officer") {
+      return [
+        {
+          label: "Finance Service",
+          links: [
+            { to: "/finance-dashboard", icon: LayoutDashboard, label: "Finance Dashboard" },
+            { to: "/invoice-builder", icon: FileSpreadsheet, label: "Invoice Builder" },
+            { to: "/client-invoicing", icon: DollarSign, label: "Client Billing" },
+            { to: "/matrix-operations", icon: GitBranch, label: "Matrix Settlement" },
+          ],
+        },
+        { label: "Reference", links: [{ to: "/directory", icon: MapPin, label: "Directory" }] },
+      ];
+    }
+
+    if (activeRole === "inv_fin_admin") {
+      return [
+        {
+          label: "Inventory & Finance Service",
+          links: [
+            { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+            { to: "/inventory-dashboard", icon: LayoutDashboard, label: "Inventory Dashboard" },
+            { to: "/inventory", icon: Package, label: "Inventory Control" },
+            { to: "/client-invoicing", icon: DollarSign, label: "Client Billing" },
+            { to: "/invoice-builder", icon: FileSpreadsheet, label: "Invoice Builder" },
+            { to: "/matrix-operations", icon: GitBranch, label: "Matrix Operations" },
+          ],
+        },
+        { label: "Reference", links: [{ to: "/directory", icon: MapPin, label: "Directory" }] },
+      ];
+    }
+
+    if (activeRole === "csr_officer") {
+      return [
+        {
+          label: "CSR / CRM Service",
+          links: [
+            { to: "/crm", icon: Users, label: "CSR / CRM" },
+            { to: "/matrix-operations", icon: GitBranch, label: "Sales Matrix" },
+          ],
+        },
+        { label: "Reference", links: [{ to: "/directory", icon: MapPin, label: "Directory" }] },
+      ];
+    }
+
+    return [{ label: "Core Modules", links: mainLinks }];
+  })();
 
   const { showToast } = useToastContext();
 
@@ -234,6 +386,15 @@ export default function Sidebar() {
     (row: any) => row.status === "Pending",
   ).length;
 
+  const serviceOnlyRoles = new Set([
+    "csr_officer",
+    "inventory_officer",
+    "finance_officer",
+    "inv_fin_admin",
+  ]);
+  const showMyWorkspace = activeRole !== "super_admin";
+  const isMyWorkspaceDisabled = serviceOnlyRoles.has(activeRole || "");
+
   return (
     <div className="sidebar">
       <div className="sb-logo">
@@ -249,67 +410,102 @@ export default function Sidebar() {
         {/* Prototype wala pura section yahan se remove kar diya gaya hai */}
       </div>
 
-      <div className="sb-sec">
-        <div className="sb-lbl">Core Modules</div>
-        {mainLinks.map((link) =>
-          link.disabled ? (
-            <div
-              key={link.to}
-              className="nav-a"
-              style={{
-                cursor: "not-allowed",
-                opacity: 0.5,
-                pointerEvents: "none",
-                userSelect: "none",
-              }}
-            >
-              <link.icon size={14} className="nav-ico" />
-              {link.label}
-              {link.badge && <span className="nav-badge">{link.badge}</span>}
-            </div>
-          ) : link.comingSoon ? (
-            <div
-              key={link.to}
-              className={`nav-a`}
-              onClick={() => showToast("Coming soon", "error")}
-              style={{ cursor: "pointer" }}
-            >
-              <link.icon size={14} className="nav-ico" />
-              {link.label}
-              {link.badge && <span className="nav-badge">{link.badge}</span>}
-            </div>
-          ) : (
-            <NavLink
-              key={link.to}
-              to={link.to}
-              end={link.to === "/announcements"}
-              className={({ isActive }) => `nav-a ${isActive ? "active" : ""}`}
-            >
-              <link.icon size={14} className="nav-ico" />
-              {link.label}
-              {link.badge && <span className="nav-badge">{link.badge}</span>}
-            </NavLink>
-          ),
-        )}
-      </div>
+      {sidebarSections.map((section, sectionIndex) => (
+        <React.Fragment key={section.label}>
+          {sectionIndex > 0 && <div className="sb-div" />}
+          <div className="sb-sec">
+            <div className="sb-lbl">{section.label}</div>
+            {section.links.map((link) =>
+              link.disabled ? (
+                <div
+                  key={link.to}
+                  className="nav-a"
+                  style={{
+                    cursor: "not-allowed",
+                    opacity: 0.5,
+                    pointerEvents: "none",
+                    userSelect: "none",
+                  }}
+                >
+                  <link.icon size={14} className="nav-ico" />
+                  {link.label}
+                  {link.badge && <span className="nav-badge">{link.badge}</span>}
+                </div>
+              ) : link.comingSoon ? (
+                <div
+                  key={link.to}
+                  className={`nav-a`}
+                  onClick={() => showToast("Coming soon", "error")}
+                  style={{ cursor: "pointer" }}
+                >
+                  <link.icon size={14} className="nav-ico" />
+                  {link.label}
+                  {link.badge && <span className="nav-badge">{link.badge}</span>}
+                </div>
+              ) : (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  end={link.to === "/announcements"}
+                  className={({ isActive }) => `nav-a ${isActive ? "active" : ""}`}
+                >
+                  <link.icon size={14} className="nav-ico" />
+                  {link.label}
+                  {link.badge && <span className="nav-badge">{link.badge}</span>}
+                </NavLink>
+              ),
+            )}
+          </div>
+        </React.Fragment>
+      ))}
 
-      {activeRole !== "super_admin" && (
+      {showMyWorkspace && (
         <>
           <div className="sb-div" />
           <div className="sb-sec">
             <div className="sb-lbl">My Workspace</div>
-            {selfServiceLinks.map((link) => (
-              <NavLink
-                key={link.to}
-                to={link.to}
-                className={({ isActive }) =>
-                  `nav-a ${isActive ? "active" : ""}`
-                }
+            {isMyWorkspaceDisabled && (
+              <div
+                style={{
+                  fontSize: 11,
+                  lineHeight: 1.45,
+                  color: "var(--sb-lbl)",
+                  opacity: 0.8,
+                  padding: "0 16px 8px",
+                }}
               >
-                <link.icon size={14} className="nav-ico" />
-                {link.label}
-              </NavLink>
-            ))}
+                Personal EMS tools are disabled for this service login.
+              </div>
+            )}
+            {selfServiceLinks.map((link) =>
+              isMyWorkspaceDisabled ? (
+                <div
+                  key={link.to}
+                  className="nav-a"
+                  title="Use the service workspace links above for this login"
+                  style={{
+                    cursor: "not-allowed",
+                    opacity: 0.45,
+                    pointerEvents: "none",
+                    userSelect: "none",
+                  }}
+                >
+                  <link.icon size={14} className="nav-ico" />
+                  {link.label}
+                </div>
+              ) : (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  className={({ isActive }) =>
+                    `nav-a ${isActive ? "active" : ""}`
+                  }
+                >
+                  <link.icon size={14} className="nav-ico" />
+                  {link.label}
+                </NavLink>
+              ),
+            )}
           </div>
         </>
       )}

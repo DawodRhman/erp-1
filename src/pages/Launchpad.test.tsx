@@ -44,4 +44,14 @@ describe("Launchpad", () => {
     expect(screen.getByText("Employees")).toBeTruthy();
     expect(screen.getByText("Announcements")).toBeTruthy();
   });
+
+  it("shows every operational workspace for super admin", () => {
+    renderLaunchpad("super_admin");
+
+    expect(screen.getByText("CSR / CRM")).toBeTruthy();
+    expect(screen.getByText("Inventory Logistics")).toBeTruthy();
+    expect(screen.getByText("Invoice Builder")).toBeTruthy();
+    expect(screen.getByText("Finance & Client Billing")).toBeTruthy();
+    expect(screen.getByText("Matrix Operations")).toBeTruthy();
+  });
 });

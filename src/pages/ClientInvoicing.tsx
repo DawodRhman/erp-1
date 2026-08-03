@@ -26,10 +26,12 @@ import {
   Calculator,
   FileSpreadsheet,
 } from 'lucide-react';
-import { getApiBaseUrl } from '../config/apiConfig';
 import { useToastContext } from '../context/ToastContext';
+import { invoicingApi, ClientInvoiceTemplate } from '../services/invoicingService';
 
 interface InvoiceItem {
+  product_name?: string;
+  tracking_type?: string;
   description: string;
   quantity: number;
   unit_price: number;
@@ -102,93 +104,42 @@ export default function ClientInvoicing() {
   const [activeTab, setActiveTab] = useState<'invoices' | 'summaries' | 'excel_grid' | 'template_designer' | 'workflow'>('invoices');
 
   // Excel Spreadsheet Grid State
-  const [excelSheetTitle, setExcelSheetTitle] = useState('Bank AL Habib Ltd - July 2026 Master Branch Billing Grid');
+  const [excelSheetTitle, setExcelSheetTitle] = useState('Habib Bank Limited - Billing Grid');
   const [excelHeaders, setExcelHeaders] = useState<string[]>([
     'Sr #',
     'Branch Name',
     'Branch Code',
     'Invoice #',
     'Subtotal (PKR)',
-    'SST 10% (PKR)',
+    'GST 18% (PKR)',
     'Total With Tax (PKR)',
   ]);
 
   const [excelRows, setExcelRows] = useState<string[][]>([
-    ['1', 'Main Commercial Branch', '0042', 'INV-2026-BALH-001', '450000', '45000', '495000'],
-    ['2', 'Gulshan Branch', '0089', 'INV-2026-BALH-004', '350000', '35000', '385000'],
-    ['3', 'DHA Phase 5 Branch', '0112', 'INV-2026-BALH-005', '600000', '60000', '660000'],
-    ['4', 'North Nazimabad Branch', '0031', 'INV-2026-BALH-006', '400000', '40000', '440000'],
+    ['1', 'Main Commercial Branch', '0042', 'INV-2026-HBL-001', '450000', '81000', '531000'],
+    ['2', 'Gulshan Branch', '0089', 'INV-2026-HBL-004', '350000', '63000', '413000'],
+    ['3', 'DHA Phase 5 Branch', '0112', 'INV-2026-HBL-005', '600000', '108000', '708000'],
+    ['4', 'North Nazimabad Branch', '0031', 'INV-2026-HBL-006', '400000', '72000', '472000'],
   ]);
 
   // System Saved Templates
   const [templates, setTemplates] = useState<TemplateFormat[]>([
     {
       id: 'tmpl-1',
-      customer_name: 'Bank AL Habib Ltd',
-      template_name: 'Bank AL Habib SST 10% Format',
+      customer_name: 'Habib Bank Limited',
+      template_name: 'HBL Sales Tax Invoice',
       header_title: 'Invoice for Installation and Dismantling Charges',
-      tax_type: 'SST',
-      tax_rate: 10,
-      number_of_copies: 4,
-      currency: 'PKR',
-      bank_account: 'Account #: 0420 0010120895360014 (Bank AL Habib Ltd)',
-      prepared_by: 'Assistant Finance Manager',
-      footer_disclaimer: 'Payment due within 30 days of receiving official invoice statement.',
-      show_branch_code: true,
-      show_ntn_gst: true,
-      ntn_number: 'NTN: 0819284-9',
-      gst_number: 'SST Reg #: 17-00-9988-001',
-    },
-    {
-      id: 'tmpl-2',
-      customer_name: 'Sindh Bank Ltd',
-      template_name: 'Sindh Bank GST 18% Format',
-      header_title: 'Invoice for Supply & Installation of CCTV Security Systems',
       tax_type: 'GST',
       tax_rate: 18,
       number_of_copies: 4,
       currency: 'PKR',
-      bank_account: 'Account #: 1002 9988221100 (Sindh Bank Main Branch)',
-      prepared_by: 'Accounts Officer',
-      footer_disclaimer: 'GST 18% applied as per Sindh Revenue Authority regulations.',
+      bank_account: 'Account #: 24438000016603',
+      prepared_by: 'Accounts department',
+      footer_disclaimer: 'Please make the payment in favor of Electronic Safety & Security Private Limited',
       show_branch_code: true,
       show_ntn_gst: true,
-      ntn_number: 'NTN: 3948192-1',
-      gst_number: 'GST Reg #: 11-00-1122-334',
-    },
-    {
-      id: 'tmpl-3',
-      customer_name: 'QNB Qatar',
-      template_name: 'QNB Qatar Multi-Currency VAT 5% Format',
-      header_title: 'Commercial Tax Invoice for Surveillance & Access Systems',
-      tax_type: 'VAT',
-      tax_rate: 5,
-      number_of_copies: 3,
-      currency: 'QAR',
-      bank_account: 'IBAN: QA98 QNBA 0000 0000 1234 5678 (QNB Doha)',
-      prepared_by: 'Finance Executive',
-      footer_disclaimer: 'Converted to Qatari Riyal at live official bank exchange rate.',
-      show_branch_code: false,
-      show_ntn_gst: false,
-      ntn_number: '',
-      gst_number: '',
-    },
-    {
-      id: 'tmpl-4',
-      customer_name: 'Office of Deputy Commissioner (DC)',
-      template_name: 'DC Office SRB Exempt Format',
-      header_title: 'Invoice For CCTV Cameras Installed At Designated Government Sites',
-      tax_type: 'EXEMPT',
-      tax_rate: 0,
-      number_of_copies: 4,
-      currency: 'PKR',
-      bank_account: 'Account #: 3628486-6 (State Bank Treasury)',
-      prepared_by: 'Senior Accounts Assistant',
-      footer_disclaimer: 'Tax Exempt under Government Public Safety Order SRB 2026.',
-      show_branch_code: true,
-      show_ntn_gst: true,
-      ntn_number: 'NTN: 0000111-0',
-      gst_number: 'Exempt License #: SRB-EX-992',
+      ntn_number: 'NTN: 0819284-9',
+      gst_number: 'SST Reg #: 17-00-9988-001',
     },
   ]);
 
@@ -199,19 +150,19 @@ export default function ClientInvoicing() {
   const [invoices, setInvoices] = useState<CustomerInvoice[]>([
     {
       id: 'inv-001',
-      invoice_number: 'INV-2026-BALH-001',
-      customer_name: 'Bank AL Habib Ltd',
+      invoice_number: 'INV-2026-HBL-001',
+      customer_name: 'Habib Bank Limited',
       branch_name: 'Main Commercial Branch',
       branch_code: '0042',
       currency: 'PKR',
       exchange_rate: 1.0,
-      template_name: 'Bank AL Habib SST 10% Format',
-      tax_type: 'SST',
-      tax_rate: 10,
+      template_name: 'HBL Sales Tax Invoice',
+      tax_type: 'GST',
+      tax_rate: 18,
       subtotal: 450000,
-      tax_amount: 45000,
-      total_amount: 495000,
-      amount_in_words: 'Four Hundred Ninety Five Thousand Pakistani Rupees Only',
+      tax_amount: 81000,
+      total_amount: 531000,
+      amount_in_words: 'Five Hundred Thirty One Thousand Pakistani Rupees Only',
       number_of_copies: 4,
       status: 'APPROVED',
       created_at: new Date().toISOString(),
@@ -221,83 +172,40 @@ export default function ClientInvoicing() {
           quantity: 1,
           unit_price: 300000,
           total_without_tax: 300000,
-          tax_amount: 30000,
-          total_with_tax: 330000,
+          tax_amount: 54000,
+          total_with_tax: 354000,
         },
         {
           description: 'Ethernet CAT6 Cable Roll (200ft installed) & Connectors',
           quantity: 2,
           unit_price: 75000,
           total_without_tax: 150000,
-          tax_amount: 15000,
-          total_with_tax: 165000,
-        },
-      ],
-    },
-    {
-      id: 'inv-002',
-      invoice_number: 'INV-2026-SNDB-002',
-      customer_name: 'Sindh Bank Ltd',
-      branch_name: 'Clifton Branch',
-      branch_code: '1002',
-      currency: 'PKR',
-      exchange_rate: 1.0,
-      template_name: 'Sindh Bank GST 18% Format',
-      tax_type: 'GST',
-      tax_rate: 18,
-      subtotal: 680000,
-      tax_amount: 122400,
-      total_amount: 802400,
-      amount_in_words: 'Eight Hundred Two Thousand Four Hundred Pakistani Rupees Only',
-      number_of_copies: 4,
-      status: 'PENDING_REVIEW',
-      created_at: new Date(Date.now() - 86400000).toISOString(),
-      items: [
-        {
-          description: 'Biometric Access Control & Fire Alarm Panel 8-Zone',
-          quantity: 1,
-          unit_price: 680000,
-          total_without_tax: 680000,
-          tax_amount: 122400,
-          total_with_tax: 802400,
+          tax_amount: 27000,
+          total_with_tax: 177000,
         },
       ],
     },
   ]);
 
   const [selectedInvoice, setSelectedInvoice] = useState<CustomerInvoice | null>(invoices[0]);
+  const [invoiceEditMode, setInvoiceEditMode] = useState(false);
 
   const [summaries, setSummaries] = useState<ClientSummary[]>([
     {
       id: 'sum-01',
-      client_name: 'Bank AL Habib Ltd',
+      client_name: 'Habib Bank Limited',
       summary_period: 'July 2026 Monthly Master Billing Statement',
       total_branches: 4,
       total_jobs: 6,
       subtotal_pkr: 1800000,
-      tax_amount_pkr: 180000,
-      total_amount_pkr: 1980000,
+      tax_amount_pkr: 324000,
+      total_amount_pkr: 2124000,
       status: 'VERIFIED',
       branches_breakdown: [
-        { sr_no: 1, branch_name: 'Main Commercial Branch', branch_code: '0042', inv_number: 'INV-2026-BALH-001', amount_no_tax: 450000, tax_amount: 45000, total_with_tax: 495000 },
-        { sr_no: 2, branch_name: 'Gulshan Branch', branch_code: '0089', inv_number: 'INV-2026-BALH-004', amount_no_tax: 350000, tax_amount: 35000, total_with_tax: 385000 },
-        { sr_no: 3, branch_name: 'DHA Phase 5 Branch', branch_code: '0112', inv_number: 'INV-2026-BALH-005', amount_no_tax: 600000, tax_amount: 60000, total_with_tax: 660000 },
-        { sr_no: 4, branch_name: 'North Nazimabad Branch', branch_code: '0031', inv_number: 'INV-2026-BALH-006', amount_no_tax: 400000, tax_amount: 40000, total_with_tax: 440000 },
-      ],
-    },
-    {
-      id: 'sum-02',
-      client_name: 'Sindh Bank Ltd',
-      summary_period: 'Q3 2026 Regional Security Installation Summary',
-      total_branches: 2,
-      total_jobs: 2,
-      subtotal_pkr: 1400000,
-      tax_amount_pkr: 252000,
-      total_amount_pkr: 1652000,
-      status: 'DRAFT',
-      branches_breakdown: [
-        { sr_no: 1, branch_name: 'Clifton Branch', branch_code: '1002', inv_number: 'INV-2026-SNDB-002', amount_no_tax: 680000, tax_amount: 122400, total_with_tax: 802400 },
-        { sr_no: 2, branch_name: 'Hyderabad Main', branch_code: '1045', inv_number: 'INV-2026-SNDB-007', amount_no_tax: 720000, tax_amount: 129600, total_with_tax: 849600 },
+        { sr_no: 1, branch_name: 'Main Commercial Branch', branch_code: '0042', inv_number: 'INV-2026-HBL-001', amount_no_tax: 450000, tax_amount: 81000, total_with_tax: 531000 },
+        { sr_no: 2, branch_name: 'Gulshan Branch', branch_code: '0089', inv_number: 'INV-2026-HBL-004', amount_no_tax: 350000, tax_amount: 63000, total_with_tax: 413000 },
+        { sr_no: 3, branch_name: 'DHA Phase 5 Branch', branch_code: '0112', inv_number: 'INV-2026-HBL-005', amount_no_tax: 600000, tax_amount: 108000, total_with_tax: 708000 },
+        { sr_no: 4, branch_name: 'North Nazimabad Branch', branch_code: '0031', inv_number: 'INV-2026-HBL-006', amount_no_tax: 400000, tax_amount: 72000, total_with_tax: 472000 },
       ],
     },
   ]);
@@ -316,46 +224,71 @@ export default function ClientInvoicing() {
   const [showGenModal, setShowGenModal] = useState(false);
   const [showImportTicketModal, setShowImportTicketModal] = useState(false);
   const [showNewSummaryModal, setShowNewSummaryModal] = useState(false);
-  const [selectedTicketId, setSelectedTicketId] = useState('TKT-2026-BALH-088');
+  const [selectedTicketId, setSelectedTicketId] = useState('TKT-2026-HBL-088');
 
   const [availableTickets, setAvailableTickets] = useState([
     {
-      ticket_number: 'TKT-2026-BALH-088',
-      customer_name: 'Bank AL Habib Ltd',
+      ticket_number: 'TKT-2026-HBL-088',
+      customer_name: 'Habib Bank Limited',
       branch_name: 'DHA Phase 5 Branch',
       branch_code: '0112',
       technician_name: 'Tariq Mehmood (Senior Installer)',
       items_summary: '1x 32-CH NVR, 4x 4MP IP Cameras, 300ft CAT6 Cable used',
       subtotal: 600000,
-      tax_amount: 60000,
-      total_amount: 660000,
-      amount_in_words: 'Six Hundred Sixty Thousand Pakistani Rupees Only',
-      template_name: 'Bank AL Habib SST 10% Format',
-      tax_type: 'SST',
-      tax_rate: 10,
-    },
-    {
-      ticket_number: 'TKT-2026-SNDB-045',
-      customer_name: 'Sindh Bank Ltd',
-      branch_name: 'Hyderabad Main Branch',
-      branch_code: '1045',
-      technician_name: 'Kamran Shah (Field Engineer)',
-      items_summary: '1x Biometric Gate Barrier, 2x Motion Detectors',
-      subtotal: 720000,
-      tax_amount: 129600,
-      total_amount: 849600,
-      amount_in_words: 'Eight Hundred Forty Nine Thousand Six Hundred Pakistani Rupees Only',
-      template_name: 'Sindh Bank GST 18% Format',
+      tax_amount: 108000,
+      total_amount: 708000,
+      amount_in_words: 'Seven Hundred Eight Thousand Pakistani Rupees Only',
+      template_name: 'HBL Sales Tax Invoice',
       tax_type: 'GST',
       tax_rate: 18,
     },
   ]);
 
-  const [newSummaryClient, setNewSummaryClient] = useState('Bank AL Habib Ltd');
+  const [newSummaryClient, setNewSummaryClient] = useState('Habib Bank Limited');
   const [newSummaryPeriod, setNewSummaryPeriod] = useState('August 2026 Monthly Statement');
 
   const { showToast } = useToastContext();
-  const apiBase = getApiBaseUrl();
+
+  const mapTemplateFromApi = (template: ClientInvoiceTemplate): TemplateFormat => ({
+    id: template.id,
+    customer_name: template.customer_name || 'Habib Bank Limited',
+    template_name: template.template_name || 'HBL Sales Tax Invoice',
+    header_title: template.custom_header || 'Sales Tax Invoice',
+    tax_type: template.tax_type || 'GST',
+    tax_rate: Number(template.default_tax_rate || 18),
+    number_of_copies: Number(template.number_of_copies || 1),
+    currency: template.template_config?.currency || 'PKR',
+    bank_account: template.custom_footer || 'Account #: 24438000016603',
+    prepared_by: template.template_config?.prepared_by || 'Accounts department',
+    footer_disclaimer: template.template_config?.footer_disclaimer || 'Please make the payment in favor of Electronic Safety & Security Private Limited',
+    show_branch_code: template.template_config?.show_branch_code ?? true,
+    show_ntn_gst: template.template_config?.show_ntn_gst ?? true,
+    ntn_number: template.template_config?.ntn_number || '',
+    gst_number: template.template_config?.gst_number || '',
+  });
+
+  const refreshFinanceData = async () => {
+    try {
+      const [apiTemplates, apiInvoices] = await Promise.all([
+        invoicingApi.getTemplates().catch(() => []),
+        invoicingApi.getInvoices().catch(() => []),
+      ]);
+
+      if (apiTemplates.length) {
+        const mappedTemplates = apiTemplates.map(mapTemplateFromApi);
+        setTemplates(mappedTemplates);
+        setSelectedTemplate(mappedTemplates[0]);
+        setDesignerForm(mappedTemplates[0]);
+      }
+
+      if (apiInvoices.length) {
+        setInvoices(apiInvoices);
+        setSelectedInvoice(apiInvoices[0]);
+      }
+    } catch {
+      showToast('Finance data could not be refreshed from backend', 'error');
+    }
+  };
 
   // Exchange Rates
   const fetchLiveExchangeRates = async () => {
@@ -386,6 +319,7 @@ export default function ClientInvoicing() {
 
   useEffect(() => {
     fetchLiveExchangeRates();
+    refreshFinanceData();
   }, []);
 
   useEffect(() => {
@@ -458,35 +392,43 @@ export default function ClientInvoicing() {
   // Load Preset Excel Template
   const handleLoadExcelTemplate = (clientKey: string) => {
     if (clientKey === 'BALH') {
-      setExcelSheetTitle('Bank AL Habib Ltd - July 2026 Master Branch Billing Grid');
-      setExcelHeaders(['Sr #', 'Branch Name', 'Branch Code', 'Invoice #', 'Subtotal (PKR)', 'SST 10% (PKR)', 'Total With Tax (PKR)']);
+      setExcelSheetTitle('Habib Bank Limited - Billing Grid');
+      setExcelHeaders(['Sr #', 'Branch Name', 'Branch Code', 'Invoice #', 'Subtotal (PKR)', 'GST 18% (PKR)', 'Total With Tax (PKR)']);
       setExcelRows([
-        ['1', 'Main Commercial Branch', '0042', 'INV-2026-BALH-001', '450000', '45000', '495000'],
-        ['2', 'Gulshan Branch', '0089', 'INV-2026-BALH-004', '350000', '35000', '385000'],
-        ['3', 'DHA Phase 5 Branch', '0112', 'INV-2026-BALH-005', '600000', '60000', '660000'],
-        ['4', 'North Nazimabad Branch', '0031', 'INV-2026-BALH-006', '400000', '40000', '440000'],
-      ]);
-    } else if (clientKey === 'SNDB') {
-      setExcelSheetTitle('Sindh Bank Ltd - Regional CCTV Security Installation Grid');
-      setExcelHeaders(['Sr #', 'Customer', 'Branch Name', 'Branch Code', 'Invoice #', 'GST #', 'NTN #', 'Subtotal', 'GST 18%', 'Total']);
-      setExcelRows([
-        ['1', 'Sindh Bank', 'Clifton Branch', '1002', 'INV-2026-SNDB-002', '11-00-1122', '3948192-1', '680000', '122400', '802400'],
-        ['2', 'Sindh Bank', 'Hyderabad Main', '1045', 'INV-2026-SNDB-007', '11-00-1122', '3948192-1', '720000', '129600', '849600'],
-      ]);
-    } else if (clientKey === 'DC') {
-      setExcelSheetTitle('Office of Deputy Commissioner (DC) - Government Site Surveillance Grid');
-      setExcelHeaders(['Sr #', 'Office of DC', 'Designated Site', 'Inv #', 'GST Status', 'NTN #', 'SRB License', 'Subtotal', 'Tax', 'Net Total']);
-      setExcelRows([
-        ['1', 'DC Complex', 'DC Office Site A', 'INV-2026-DC-01', 'EXEMPT', '0000111-0', 'SRB-EX-992', '550000', '0', '550000'],
-        ['2', 'DC Complex', 'District Treasury Vault B', 'INV-2026-DC-02', 'EXEMPT', '0000111-0', 'SRB-EX-992', '400000', '0', '400000'],
+        ['1', 'Main Commercial Branch', '0042', 'INV-2026-HBL-001', '450000', '81000', '531000'],
+        ['2', 'Gulshan Branch', '0089', 'INV-2026-HBL-004', '350000', '63000', '413000'],
+        ['3', 'DHA Phase 5 Branch', '0112', 'INV-2026-HBL-005', '600000', '108000', '708000'],
+        ['4', 'North Nazimabad Branch', '0031', 'INV-2026-HBL-006', '400000', '72000', '472000'],
       ]);
     }
-    showToast(`Loaded ${clientKey} Excel Grid Template!`, 'info');
+    showToast('Loaded HBL billing grid template', 'info');
   };
 
   const handleSaveDesignerTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!designerForm.template_name) return;
+    try {
+      await invoicingApi.saveTemplate({
+        template_name: designerForm.template_name,
+        tax_type: designerForm.tax_type,
+        default_tax_rate: designerForm.tax_rate,
+        number_of_copies: designerForm.number_of_copies,
+        custom_header: designerForm.header_title,
+        custom_footer: designerForm.bank_account,
+        template_config: {
+          currency: designerForm.currency,
+          prepared_by: designerForm.prepared_by,
+          footer_disclaimer: designerForm.footer_disclaimer,
+          show_branch_code: designerForm.show_branch_code,
+          show_ntn_gst: designerForm.show_ntn_gst,
+          ntn_number: designerForm.ntn_number,
+          gst_number: designerForm.gst_number,
+        },
+      });
+      await refreshFinanceData();
+    } catch {
+      showToast('Template saved locally only because backend save failed', 'error');
+    }
     const existingIdx = templates.findIndex((t) => t.id === designerForm.id);
     let updatedTmpls = [...templates];
     if (existingIdx >= 0) updatedTmpls[existingIdx] = designerForm;
@@ -505,12 +447,12 @@ export default function ClientInvoicing() {
       total_branches: 3,
       total_jobs: 3,
       subtotal_pkr: 1200000,
-      tax_amount_pkr: 120000,
-      total_amount_pkr: 1320000,
+      tax_amount_pkr: 216000,
+      total_amount_pkr: 1416000,
       status: 'VERIFIED',
       branches_breakdown: [
-        { sr_no: 1, branch_name: 'Commercial Branch 1', branch_code: '001', inv_number: 'INV-2026-001', amount_no_tax: 400000, tax_amount: 40000, total_with_tax: 440000 },
-        { sr_no: 2, branch_name: 'Commercial Branch 2', branch_code: '002', inv_number: 'INV-2026-002', amount_no_tax: 400000, tax_amount: 40000, total_with_tax: 440000 },
+        { sr_no: 1, branch_name: 'Commercial Branch 1', branch_code: '001', inv_number: 'INV-2026-HBL-001', amount_no_tax: 400000, tax_amount: 72000, total_with_tax: 472000 },
+        { sr_no: 2, branch_name: 'Commercial Branch 2', branch_code: '002', inv_number: 'INV-2026-HBL-002', amount_no_tax: 400000, tax_amount: 72000, total_with_tax: 472000 },
       ],
     };
     setSummaries([newSum, ...summaries]);
@@ -559,6 +501,165 @@ export default function ClientInvoicing() {
   };
 
   const copyLabels = ['Customer Copy', 'Finance Copy', 'Audit Copy', 'Bank Copy', 'Archive Copy', 'Record Copy'];
+  const editableInputStyle: React.CSSProperties = {
+    width: '100%',
+    border: '1px solid #93c5fd',
+    borderRadius: '6px',
+    padding: '6px 8px',
+    background: '#eff6ff',
+    color: '#0f172a',
+    fontFamily: 'inherit',
+    fontSize: '13px',
+  };
+
+  const formatInvoiceMoney = (value: number) => {
+    const amount = Number(value || 0);
+    if (currency !== 'PKR') return `${currency} ${(amount / exchangeRate).toFixed(2)}`;
+    return `Rs ${amount.toLocaleString()}`;
+  };
+
+  const getInvoiceItems = (invoice: CustomerInvoice) => {
+    const items = invoice.items?.length
+      ? invoice.items
+      : [
+          {
+            product_name: 'Service / Inventory item',
+            tracking_type: '',
+            description: invoice.template_name,
+            quantity: 1,
+            unit_price: invoice.subtotal || invoice.total_amount,
+            total_without_tax: invoice.subtotal || invoice.total_amount,
+            tax_amount: invoice.tax_amount || 0,
+            total_with_tax: invoice.total_amount,
+          },
+        ];
+
+    return items.map((item) => {
+      const qty = Number(item.quantity || 1);
+      const unit = Number(item.unit_price || 0);
+      const valueExcl = Number(item.total_without_tax || qty * unit || 0);
+      const gstAmount = Number(item.tax_amount || 0);
+      const valueIncl = Number(item.total_with_tax || valueExcl + gstAmount);
+      return { ...item, qty, unit, valueExcl, gstAmount, valueIncl };
+    });
+  };
+
+  const recalculateInvoice = (invoice: CustomerInvoice): CustomerInvoice => {
+    const taxRate = Number(invoice.tax_rate || selectedTemplate.tax_rate || 0);
+    const items = (invoice.items?.length ? invoice.items : getInvoiceItems(invoice)).map((item) => {
+      const quantity = Number(item.quantity || 0);
+      const unitPrice = Number(item.unit_price || 0);
+      const totalWithoutTax = quantity * unitPrice;
+      const taxAmount = (totalWithoutTax * taxRate) / 100;
+      return {
+        product_name: item.product_name,
+        tracking_type: item.tracking_type,
+        description: item.description,
+        quantity,
+        unit_price: unitPrice,
+        total_without_tax: totalWithoutTax,
+        tax_amount: taxAmount,
+        total_with_tax: totalWithoutTax + taxAmount,
+      };
+    });
+    const subtotal = items.reduce((sum, item) => sum + item.total_without_tax, 0);
+    const taxAmount = items.reduce((sum, item) => sum + item.tax_amount, 0);
+    const totalAmount = items.reduce((sum, item) => sum + item.total_with_tax, 0);
+    return {
+      ...invoice,
+      tax_rate: taxRate,
+      subtotal,
+      tax_amount: taxAmount,
+      total_amount: totalAmount,
+      amount_in_words: `${formatInvoiceMoney(totalAmount)} only`,
+      items,
+    };
+  };
+
+  const syncSelectedInvoice = (invoice: CustomerInvoice) => {
+    setSelectedInvoice(invoice);
+    setInvoices((current) => current.map((item) => (item.id === invoice.id ? invoice : item)));
+  };
+
+  const updateSelectedInvoiceField = (field: keyof CustomerInvoice, value: string | number) => {
+    if (!selectedInvoice) return;
+    const nextInvoice = { ...selectedInvoice, [field]: value } as CustomerInvoice;
+    syncSelectedInvoice(field === 'tax_rate' ? recalculateInvoice(nextInvoice) : nextInvoice);
+  };
+
+  const updateSelectedInvoiceItem = (index: number, field: keyof InvoiceItem, value: string | number) => {
+    if (!selectedInvoice) return;
+    const items = getInvoiceItems(selectedInvoice).map((item, itemIndex) =>
+      itemIndex === index ? { ...item, [field]: value } : item,
+    );
+    syncSelectedInvoice(recalculateInvoice({ ...selectedInvoice, items }));
+  };
+
+  const addSelectedInvoiceRow = () => {
+    if (!selectedInvoice) return;
+    const items = [
+      ...getInvoiceItems(selectedInvoice),
+      {
+        product_name: 'Service / Inventory item',
+        tracking_type: 'SERIAL',
+        description: 'New editable invoice item',
+        quantity: 1,
+        unit_price: 0,
+        total_without_tax: 0,
+        tax_amount: 0,
+        total_with_tax: 0,
+      },
+    ];
+    syncSelectedInvoice(recalculateInvoice({ ...selectedInvoice, items }));
+  };
+
+  const removeSelectedInvoiceRow = (index: number) => {
+    if (!selectedInvoice) return;
+    const items = getInvoiceItems(selectedInvoice).filter((_, itemIndex) => itemIndex !== index);
+    syncSelectedInvoice(recalculateInvoice({ ...selectedInvoice, items: items.length ? items : getInvoiceItems(selectedInvoice) }));
+  };
+
+  const saveSelectedInvoiceChanges = async () => {
+    if (!selectedInvoice) return;
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (uuidPattern.test(selectedInvoice.id)) {
+      try {
+        await invoicingApi.updateInvoice(selectedInvoice.id, {
+          invoice_number: selectedInvoice.invoice_number,
+          tax_rate: selectedInvoice.tax_rate,
+          amount_in_words: selectedInvoice.amount_in_words,
+          number_of_copies: selectedInvoice.number_of_copies || numberOfCopies,
+          status: selectedInvoice.status,
+          notes: JSON.stringify({
+            customer_name: selectedInvoice.customer_name,
+            branch_name: selectedInvoice.branch_name,
+            branch_code: selectedInvoice.branch_code,
+            template_header: selectedTemplate.header_title,
+            footer_disclaimer: selectedTemplate.footer_disclaimer,
+            bank_account: selectedTemplate.bank_account,
+            prepared_by: selectedTemplate.prepared_by,
+            ntn_number: selectedTemplate.ntn_number,
+            gst_number: selectedTemplate.gst_number,
+          }),
+          items: getInvoiceItems(selectedInvoice).map((item) => ({
+            product_id: null,
+            description: item.description,
+            quantity: item.qty,
+            unit_price: item.unit,
+            total_without_tax: item.valueExcl,
+            tax_amount: item.gstAmount,
+            total_with_tax: item.valueIncl,
+          })),
+        });
+        showToast('Invoice changes saved to backend database.', 'success');
+      } catch {
+        showToast('Invoice updated on screen, but backend save failed.', 'error');
+      }
+    } else {
+      showToast('Invoice changes saved in this workspace preview.', 'success');
+    }
+    setInvoiceEditMode(false);
+  };
 
   return (
     <div style={{ padding: '24px', maxWidth: '1600px', margin: '0 auto', fontFamily: "'Outfit', sans-serif" }}>
@@ -716,13 +817,7 @@ export default function ClientInvoicing() {
 
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={() => handleLoadExcelTemplate('BALH')} style={{ backgroundColor: '#e0e7ff', color: '#3730a3', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
-                Load Bank AL Habib
-              </button>
-              <button onClick={() => handleLoadExcelTemplate('SNDB')} style={{ backgroundColor: '#e0e7ff', color: '#3730a3', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
-                Load Sindh Bank
-              </button>
-              <button onClick={() => handleLoadExcelTemplate('DC')} style={{ backgroundColor: '#e0e7ff', color: '#3730a3', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
-                Load DC Office
+                Load HBL Template
               </button>
             </div>
           </div>
@@ -894,7 +989,10 @@ export default function ClientInvoicing() {
                 {invoices.map((inv) => (
                   <div
                     key={inv.id}
-                    onClick={() => setSelectedInvoice(inv)}
+                    onClick={() => {
+                      setSelectedInvoice(inv);
+                      setInvoiceEditMode(false);
+                    }}
                     style={{
                       padding: '14px 16px',
                       borderRadius: '10px',
@@ -920,6 +1018,37 @@ export default function ClientInvoicing() {
             </div>
 
             <div>
+              {selectedInvoice && (
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ color: '#475569', fontSize: '13px', fontWeight: 700 }}>
+                    {invoiceEditMode ? 'Edit mode is ON. Change any field, row, tax rate or amount directly.' : 'Open edit mode to change invoice fields and line items.'}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => setInvoiceEditMode((current) => !current)}
+                      style={{ backgroundColor: invoiceEditMode ? '#0f172a' : '#2563eb', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: '800' }}
+                    >
+                      <Edit3 size={15} /> {invoiceEditMode ? 'Close Edit Mode' : 'Edit Invoice'}
+                    </button>
+                    {invoiceEditMode && (
+                      <>
+                        <button
+                          onClick={addSelectedInvoiceRow}
+                          style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: '800' }}
+                        >
+                          <Plus size={15} /> Add Row
+                        </button>
+                        <button
+                          onClick={saveSelectedInvoiceChanges}
+                          style={{ backgroundColor: '#0284c7', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: '800' }}
+                        >
+                          <Save size={15} /> Save Changes
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
                 {Array.from({ length: numberOfCopies }).map((_, idx) => {
                   const copyNum = idx + 1;
@@ -946,92 +1075,196 @@ export default function ClientInvoicing() {
               </div>
 
               {selectedInvoice && (
-                <div style={{ backgroundColor: '#ffffff', color: '#000000', padding: '36px', borderRadius: '14px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', border: '1px solid #cbd5e1' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #000', paddingBottom: '12px', marginBottom: '20px' }}>
-                    <div>
-                      <span style={{ backgroundColor: '#0f172a', color: '#fff', padding: '4px 12px', borderRadius: '4px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' }}>
-                        OFFICIAL {copyLabels[activeCopyTab - 1] || `COPY ${activeCopyTab}`}
-                      </span>
-                      <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#000', marginTop: '8px', textTransform: 'uppercase' }}>
-                        {selectedTemplate.header_title}
-                      </h2>
-                      <p style={{ fontSize: '13px', color: '#334155' }}>
-                        Customer: <strong>{selectedInvoice.customer_name}</strong> {selectedTemplate.show_branch_code && `(Branch Code: ${selectedInvoice.branch_code || '0042'})`}
-                      </p>
-                      {selectedTemplate.show_ntn_gst && (
-                        <p style={{ fontSize: '12px', color: '#64748b' }}>{selectedTemplate.ntn_number} | {selectedTemplate.gst_number}</p>
+                <div style={{ backgroundColor: '#ffffff', color: '#111827', padding: '28px', borderRadius: '14px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', border: '1px solid #cbd5e1' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: '12px', border: '1px solid #bfdbfe', borderRadius: '6px', background: '#eff6ff', color: '#1e3a8a', padding: '8px 12px', fontSize: '12px', fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase' }}>
+                    Official {copyLabels[activeCopyTab - 1] || `Copy ${activeCopyTab}`}
+                  </div>
+
+                  <div id="reactHblInvoicePrint" style={{ color: '#111827', border: '1px solid #111827', background: '#fff', fontFamily: "Georgia, 'Times New Roman', serif" }}>
+                    <div style={{ textAlign: 'center', fontSize: '20px', fontWeight: 800, padding: '7px', borderBottom: '1px solid #111827' }}>
+                      {invoiceEditMode ? (
+                        <input
+                          value={selectedTemplate.header_title}
+                          onChange={(e) => setSelectedTemplate({ ...selectedTemplate, header_title: e.target.value })}
+                          style={{ ...editableInputStyle, textAlign: 'center', fontSize: 18, fontWeight: 800 }}
+                          placeholder="Invoice title"
+                        />
+                      ) : (
+                        selectedTemplate.header_title || 'Sales Tax Invoice'
                       )}
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <p style={{ fontWeight: '900', fontSize: '16px' }}>INVOICE #: {selectedInvoice.invoice_number}</p>
-                      <p style={{ fontSize: '13px', color: '#475569' }}>Date: {new Date(selectedInvoice.created_at).toLocaleDateString()}</p>
-                      <p style={{ fontSize: '12px', color: '#0284c7', fontWeight: '700', marginTop: '2px' }}>Currency: {currency} (Rate: {exchangeRate})</p>
-                    </div>
-                  </div>
-
-                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '2px solid #000' }}>
-                        <th style={{ padding: '8px', textAlign: 'left' }}>S#</th>
-                        <th style={{ padding: '8px', textAlign: 'left' }}>Description</th>
-                        <th style={{ padding: '8px', textAlign: 'right' }}>Qty</th>
-                        <th style={{ padding: '8px', textAlign: 'right' }}>Unit Price ({currency})</th>
-                        <th style={{ padding: '8px', textAlign: 'right' }}>Tax ({selectedTemplate.tax_type} {selectedTemplate.tax_rate}%)</th>
-                        <th style={{ padding: '8px', textAlign: 'right' }}>Total With Tax</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(selectedInvoice.items || []).map((item, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                          <td style={{ padding: '8px' }}>{idx + 1}</td>
-                          <td style={{ padding: '8px', fontWeight: '600' }}>{item.description}</td>
-                          <td style={{ padding: '8px', textAlign: 'right' }}>{item.quantity}</td>
-                          <td style={{ padding: '8px', textAlign: 'right' }}>
-                            {currency !== 'PKR' ? (item.unit_price / exchangeRate).toFixed(2) : Number(item.unit_price).toLocaleString()}
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                      <tbody>
+                        <tr>
+                          <td colSpan={3} style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top' }}>
+                            {invoiceEditMode ? (
+                              <input value={selectedInvoice.customer_name || ''} onChange={(e) => updateSelectedInvoiceField('customer_name', e.target.value)} style={editableInputStyle} placeholder="Client name" />
+                            ) : (
+                              <strong>{selectedInvoice.customer_name || 'Habib Bank Limited'}</strong>
+                            )}
                           </td>
-                          <td style={{ padding: '8px', textAlign: 'right' }}>
-                            {currency !== 'PKR' ? (item.tax_amount / exchangeRate).toFixed(2) : Number(item.tax_amount).toLocaleString()}
-                          </td>
-                          <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>
-                            {currency !== 'PKR' ? (item.total_with_tax / exchangeRate).toFixed(2) : Number(item.total_with_tax).toLocaleString()}
+                          <td style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top' }}><strong>Invoice no.</strong></td>
+                          <td colSpan={4} style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top' }}>
+                            {invoiceEditMode ? (
+                              <input value={selectedInvoice.invoice_number} onChange={(e) => updateSelectedInvoiceField('invoice_number', e.target.value)} style={editableInputStyle} />
+                            ) : (
+                              selectedInvoice.invoice_number
+                            )}
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '20px' }}>
-                    <div style={{ maxWidth: '60%' }}>
-                      <p style={{ fontSize: '13px', fontWeight: 'bold' }}>
-                        Amount In Words: <span style={{ fontStyle: 'italic', fontWeight: 'normal' }}>{selectedInvoice.amount_in_words}</span>
-                      </p>
-                      <p style={{ fontSize: '12px', color: '#475569', marginTop: '8px', fontWeight: '600' }}>{selectedTemplate.bank_account}</p>
-                      <p style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', fontStyle: 'italic' }}>{selectedTemplate.footer_disclaimer}</p>
-                    </div>
-                    <div style={{ width: '240px', fontSize: '13px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span>Subtotal:</span>
-                        <span>{currency} {(selectedInvoice.subtotal / exchangeRate).toFixed(2)}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span>Tax ({selectedTemplate.tax_type} {selectedTemplate.tax_rate}%):</span>
-                        <span>{currency} {(selectedInvoice.tax_amount / exchangeRate).toFixed(2)}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid #000', paddingTop: '6px', fontWeight: 'bold', fontSize: '15px' }}>
-                        <span>Total Amount:</span>
-                        <span>{currency} {(selectedInvoice.total_amount / exchangeRate).toFixed(2)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '40px', paddingTop: '20px', borderTop: '1px dashed #cbd5e1', fontSize: '12px' }}>
-                    <div>
-                      <p>_______________________</p>
-                      <p style={{ fontWeight: 'bold', marginTop: '4px' }}>Prepared By: {selectedTemplate.prepared_by}</p>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <p>_______________________</p>
-                      <p style={{ fontWeight: 'bold', marginTop: '4px' }}>Client Stamp & Signature</p>
+                        <tr>
+                          <td colSpan={3} style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top' }}>
+                            <strong>Branch / Reference</strong><br />
+                            {invoiceEditMode ? (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                                <input value={selectedInvoice.branch_name || ''} onChange={(e) => updateSelectedInvoiceField('branch_name', e.target.value)} style={editableInputStyle} placeholder="Branch name" />
+                                <input value={selectedInvoice.branch_code || ''} onChange={(e) => updateSelectedInvoiceField('branch_code', e.target.value)} style={editableInputStyle} placeholder="Branch code / ticket" />
+                              </div>
+                            ) : (
+                              selectedInvoice.branch_code || selectedInvoice.branch_name || 'HBL Reference'
+                            )}
+                          </td>
+                          <td style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top' }}><strong>Date</strong></td>
+                          <td colSpan={4} style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top' }}>
+                            {invoiceEditMode ? (
+                              <input
+                                type="date"
+                                value={selectedInvoice.created_at.slice(0, 10)}
+                                onChange={(e) => updateSelectedInvoiceField('created_at', new Date(e.target.value).toISOString())}
+                                style={editableInputStyle}
+                              />
+                            ) : (
+                              new Date(selectedInvoice.created_at).toLocaleDateString()
+                            )}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td colSpan={3} style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top' }}>
+                            <strong>Region</strong><br />Karachi
+                          </td>
+                          <td style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top' }}><strong>NTN / GST</strong></td>
+                          <td colSpan={4} style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top' }}>
+                            {invoiceEditMode ? (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                                <input value={selectedTemplate.ntn_number} onChange={(e) => setSelectedTemplate({ ...selectedTemplate, ntn_number: e.target.value })} style={editableInputStyle} placeholder="NTN" />
+                                <input value={selectedTemplate.gst_number} onChange={(e) => setSelectedTemplate({ ...selectedTemplate, gst_number: e.target.value })} style={editableInputStyle} placeholder="GST/SST" />
+                                <input type="number" value={selectedInvoice.tax_rate} onChange={(e) => updateSelectedInvoiceField('tax_rate', Number(e.target.value))} style={editableInputStyle} placeholder="Tax %" />
+                              </div>
+                            ) : (
+                              selectedTemplate.ntn_number || selectedTemplate.gst_number || 'Configured by finance'
+                            )}
+                          </td>
+                        </tr>
+                        <tr>
+                          <th style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'center' }}>S No</th>
+                          <th style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top' }}>Model Number / Brand Name</th>
+                          <th style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top' }}>Description</th>
+                          <th style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'center' }}>Qty</th>
+                          <th style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'right' }}>Price</th>
+                          <th style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'right' }}>Value Excl.</th>
+                          <th style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'right' }}>GST Amount</th>
+                          <th style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'right' }}>Value Incl.</th>
+                          {invoiceEditMode && <th style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'center' }}>Action</th>}
+                        </tr>
+                        {getInvoiceItems(selectedInvoice).map((item, idx) => (
+                          <tr key={`${selectedInvoice.id}-${idx}`}>
+                            <td style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'center' }}>{idx + 1}</td>
+                            <td style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top' }}>
+                              {invoiceEditMode ? (
+                                <div style={{ display: 'grid', gap: 6 }}>
+                                  <input value={item.product_name || ''} onChange={(e) => updateSelectedInvoiceItem(idx, 'product_name', e.target.value)} style={editableInputStyle} placeholder="Model / brand name" />
+                                  <input value={item.tracking_type || ''} onChange={(e) => updateSelectedInvoiceItem(idx, 'tracking_type', e.target.value)} style={editableInputStyle} placeholder="Serial / tracking" />
+                                </div>
+                              ) : (
+                                <>
+                                  <strong>{item.product_name || 'Service / Inventory item'}</strong><br />
+                                  {item.tracking_type || 'SERIAL'}
+                                </>
+                              )}
+                            </td>
+                            <td style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top' }}>
+                              {invoiceEditMode ? (
+                                <textarea value={item.description || ''} onChange={(e) => updateSelectedInvoiceItem(idx, 'description', e.target.value)} style={{ ...editableInputStyle, minHeight: 64, resize: 'vertical' }} placeholder="Description" />
+                              ) : (
+                                item.description || selectedInvoice.template_name
+                              )}
+                            </td>
+                            <td style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'center' }}>
+                              {invoiceEditMode ? (
+                                <input type="number" step="0.000001" value={item.qty} onChange={(e) => updateSelectedInvoiceItem(idx, 'quantity', Number(e.target.value))} style={{ ...editableInputStyle, textAlign: 'center' }} />
+                              ) : (
+                                item.qty
+                              )}
+                            </td>
+                            <td style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'right' }}>
+                              {invoiceEditMode ? (
+                                <input type="number" step="0.000001" value={item.unit} onChange={(e) => updateSelectedInvoiceItem(idx, 'unit_price', Number(e.target.value))} style={{ ...editableInputStyle, textAlign: 'right' }} />
+                              ) : (
+                                formatInvoiceMoney(item.unit)
+                              )}
+                            </td>
+                            <td style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'right' }}>{formatInvoiceMoney(item.valueExcl)}</td>
+                            <td style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'right' }}>{formatInvoiceMoney(item.gstAmount)}</td>
+                            <td style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'right' }}>{formatInvoiceMoney(item.valueIncl)}</td>
+                            {invoiceEditMode && (
+                              <td style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'center' }}>
+                                <button
+                                  onClick={() => removeSelectedInvoiceRow(idx)}
+                                  style={{ border: '1px solid #fecaca', background: '#fee2e2', color: '#b91c1c', borderRadius: 6, padding: '6px 8px', cursor: 'pointer', fontWeight: 800 }}
+                                >
+                                  Remove
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                        <tr>
+                          <td colSpan={invoiceEditMode ? 8 : 7} style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'right' }}><strong>Total</strong></td>
+                          <td style={{ border: '1px solid #111827', padding: '7px', verticalAlign: 'top', textAlign: 'right' }}><strong>{formatInvoiceMoney(selectedInvoice.total_amount)}</strong></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div style={{ padding: '12px', borderTop: '1px solid #111827', fontSize: '15px', lineHeight: 1.55 }}>
+                      <strong>Amount in words:</strong>{' '}
+                      {invoiceEditMode ? (
+                        <input value={selectedInvoice.amount_in_words || ''} onChange={(e) => updateSelectedInvoiceField('amount_in_words', e.target.value)} style={{ ...editableInputStyle, width: '70%' }} placeholder="Amount in words" />
+                      ) : (
+                        selectedInvoice.amount_in_words || 'Amount words will be generated by finance'
+                      )}
+                      <br />
+                      {invoiceEditMode ? (
+                        <input
+                          value={selectedTemplate.footer_disclaimer}
+                          onChange={(e) => setSelectedTemplate({ ...selectedTemplate, footer_disclaimer: e.target.value })}
+                          style={{ ...editableInputStyle, marginTop: 8 }}
+                          placeholder="Payment footer line"
+                        />
+                      ) : (
+                        selectedTemplate.footer_disclaimer || <>Please make the payment in favor of <strong>Electronic Safety & Security Private Limited</strong></>
+                      )}
+                      <br />
+                      {invoiceEditMode ? (
+                        <input
+                          value={selectedTemplate.bank_account}
+                          onChange={(e) => setSelectedTemplate({ ...selectedTemplate, bank_account: e.target.value })}
+                          style={{ ...editableInputStyle, marginTop: 8 }}
+                          placeholder="Account #"
+                        />
+                      ) : (
+                        <strong>{selectedTemplate.bank_account || 'Account #: 24438000016603'}</strong>
+                      )}
+                      <br /><br />
+                      <strong>Prepared By</strong><br />
+                      {invoiceEditMode ? (
+                        <input
+                          value={selectedTemplate.prepared_by}
+                          onChange={(e) => setSelectedTemplate({ ...selectedTemplate, prepared_by: e.target.value })}
+                          style={editableInputStyle}
+                          placeholder="Prepared by"
+                        />
+                      ) : (
+                        selectedTemplate.prepared_by || 'Accounts department'
+                      )}
                     </div>
                   </div>
 
@@ -1040,7 +1273,7 @@ export default function ClientInvoicing() {
                       onClick={() => window.print()}
                       style={{ backgroundColor: '#0f172a', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: '700' }}
                     >
-                      <Printer size={16} /> Print All {numberOfCopies} Official Copies
+                      <Printer size={16} /> Print / Save PDF
                     </button>
                   </div>
                 </div>
@@ -1159,7 +1392,7 @@ export default function ClientInvoicing() {
                 <input
                   required
                   type="text"
-                  placeholder="e.g. Bank AL Habib Ltd / QNB Qatar"
+                  placeholder="e.g. Habib Bank Limited"
                   value={designerForm.customer_name}
                   onChange={(e) => setDesignerForm({ ...designerForm, customer_name: e.target.value })}
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
@@ -1171,7 +1404,7 @@ export default function ClientInvoicing() {
                 <input
                   required
                   type="text"
-                  placeholder="e.g. Bank AL Habib SST 10% Format"
+                  placeholder="e.g. HBL Sales Tax Invoice"
                   value={designerForm.template_name}
                   onChange={(e) => setDesignerForm({ ...designerForm, template_name: e.target.value })}
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px', fontWeight: '700' }}
@@ -1327,7 +1560,7 @@ export default function ClientInvoicing() {
                 <input
                   required
                   type="text"
-                  placeholder="e.g. Bank AL Habib Ltd / Sindh Bank"
+                  placeholder="e.g. Habib Bank Limited"
                   value={newSummaryClient}
                   onChange={(e) => setNewSummaryClient(e.target.value)}
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a' }}

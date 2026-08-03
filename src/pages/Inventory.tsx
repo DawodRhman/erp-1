@@ -17,6 +17,7 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  FileText,
   Trash2,
   Edit,
   Car,
@@ -26,9 +27,11 @@ import {
 import {
   inventoryApi,
   InventorySummary,
+  InventoryWorkQueueJob,
   ItemCategory,
   Product,
   InventoryItem,
+  InventoryMovement,
   Vendor,
   Customer,
   CustomerVehicle,
@@ -37,11 +40,18 @@ import {
   TrackerInstallation,
   CustomerComplaint,
 } from '../services/inventoryService';
+import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 
 export default function Inventory() {
+  const { activeRole } = useAuth();
+  const canOpenBilling =
+    activeRole === 'super_admin' ||
+    activeRole === 'finance_officer' ||
+    activeRole === 'inv_fin_admin';
+
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'products' | 'serials' | 'po' | 'invoices' | 'customers' | 'installations'
+    'overview' | 'products' | 'serials' | 'ledger' | 'po' | 'invoices' | 'customers' | 'installations'
   >('overview');
 
   const [loading, setLoading] = useState(true);
@@ -49,6 +59,7 @@ export default function Inventory() {
   const [categories, setCategories] = useState<ItemCategory[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [movements, setMovements] = useState<InventoryMovement[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [vehicles, setVehicles] = useState<CustomerVehicle[]>([]);
@@ -56,6 +67,7 @@ export default function Inventory() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [installations, setInstallations] = useState<TrackerInstallation[]>([]);
   const [complaints, setComplaints] = useState<CustomerComplaint[]>([]);
+  const [workQueue, setWorkQueue] = useState<InventoryWorkQueueJob[]>([]);
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,6 +76,7 @@ export default function Inventory() {
   const [selectedTrackingType, setSelectedTrackingType] = useState('');
   const [selectedStockStatus, setSelectedStockStatus] = useState('');
   const [selectedSerialStatus, setSelectedSerialStatus] = useState('');
+  const [selectedMovementType, setSelectedMovementType] = useState('');
 
   // Modals
   const [showAddProductModal, setShowAddProductModal] = useState(false);
@@ -103,28 +116,54 @@ export default function Inventory() {
   const [newInstallation, setNewInstallation] = useState({ customer_id: '', vehicle_id: '', tracker_item_id: '', technician_name: '', notes: '' });
   const [newComplaint, setNewComplaint] = useState({ customer_id: '', tracker_item_id: '', complaint_type: 'DEVICE_OFFLINE', description: '' });
   const [newReplacement, setNewReplacement] = useState({ complaint_id: '', old_inventory_item_id: '', new_inventory_item_id: '', reason: '' });
+  const [newPO, setNewPO] = useState({
+    vendor_id: '',
+    product_id: '',
+    quantity: 1,
+    unit_price: 0,
+    order_date: new Date().toISOString().slice(0, 10),
+    expected_delivery_date: '',
+    notes: '',
+  });
+
+  const loadWithRetry = async <T,>(request: () => Promise<T>, fallback: T): Promise<T> => {
+    try {
+      return await request();
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      try {
+        return await request();
+      } catch {
+        return fallback;
+      }
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [sumRes, catRes, prodRes, itemRes, venRes, custRes, poRes, invRes, instRes, compRes] =
+      const [sumRes, queueRes, catRes, prodRes, itemRes, movementRes, venRes, custRes, poRes, invRes, instRes, compRes] =
         await Promise.all([
-          inventoryApi.getSummary().catch(() => null),
-          inventoryApi.getCategories().catch(() => []),
-          inventoryApi.getProducts().catch(() => []),
-          inventoryApi.getItems().catch(() => []),
-          inventoryApi.getVendors().catch(() => []),
-          inventoryApi.getCustomers().catch(() => []),
-          inventoryApi.getPurchaseOrders().catch(() => []),
-          inventoryApi.getInvoices().catch(() => []),
-          inventoryApi.getInstallations().catch(() => []),
-          inventoryApi.getComplaints().catch(() => []),
+          loadWithRetry(() => inventoryApi.getSummary(), summary),
+          loadWithRetry(() => inventoryApi.getWorkQueue(), workQueue),
+          loadWithRetry(() => inventoryApi.getCategories(), categories),
+          loadWithRetry(() => inventoryApi.getProducts({ limit: 500 }), products),
+          loadWithRetry(() => inventoryApi.getItems({ limit: 500 }), items),
+          loadWithRetry(() => inventoryApi.getMovements({ limit: 300 }), movements),
+          loadWithRetry(() => inventoryApi.getVendors(), vendors),
+          loadWithRetry(() => inventoryApi.getCustomers(), customers),
+          loadWithRetry(() => inventoryApi.getPurchaseOrders(), purchaseOrders),
+          loadWithRetry(() => inventoryApi.getInvoices(), invoices),
+          loadWithRetry(() => inventoryApi.getInstallations(), installations),
+          loadWithRetry(() => inventoryApi.getComplaints(), complaints),
         ]);
 
       setSummary(sumRes);
+      setWorkQueue(queueRes);
       setCategories(catRes);
       setProducts(prodRes);
       setItems(itemRes);
+      setMovements(movementRes);
       setVendors(venRes);
       setCustomers(custRes);
       setPurchaseOrders(poRes);
@@ -176,6 +215,22 @@ export default function Inventory() {
       return matchesSearch && matchesStatus;
     });
   }, [items, searchTerm, selectedSerialStatus]);
+
+  const filteredMovements = useMemo(() => {
+    const needle = searchTerm.trim().toLowerCase();
+    return movements.filter((movement) => {
+      const matchesSearch =
+        !needle ||
+        movement.product_name?.toLowerCase().includes(needle) ||
+        movement.serial_number?.toLowerCase().includes(needle) ||
+        movement.imei?.toLowerCase().includes(needle) ||
+        movement.reference_type?.toLowerCase().includes(needle) ||
+        movement.notes?.toLowerCase().includes(needle) ||
+        movement.created_by_email?.toLowerCase().includes(needle);
+      const matchesType = !selectedMovementType || movement.movement_type === selectedMovementType;
+      return matchesSearch && matchesType;
+    });
+  }, [movements, searchTerm, selectedMovementType]);
 
   // Handlers
   const handleCreateProduct = async (e: React.FormEvent) => {
@@ -288,6 +343,41 @@ export default function Inventory() {
     }
   };
 
+  const handleCreatePO = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPO.product_id) return toast.error('Please select a product for PO');
+    try {
+      await inventoryApi.createPurchaseOrder({
+        vendor_id: newPO.vendor_id || null,
+        order_date: newPO.order_date,
+        expected_delivery_date: newPO.expected_delivery_date || null,
+        notes: newPO.notes,
+        items: [
+          {
+            product_id: newPO.product_id,
+            quantity: newPO.quantity,
+            unit_price: newPO.unit_price,
+            remarks: newPO.expected_delivery_date ? `Expected delivery: ${newPO.expected_delivery_date}` : '',
+          },
+        ],
+      });
+      toast.success('Purchase order created successfully');
+      setShowPOModal(false);
+      setNewPO({
+        vendor_id: '',
+        product_id: '',
+        quantity: 1,
+        unit_price: 0,
+        order_date: new Date().toISOString().slice(0, 10),
+        expected_delivery_date: '',
+        notes: '',
+      });
+      loadData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Error creating purchase order');
+    }
+  };
+
   const handleOpenCustomerDraftModal = async (customer: Customer) => {
     setSelectedCustomerForDraft(customer);
     try {
@@ -329,6 +419,99 @@ export default function Inventory() {
 
   const formatCurrency = (val?: number) => {
     return new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', maximumFractionDigits: 0 }).format(val || 0);
+  };
+
+  const formatDate = (value?: string) => {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  const cardStyle: React.CSSProperties = {
+    backgroundColor: '#ffffff',
+    borderRadius: '16px',
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 2px 8px rgba(15,23,42,0.04)',
+  };
+
+  const toolbarStyle: React.CSSProperties = {
+    ...cardStyle,
+    padding: '16px',
+    display: 'flex',
+    gap: '12px',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+  };
+
+  const searchWrapStyle: React.CSSProperties = { position: 'relative', flex: '1 1 280px', minWidth: '240px' };
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '10px 12px',
+    borderRadius: '10px',
+    border: '1px solid #cbd5e1',
+    backgroundColor: '#f8fafc',
+    color: '#0f172a',
+    fontSize: '13.5px',
+    fontWeight: 600,
+    outline: 'none',
+    boxSizing: 'border-box',
+  };
+  const selectStyle: React.CSSProperties = {
+    ...inputStyle,
+    width: 'auto',
+    minWidth: '190px',
+    cursor: 'pointer',
+  };
+  const tableWrapStyle: React.CSSProperties = { ...cardStyle, overflowX: 'auto', overflowY: 'hidden' };
+  const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '920px' };
+  const thStyle: React.CSSProperties = {
+    textAlign: 'left',
+    padding: '13px 14px',
+    backgroundColor: '#f8fafc',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    fontSize: '11px',
+    letterSpacing: '0.05em',
+    borderBottom: '1px solid #e2e8f0',
+  };
+  const tdStyle: React.CSSProperties = { padding: '13px 14px', borderTop: '1px solid #f1f5f9', color: '#334155' };
+  const primaryButtonStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '10px 14px',
+    borderRadius: '10px',
+    border: 'none',
+    backgroundColor: '#10b981',
+    color: '#ffffff',
+    fontSize: '13px',
+    fontWeight: 800,
+    cursor: 'pointer',
+    boxShadow: '0 8px 18px rgba(16,185,129,0.18)',
+    whiteSpace: 'nowrap',
+  };
+  const chipStyle = (tone: 'slate' | 'indigo' | 'emerald' | 'amber' | 'rose' = 'slate'): React.CSSProperties => {
+    const colors = {
+      slate: ['#f1f5f9', '#475569'],
+      indigo: ['#eef2ff', '#4338ca'],
+      emerald: ['#dcfce7', '#047857'],
+      amber: ['#fef3c7', '#b45309'],
+      rose: ['#ffe4e6', '#be123c'],
+    } as const;
+    return {
+      display: 'inline-flex',
+      alignItems: 'center',
+      padding: '5px 9px',
+      borderRadius: '999px',
+      backgroundColor: colors[tone][0],
+      color: colors[tone][1],
+      fontSize: '11px',
+      fontWeight: 900,
+      lineHeight: 1,
+    };
   };
 
   return (
@@ -465,14 +648,31 @@ export default function Inventory() {
             </div>
           </div>
         </div>
+
+        <button
+          onClick={() => setActiveTab('overview')}
+          style={{ backgroundColor: '#ffffff', borderRadius: '14px', padding: '20px', border: '1px solid #bfdbfe', boxShadow: '0 2px 8px rgba(37,99,235,0.08)', textAlign: 'left', cursor: 'pointer' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>CSR Approved Jobs</span>
+            <div style={{ padding: '8px', backgroundColor: '#dbeafe', color: '#1d4ed8', borderRadius: '10px' }}><FileText size={20} /></div>
+          </div>
+          <div style={{ marginTop: '14px' }}>
+            <span style={{ fontSize: '26px', fontWeight: '800', color: '#1d4ed8' }}>{summary?.approved_csr_jobs || workQueue.length || 0}</span>
+            <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
+              Ready for stock, serials and installer handoff
+            </div>
+          </div>
+        </button>
       </div>
 
       {/* Tabs Bar */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', backgroundColor: '#f1f5f9', padding: '6px', borderRadius: '12px', overflowX: 'auto' }}>
         {[
           { id: 'overview', label: 'Overview & Alerts', icon: TrendingUp },
-          { id: 'products', label: `Products (${products.length})`, icon: Box },
-          { id: 'serials', label: `Serial Tracking (${items.length})`, icon: Barcode },
+          { id: 'products', label: `Products (${summary?.total_products || products.length})`, icon: Box },
+          { id: 'serials', label: `Serial Tracking (${summary?.total_serials || items.length})`, icon: Barcode },
+          { id: 'ledger', label: `Stock Ledger (${movements.length})`, icon: ArrowRightLeft },
           { id: 'po', label: `Purchase Orders (${purchaseOrders.length})`, icon: ShoppingCart },
           { id: 'invoices', label: `Vendor Stock Receipts (${invoices.length})`, icon: Receipt },
           { id: 'installations', label: `Field Dispatches (${installations.length})`, icon: Wrench },
@@ -507,53 +707,123 @@ export default function Inventory() {
 
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            {/* Low Stock Alert Panel */}
-            <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-amber-500" />
-                  <h2 className="text-lg font-bold">Low Stock & Reorder Alerts</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(320px, 0.9fr)', gap: '24px', alignItems: 'start' }}>
+          <div style={{ display: 'grid', gap: '24px' }}>
+            {/* CSR Approved Inventory Work Queue */}
+            <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #bfdbfe', padding: '20px', boxShadow: '0 8px 24px rgba(37,99,235,0.08)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#2563eb', marginBottom: '4px' }}>
+                    CSR to Inventory Queue
+                  </div>
+                  <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', margin: 0 }}>Approved Jobs Waiting For Stock Action</h2>
                 </div>
-                <span className="text-xs font-semibold px-2.5 py-1 bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 rounded-full">
+                <span style={{ fontSize: '12px', fontWeight: 800, padding: '6px 10px', backgroundColor: '#dbeafe', color: '#1d4ed8', borderRadius: '999px' }}>
+                  {workQueue.length} active jobs
+                </span>
+              </div>
+
+              {workQueue.length === 0 ? (
+                <div style={{ padding: '32px', textAlign: 'center', color: '#64748b', backgroundColor: '#f8fafc', borderRadius: '14px', border: '1px dashed #cbd5e1' }}>
+                  <CheckCircle size={40} style={{ color: '#10b981', margin: '0 auto 8px' }} />
+                  No approved CSR jobs are waiting right now. When CSR approves a quotation, it will appear here.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: '12px', maxHeight: '560px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {workQueue.map((job) => (
+                    <div key={job.id} style={{ padding: '14px', borderRadius: '14px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '14px', alignItems: 'center' }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                            <span style={{ fontWeight: 900, color: '#0f172a' }}>{job.quotation_number}</span>
+                            <span style={{ padding: '3px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: 800, backgroundColor: '#d1fae5', color: '#047857' }}>{job.status}</span>
+                            <span style={{ fontSize: '12px', color: '#64748b' }}>{job.template_style || 'HBL Sales Tax Invoice'}</span>
+                          </div>
+                          <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.45 }}>
+                            {job.customer_name || 'Client'} - {job.item_count || 0} item lines, requested qty {job.total_requested_qty || 0}, value {formatCurrency(job.total_amount)}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'flex-end' }}>
+                          <button
+                            onClick={() => setActiveTab('serials')}
+                            style={{ border: 'none', borderRadius: '9px', padding: '9px 11px', backgroundColor: '#2563eb', color: '#ffffff', fontSize: '12px', fontWeight: 800, cursor: 'pointer' }}
+                          >
+                            Assign Serial / Stock
+                          </button>
+                          <button
+                            onClick={() => {
+                              setNewInstallation((current) => ({ ...current, customer_id: job.customer_id || '' }));
+                              setShowInstallationModal(true);
+                            }}
+                            style={{ border: 'none', borderRadius: '9px', padding: '9px 11px', backgroundColor: '#10b981', color: '#ffffff', fontSize: '12px', fontWeight: 800, cursor: 'pointer' }}
+                          >
+                            Create Installer Handoff
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (canOpenBilling) {
+                                window.location.href = `/invoice-builder?quotationId=${encodeURIComponent(job.id)}`;
+                                return;
+                              }
+                              toast.success('Marked ready for finance billing queue');
+                            }}
+                            style={{ border: 'none', borderRadius: '9px', padding: '9px 11px', backgroundColor: '#0f172a', color: '#ffffff', fontSize: '12px', fontWeight: 800, cursor: 'pointer' }}
+                          >
+                            {canOpenBilling ? 'Open Billing' : 'Ready For Billing'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Low Stock Alert Panel */}
+            <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertTriangle size={20} style={{ color: '#f59e0b' }} />
+                  <h2 style={{ fontSize: '18px', fontWeight: 900, margin: 0, color: '#0f172a' }}>Low Stock & Reorder Alerts</h2>
+                </div>
+                <span style={{ fontSize: '12px', fontWeight: 800, padding: '6px 10px', backgroundColor: '#fef3c7', color: '#b45309', borderRadius: '999px' }}>
                   Action Recommended
                 </span>
               </div>
 
               {products.filter((p) => p.quantity <= p.min_stock_level).length === 0 ? (
-                <div className="p-8 text-center text-slate-500">
-                  <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
+                <div style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>
+                  <CheckCircle size={40} style={{ color: '#10b981', margin: '0 auto 8px' }} />
                   All inventory stock levels are healthy!
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase text-xs">
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                    <thead style={{ backgroundColor: '#f8fafc', color: '#64748b', textTransform: 'uppercase', fontSize: '11px' }}>
                       <tr>
-                        <th className="px-4 py-3 rounded-l-lg">Product Name</th>
-                        <th className="px-4 py-3">Category</th>
-                        <th className="px-4 py-3">Current Stock</th>
-                        <th className="px-4 py-3">Min Threshold</th>
-                        <th className="px-4 py-3 rounded-r-lg">Status</th>
+                        <th style={{ padding: '12px' }}>Product Name</th>
+                        <th style={{ padding: '12px' }}>Category</th>
+                        <th style={{ padding: '12px' }}>Current Stock</th>
+                        <th style={{ padding: '12px' }}>Min Threshold</th>
+                        <th style={{ padding: '12px' }}>Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    <tbody>
                       {products
                         .filter((p) => p.quantity <= p.min_stock_level)
                         .map((prod) => (
-                          <tr key={prod.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                            <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{prod.product_name}</td>
-                            <td className="px-4 py-3 text-slate-500">{prod.category_name || 'Unassigned'}</td>
-                            <td className="px-4 py-3 font-bold text-amber-600">{prod.quantity}</td>
-                            <td className="px-4 py-3 text-slate-500">{prod.min_stock_level}</td>
-                            <td className="px-4 py-3">
+                          <tr key={prod.id}>
+                            <td style={{ padding: '12px', borderTop: '1px solid #f1f5f9', fontWeight: 800, color: '#0f172a' }}>{prod.product_name}</td>
+                            <td style={{ padding: '12px', borderTop: '1px solid #f1f5f9', color: '#64748b' }}>{prod.category_name || 'Unassigned'}</td>
+                            <td style={{ padding: '12px', borderTop: '1px solid #f1f5f9', fontWeight: 900, color: '#d97706' }}>{prod.quantity}</td>
+                            <td style={{ padding: '12px', borderTop: '1px solid #f1f5f9', color: '#64748b' }}>{prod.min_stock_level}</td>
+                            <td style={{ padding: '12px', borderTop: '1px solid #f1f5f9' }}>
                               {prod.quantity === 0 ? (
-                                <span className="px-2.5 py-1 text-xs font-semibold bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 rounded-full">
+                                <span style={{ padding: '5px 9px', fontSize: '11px', fontWeight: 800, backgroundColor: '#ffe4e6', color: '#be123c', borderRadius: '999px' }}>
                                   OUT OF STOCK
                                 </span>
                               ) : (
-                                <span className="px-2.5 py-1 text-xs font-semibold bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 rounded-full">
+                                <span style={{ padding: '5px 9px', fontSize: '11px', fontWeight: 800, backgroundColor: '#fef3c7', color: '#b45309', borderRadius: '999px' }}>
                                   LOW STOCK
                                 </span>
                               )}
@@ -761,64 +1031,61 @@ export default function Inventory() {
           </div>
 
           {/* Products Table */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 uppercase text-xs border-b border-slate-200 dark:border-slate-800">
+          <div style={tableWrapStyle}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={tableStyle}>
+                <thead>
                   <tr>
-                    <th className="px-6 py-4">Product Name</th>
-                    <th className="px-6 py-4">Category</th>
-                    <th className="px-6 py-4">Type</th>
-                    <th className="px-6 py-4">Tracking</th>
-                    <th className="px-6 py-4">In Stock</th>
-                    <th className="px-6 py-4">Unit Price</th>
-                    <th className="px-6 py-4">Actions</th>
+                    <th style={thStyle}>Product Name</th>
+                    <th style={thStyle}>Category</th>
+                    <th style={thStyle}>Type</th>
+                    <th style={thStyle}>Tracking</th>
+                    <th style={thStyle}>In Stock</th>
+                    <th style={thStyle}>Unit Price</th>
+                    <th style={thStyle}>Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody>
                   {filteredProducts.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                      <td colSpan={7} style={{ ...tdStyle, padding: '44px 14px', textAlign: 'center', color: '#64748b' }}>
                         No products match your search/filters.
                       </td>
                     </tr>
                   ) : (
                     filteredProducts.map((prod) => (
-                      <tr key={prod.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition">
-                        <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">
-                          {prod.product_name}
-                          {prod.description && <div className="text-xs font-normal text-slate-400">{prod.description}</div>}
+                      <tr key={prod.id}>
+                        <td style={{ ...tdStyle, fontWeight: 900, color: '#0f172a' }}>
+                          <div>{prod.product_name}</div>
+                          {prod.description && <div style={{ marginTop: '3px', color: '#94a3b8', fontSize: '12px', fontWeight: 500 }}>{prod.description}</div>}
                         </td>
-                        <td className="px-6 py-4 text-slate-600 dark:text-slate-300">
-                          <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-medium">
+                        <td style={tdStyle}>
+                          <span style={chipStyle('slate')}>
                             {prod.category_name || 'General'}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded text-xs font-semibold">
+                        <td style={tdStyle}>
+                          <span style={chipStyle('indigo')}>
                             {prod.product_type}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded text-xs font-semibold">
+                        <td style={tdStyle}>
+                          <span style={chipStyle('emerald')}>
                             {prod.tracking_type}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td style={tdStyle}>
                           <span
-                            className={`font-bold ${
-                              prod.quantity === 0
-                                ? 'text-rose-600'
-                                : prod.quantity <= prod.min_stock_level
-                                ? 'text-amber-600'
-                                : 'text-emerald-600'
-                            }`}
+                            style={{
+                              fontWeight: 900,
+                              color: prod.quantity === 0 ? '#e11d48' : prod.quantity <= prod.min_stock_level ? '#d97706' : '#059669',
+                            }}
                           >
                             {prod.quantity}
                           </span>
                         </td>
-                        <td className="px-6 py-4 font-medium">{formatCurrency(prod.unit_price)}</td>
-                        <td className="px-6 py-4">
+                        <td style={{ ...tdStyle, fontWeight: 800 }}>{formatCurrency(prod.unit_price)}</td>
+                        <td style={tdStyle}>
                           <button
                             onClick={async () => {
                               if (confirm(`Delete product ${prod.product_name}?`)) {
@@ -831,9 +1098,10 @@ export default function Inventory() {
                                 }
                               }
                             }}
-                            className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-lg transition"
+                            style={{ border: '1px solid #fecdd3', backgroundColor: '#fff1f2', color: '#e11d48', borderRadius: '9px', padding: '8px', cursor: 'pointer' }}
+                            aria-label={`Delete ${prod.product_name}`}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 size={16} />
                           </button>
                         </td>
                       </tr>
@@ -848,24 +1116,24 @@ export default function Inventory() {
 
       {/* TAB 3: SERIALS */}
       {activeTab === 'serials' && (
-        <div className="space-y-4">
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
-            <div className="relative w-full md:w-80">
-              <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={toolbarStyle}>
+            <div style={searchWrapStyle}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
               <input
                 type="text"
                 placeholder="Search serial / IMEI / product..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none"
+                style={{ ...inputStyle, paddingLeft: '38px' }}
               />
             </div>
 
-            <div className="flex items-center gap-3">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <select
                 value={selectedSerialStatus}
                 onChange={(e) => setSelectedSerialStatus(e.target.value)}
-                className="px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none"
+                style={selectStyle}
               >
                 <option value="">All Serial Statuses</option>
                 <option value="AVAILABLE">AVAILABLE</option>
@@ -877,55 +1145,55 @@ export default function Inventory() {
 
               <button
                 onClick={() => setShowAddSerialModal(true)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold"
+                style={primaryButtonStyle}
               >
-                <Plus className="w-4 h-4" /> + Log Serial
+                <Plus size={16} /> Log Serial / IMEI
               </button>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 uppercase text-xs border-b border-slate-200 dark:border-slate-800">
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
                 <tr>
-                  <th className="px-6 py-4">Product</th>
-                  <th className="px-6 py-4">Serial No</th>
-                  <th className="px-6 py-4">IMEI</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4">Location</th>
-                  <th className="px-6 py-4">Actions</th>
+                  <th style={thStyle}>Product</th>
+                  <th style={thStyle}>Serial No</th>
+                  <th style={thStyle}>IMEI</th>
+                  <th style={thStyle}>Status</th>
+                  <th style={thStyle}>Location</th>
+                  <th style={thStyle}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody>
                 {filteredItems.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                    <td colSpan={6} style={{ ...tdStyle, padding: '44px 14px', textAlign: 'center', color: '#64748b' }}>
                       No serial items found.
                     </td>
                   </tr>
                 ) : (
                   filteredItems.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                      <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{item.product_name}</td>
-                      <td className="px-6 py-4 font-mono text-xs">{item.serial_number || 'N/A'}</td>
-                      <td className="px-6 py-4 font-mono text-xs">{item.imei || 'N/A'}</td>
-                      <td className="px-6 py-4">
+                    <tr key={item.id}>
+                      <td style={{ ...tdStyle, fontWeight: 900, color: '#0f172a' }}>{item.product_name}</td>
+                      <td style={{ ...tdStyle, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12px' }}>{item.serial_number || 'N/A'}</td>
+                      <td style={{ ...tdStyle, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12px' }}>{item.imei || 'N/A'}</td>
+                      <td style={tdStyle}>
                         <span
-                          className={`px-2.5 py-1 text-xs font-semibold rounded-full ${
+                          style={chipStyle(
                             item.current_status === 'AVAILABLE'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                              ? 'emerald'
                               : item.current_status === 'INSTALLED'
-                              ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300'
+                              ? 'indigo'
                               : item.current_status === 'DAMAGED'
-                              ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                          }`}
+                              ? 'rose'
+                              : 'amber',
+                          )}
                         >
                           {item.current_status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-slate-500">{item.location || 'Warehouse Main'}</td>
-                      <td className="px-6 py-4">
+                      <td style={{ ...tdStyle, color: '#64748b' }}>{item.location || 'Warehouse Main'}</td>
+                      <td style={tdStyle}>
                         <select
                           value={item.current_status}
                           onChange={async (e) => {
@@ -937,7 +1205,7 @@ export default function Inventory() {
                               toast.error('Failed to update status');
                             }
                           }}
-                          className="px-2 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs"
+                          style={{ ...selectStyle, minWidth: '140px', padding: '8px 10px', fontSize: '12px' }}
                         >
                           <option value="AVAILABLE">AVAILABLE</option>
                           <option value="ALLOCATED">ALLOCATED</option>
@@ -955,57 +1223,363 @@ export default function Inventory() {
         </div>
       )}
 
+      {/* TAB 4: STOCK LEDGER */}
+      {activeTab === 'ledger' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ ...toolbarStyle, alignItems: 'stretch' }}>
+            <div style={{ flex: '1 1 420px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.06em', color: '#2563eb', textTransform: 'uppercase', marginBottom: '6px' }}>
+                Live Stock Movement Ledger
+              </div>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 900, color: '#0f172a' }}>
+                Stock In, Stock Out, Returns & Serial Status History
+              </h2>
+              <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: '13px' }}>
+                Purchase orders, issued invoices, serial creation, installation and replacement actions appear here as audit-ready inventory history.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ ...searchWrapStyle, flex: '1 1 280px' }}>
+                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                  type="text"
+                  placeholder="Search product, serial, reference, notes..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={{ ...inputStyle, paddingLeft: '38px' }}
+                />
+              </div>
+              <select value={selectedMovementType} onChange={(e) => setSelectedMovementType(e.target.value)} style={selectStyle}>
+                <option value="">All movement types</option>
+                <option value="STOCK_IN">Stock In</option>
+                <option value="STOCK_OUT">Stock Out</option>
+                <option value="TRANSFER">Transfer / Adjustment</option>
+                <option value="RETURN">Return</option>
+              </select>
+              <button onClick={loadData} style={{ ...primaryButtonStyle, backgroundColor: '#2563eb' }}>
+                <RefreshCw size={16} /> Refresh Ledger
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+            {[
+              ['Stock In', movements.filter((m) => m.movement_type === 'STOCK_IN').reduce((sum, m) => sum + Number(m.quantity || 0), 0), 'emerald'],
+              ['Stock Out', movements.filter((m) => m.movement_type === 'STOCK_OUT').reduce((sum, m) => sum + Number(m.quantity || 0), 0), 'rose'],
+              ['Returns', movements.filter((m) => m.movement_type === 'RETURN').reduce((sum, m) => sum + Number(m.quantity || 0), 0), 'amber'],
+              ['Ledger Records', filteredMovements.length, 'indigo'],
+            ].map(([label, value, tone]) => (
+              <div key={label as string} style={{ ...cardStyle, padding: '16px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 900, color: '#64748b', textTransform: 'uppercase' }}>{label}</div>
+                <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '26px', fontWeight: 900, color: '#0f172a' }}>{value}</span>
+                  <span style={chipStyle(tone as any)}>Live</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Date</th>
+                  <th style={thStyle}>Movement</th>
+                  <th style={thStyle}>Product</th>
+                  <th style={thStyle}>Serial / IMEI</th>
+                  <th style={thStyle}>Qty</th>
+                  <th style={thStyle}>Reference</th>
+                  <th style={thStyle}>Notes</th>
+                  <th style={thStyle}>By</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMovements.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ ...tdStyle, padding: '44px 14px', textAlign: 'center', color: '#64748b' }}>
+                      No stock ledger movements found yet. Create a PO, invoice, serial, installation or status update to start the trail.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredMovements.map((movement) => (
+                    <tr key={movement.id}>
+                      <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{formatDate(movement.created_at)}</td>
+                      <td style={tdStyle}>
+                        <span
+                          style={chipStyle(
+                            movement.movement_type === 'STOCK_IN'
+                              ? 'emerald'
+                              : movement.movement_type === 'STOCK_OUT'
+                              ? 'rose'
+                              : movement.movement_type === 'RETURN'
+                              ? 'amber'
+                              : 'indigo',
+                          )}
+                        >
+                          {movement.movement_type.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td style={{ ...tdStyle, fontWeight: 900, color: '#0f172a' }}>{movement.product_name || 'Product not linked'}</td>
+                      <td style={{ ...tdStyle, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12px' }}>
+                        {movement.serial_number || movement.imei || '-'}
+                      </td>
+                      <td style={{ ...tdStyle, fontWeight: 900 }}>{movement.quantity || 1}</td>
+                      <td style={tdStyle}>
+                        <div style={{ fontWeight: 800, color: '#334155' }}>{movement.reference_type || 'Manual'}</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>{movement.reference_id || '-'}</div>
+                      </td>
+                      <td style={{ ...tdStyle, color: '#475569', maxWidth: 280 }}>{movement.notes || '-'}</td>
+                      <td style={{ ...tdStyle, color: '#64748b' }}>{movement.created_by_email || 'System'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: PURCHASE ORDERS */}
+      {activeTab === 'po' && (
+        <div style={{ display: 'grid', gap: '18px' }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #dbeafe', padding: '20px', boxShadow: '0 6px 18px rgba(37,99,235,0.06)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.06em', color: '#2563eb', textTransform: 'uppercase' }}>Purchase Workflow Example</div>
+                <h2 style={{ margin: '4px 0', fontSize: '20px', fontWeight: 900, color: '#0f172a' }}>Stock-In starts here</h2>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '13px', lineHeight: 1.5 }}>
+                  Example: ESSPL needs 200 cameras. Purchasing creates a PO for a vendor, then stock receipt records the delivered serials/items.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPOModal(true)}
+                style={{ border: 'none', borderRadius: '10px', padding: '10px 14px', backgroundColor: '#2563eb', color: '#ffffff', fontWeight: 800, cursor: 'pointer' }}
+              >
+                + Create Purchase Order
+              </button>
+            </div>
+          </div>
+
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead style={{ backgroundColor: '#f8fafc', color: '#64748b', textTransform: 'uppercase', fontSize: '11px' }}>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>PO Number</th>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Vendor</th>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>PO Date</th>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Expected</th>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Items</th>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Status</th>
+                  <th style={{ textAlign: 'right', padding: '12px' }}>Amount</th>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Next Step</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(purchaseOrders.length ? purchaseOrders : [{
+                  id: 'sample-po',
+                  po_number: 'PO-SAMPLE-200-CAM',
+                  vendor_name: 'Demo Vendor - CCTV Supplier',
+                  item_count: 2,
+                  status: 'DRAFT / Pending Approval',
+                  total_amount: 1500000,
+                  order_date: new Date().toISOString(),
+                  expected_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                  notes: 'Sample only: approve PO, then create vendor stock receipt.',
+                } as PurchaseOrder & { expected_delivery_date?: string }]).map((po) => (
+                  <tr key={po.id}>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', fontWeight: 900, color: '#0f172a' }}>{po.po_number}</td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#334155' }}>{po.vendor_name || 'Vendor not selected'}</td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#334155' }}>{formatDate(po.order_date)}</td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#64748b' }}>{formatDate((po as PurchaseOrder & { expected_delivery_date?: string }).expected_delivery_date)}</td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#64748b' }}>{po.item_count || 0} item lines</td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9' }}>
+                      <span style={{ padding: '5px 9px', borderRadius: 999, backgroundColor: '#fef3c7', color: '#b45309', fontSize: '11px', fontWeight: 900 }}>{po.status}</span>
+                    </td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', textAlign: 'right', fontWeight: 900 }}>{formatCurrency(po.total_amount)}</td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#2563eb', fontWeight: 800 }}>Receive vendor stock</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: VENDOR STOCK RECEIPTS */}
+      {activeTab === 'invoices' && (
+        <div style={{ display: 'grid', gap: '18px' }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #bbf7d0', padding: '20px', boxShadow: '0 6px 18px rgba(16,185,129,0.06)' }}>
+            <div style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.06em', color: '#059669', textTransform: 'uppercase' }}>Vendor Stock Receipt Example</div>
+            <h2 style={{ margin: '4px 0', fontSize: '20px', fontWeight: 900, color: '#0f172a' }}>GRN / Stock Receipt fills inventory</h2>
+            <p style={{ margin: 0, color: '#64748b', fontSize: '13px', lineHeight: 1.5 }}>
+              After PO approval, vendor delivers stock. This tab tracks vendor invoice/receipt and confirms items are added to inventory serial/product stock.
+            </p>
+          </div>
+
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead style={{ backgroundColor: '#f8fafc', color: '#64748b', textTransform: 'uppercase', fontSize: '11px' }}>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Receipt / Invoice</th>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Party</th>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Items</th>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Status</th>
+                  <th style={{ textAlign: 'right', padding: '12px' }}>Amount</th>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Inventory Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(invoices.length ? invoices : [{
+                  id: 'sample-receipt',
+                  invoice_number: 'GRN-SAMPLE-001',
+                  customer_name: 'Demo Vendor - CCTV Supplier',
+                  status: 'RECEIVED',
+                  total_amount: 1500000,
+                  item_count: 200,
+                  notes: 'Sample: 200 cameras received and available for stock assignment.',
+                } as Invoice]).map((invoice) => (
+                  <tr key={invoice.id}>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', fontWeight: 900, color: '#0f172a' }}>{invoice.invoice_number}</td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#334155' }}>{invoice.customer_name || 'Vendor / Supplier'}</td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#64748b' }}>{invoice.item_count || 0} received</td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9' }}>
+                      <span style={{ padding: '5px 9px', borderRadius: 999, backgroundColor: '#dcfce7', color: '#047857', fontSize: '11px', fontWeight: 900 }}>{invoice.status}</span>
+                    </td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', textAlign: 'right', fontWeight: 900 }}>{formatCurrency(invoice.total_amount)}</td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#059669', fontWeight: 800 }}>Stock available for serial assignment</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: FIELD DISPATCHES */}
+      {activeTab === 'installations' && (
+        <div style={{ display: 'grid', gap: '18px' }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #ddd6fe', padding: '20px', boxShadow: '0 6px 18px rgba(139,92,246,0.06)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.06em', color: '#7c3aed', textTransform: 'uppercase' }}>Installer / Field Dispatch Example</div>
+                <h2 style={{ margin: '4px 0', fontSize: '20px', fontWeight: 900, color: '#0f172a' }}>Stock goes to installer, then billing opens</h2>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '13px', lineHeight: 1.5 }}>
+                  Once serials/items are assigned, inventory creates installer handoff. Installer completes job, unused items return, and finance uses final usage summary for invoice.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowInstallationModal(true)}
+                style={{ border: 'none', borderRadius: '10px', padding: '10px 14px', backgroundColor: '#7c3aed', color: '#ffffff', fontWeight: 800, cursor: 'pointer' }}
+              >
+                + Create Field Dispatch
+              </button>
+            </div>
+          </div>
+
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead style={{ backgroundColor: '#f8fafc', color: '#64748b', textTransform: 'uppercase', fontSize: '11px' }}>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Dispatch / Installation</th>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Client</th>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Serial / Vehicle</th>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Technician</th>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Status</th>
+                  <th style={{ textAlign: 'left', padding: '12px' }}>Next Step</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(installations.length ? installations : [{
+                  id: 'sample-dispatch',
+                  installation_no: 'DISPATCH-SAMPLE-001',
+                  customer_id: 'sample',
+                  customer_name: 'Habib Bank Limited',
+                  vehicle_number: 'Branch DHA / Ticket TKT-088',
+                  tracker_serial: 'CAM-SERIAL-001',
+                  technician_name: 'Demo Installer',
+                  status: 'READY_FOR_INSTALLATION',
+                  installation_date: new Date().toISOString(),
+                  notes: 'Sample: installer receives stock and returns installed/unused item summary.',
+                } as TrackerInstallation]).map((installation) => (
+                  <tr key={installation.id}>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', fontWeight: 900, color: '#0f172a' }}>{installation.installation_no}</td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#334155' }}>{installation.customer_name || 'Client'}</td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#64748b' }}>{installation.tracker_serial || installation.vehicle_number || 'Serial pending'}</td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#334155' }}>{installation.technician_name || 'Installer pending'}</td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9' }}>
+                      <span style={{ padding: '5px 9px', borderRadius: 999, backgroundColor: '#ede9fe', color: '#6d28d9', fontSize: '11px', fontWeight: 900 }}>{installation.status}</span>
+                    </td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#7c3aed', fontWeight: 800 }}>Send final usage to finance billing</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* TAB 6: CUSTOMERS & SPECIAL INVOICE DRAFTS */}
       {activeTab === 'customers' && (
-        <div className="space-y-4">
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-            <h3 className="text-base font-bold">Customer Registry & Special Invoice Draft Templates</h3>
-            <button onClick={() => setShowCustomerModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold">
-              <Plus className="w-4 h-4" /> + Register Customer
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={toolbarStyle}>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.05em', color: '#2563eb', textTransform: 'uppercase' }}>
+                Customer Master
+              </div>
+              <h3 style={{ margin: '4px 0 0', fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>
+                Customer Registry & Special Invoice Draft Templates
+              </h3>
+            </div>
+            <button
+              onClick={() => setShowCustomerModal(true)}
+              style={{ ...primaryButtonStyle, backgroundColor: '#2563eb', boxShadow: '0 8px 18px rgba(37,99,235,0.18)' }}
+            >
+              <Plus size={16} /> Register Customer
             </button>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 uppercase text-xs border-b border-slate-200 dark:border-slate-800">
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
                 <tr>
-                  <th className="px-6 py-4">Customer / Company</th>
-                  <th className="px-6 py-4">Contact Person</th>
-                  <th className="px-6 py-4">Phone / Email</th>
-                  <th className="px-6 py-4">Vehicles</th>
-                  <th className="px-6 py-4">Special Invoice Draft Actions</th>
+                  <th style={thStyle}>Customer / Company</th>
+                  <th style={thStyle}>Contact Person</th>
+                  <th style={thStyle}>Phone / Email</th>
+                  <th style={thStyle}>Vehicles</th>
+                  <th style={thStyle}>Special Invoice Draft Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody>
                 {customers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                    <td colSpan={5} style={{ ...tdStyle, padding: '44px 14px', textAlign: 'center', color: '#64748b' }}>
                       No customers registered yet.
                     </td>
                   </tr>
                 ) : (
                   customers.map((c) => (
-                    <tr key={c.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                      <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{c.customer_name}</td>
-                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{c.contact_person || 'N/A'}</td>
-                      <td className="px-6 py-4 text-xs font-mono">{c.phone || c.email || 'N/A'}</td>
-                      <td className="px-6 py-4">
-                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded font-semibold text-xs">
+                    <tr key={c.id}>
+                      <td style={{ ...tdStyle, fontWeight: 900, color: '#0f172a' }}>{c.customer_name}</td>
+                      <td style={tdStyle}>{c.contact_person || 'N/A'}</td>
+                      <td style={{ ...tdStyle, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12px' }}>{c.phone || c.email || 'N/A'}</td>
+                      <td style={tdStyle}>
+                        <span style={chipStyle('slate')}>
                           {c.vehicle_count || 0} Vehicles
                         </span>
                       </td>
-                      <td className="px-6 py-4 flex items-center gap-2">
+                      <td style={{ ...tdStyle, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <button
                           onClick={() => handleOpenCustomerDraftModal(c)}
-                          className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 rounded-lg text-xs font-semibold transition"
+                          style={{ border: '1px solid #c7d2fe', backgroundColor: '#eef2ff', color: '#4338ca', borderRadius: '9px', padding: '8px 10px', fontSize: '12px', fontWeight: 900, cursor: 'pointer' }}
                         >
                           Config Special Draft
                         </button>
                         <button
                           onClick={() => handleGenerateDraftInvoice(c)}
-                          className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-semibold shadow hover:bg-emerald-500 transition"
+                          style={{ border: 'none', backgroundColor: '#10b981', color: '#ffffff', borderRadius: '9px', padding: '8px 10px', fontSize: '12px', fontWeight: 900, cursor: 'pointer', boxShadow: '0 6px 14px rgba(16,185,129,0.16)' }}
                         >
-                          + Spawn Draft Invoice
+                          Spawn Draft Invoice
                         </button>
                       </td>
                     </tr>
@@ -1137,6 +1711,123 @@ export default function Inventory() {
                 </button>
                 <button type="submit" style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>
                   Create Product
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CREATE PURCHASE ORDER */}
+      {showPOModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '16px' }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', padding: '28px', maxWidth: '620px', width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.25)', border: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', marginBottom: '6px' }}>Create Purchase Order</h3>
+            <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: '13px' }}>
+              Stock-in starts from this PO. Set PO date, expected delivery, vendor and item.
+            </p>
+            <form onSubmit={handleCreatePO} style={{ display: 'grid', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>PO Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={newPO.order_date}
+                    onChange={(e) => setNewPO({ ...newPO, order_date: e.target.value })}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Expected Delivery</label>
+                  <input
+                    type="date"
+                    value={newPO.expected_delivery_date}
+                    onChange={(e) => setNewPO({ ...newPO, expected_delivery_date: e.target.value })}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Vendor</label>
+                <select
+                  value={newPO.vendor_id}
+                  onChange={(e) => setNewPO({ ...newPO, vendor_id: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
+                >
+                  <option value="">Select vendor</option>
+                  {vendors.map((vendor) => (
+                    <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Product / Item *</label>
+                <select
+                  required
+                  value={newPO.product_id}
+                  onChange={(e) => {
+                    const product = products.find((item) => item.id === e.target.value);
+                    setNewPO({ ...newPO, product_id: e.target.value, unit_price: Number(product?.cost_price || product?.unit_price || 0) });
+                  }}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
+                >
+                  <option value="">Select product</option>
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>{product.product_name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Quantity *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={newPO.quantity}
+                    onChange={(e) => setNewPO({ ...newPO, quantity: Number(e.target.value) })}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Unit Price</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={newPO.unit_price}
+                    onChange={(e) => setNewPO({ ...newPO, unit_price: Number(e.target.value) })}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Total</label>
+                  <div style={{ padding: '11px 14px', borderRadius: '8px', border: '1px solid #dbeafe', backgroundColor: '#eff6ff', color: '#1d4ed8', fontSize: '14px', fontWeight: 900 }}>
+                    {formatCurrency(newPO.quantity * newPO.unit_price)}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>Notes</label>
+                <textarea
+                  value={newPO.notes}
+                  onChange={(e) => setNewPO({ ...newPO, notes: e.target.value })}
+                  rows={3}
+                  placeholder="Approval note, vendor terms, delivery instruction..."
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#0f172a', fontSize: '14px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
+                <button type="button" onClick={() => setShowPOModal(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: '600', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button type="submit" style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#2563eb', color: '#fff', fontWeight: '800', cursor: 'pointer' }}>
+                  Save Purchase Order
                 </button>
               </div>
             </form>

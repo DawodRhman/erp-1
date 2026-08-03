@@ -723,17 +723,6 @@ export default function Dashboard() {
   const canAddEmployee = useAuthStore((state) => state.hasPermission("employees:write"));
   const navigate = useNavigate();
 
-  // Role-based redirect check
-  if (activeRole === "employee") {
-    return <Navigate to="/my-dashboard" replace />;
-  }
-  if (activeRole === "branch_hr") {
-    return <Navigate to="/hr/branch-dashboard" replace />;
-  }
-  if (activeRole === "head_hr") {
-    return <Navigate to="/attendance-head-review" replace />;
-  }
-
   const [selectedBranch, setSelectedBranch] = useState<string>("All");
 
   const branches = useMemo(() => {
@@ -1135,6 +1124,17 @@ export default function Dashboard() {
     });
     return list.sort((a, b) => a.daysUntil - b.daysUntil);
   }, [filteredEmployees, employees, metrics]);
+
+  // Keep role redirects after hooks so React hook order stays stable.
+  if (activeRole === "employee") {
+    return <Navigate to="/my-dashboard" replace />;
+  }
+  if (activeRole === "branch_hr") {
+    return <Navigate to="/hr/branch-dashboard" replace />;
+  }
+  if (activeRole === "head_hr") {
+    return <Navigate to="/attendance-head-review" replace />;
+  }
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (

@@ -59,7 +59,13 @@ export function isMustChangePasswordError(error: any) {
 function routeToChangePassword() {
   if (window.location.pathname === "/change-password") return;
   window.history.replaceState({}, "", "/change-password");
-  window.dispatchEvent(new PopStateEvent("popstate"));
+  window.dispatchEvent(new Event("popstate"));
+}
+
+function routeToLogin() {
+  if (window.location.pathname === "/login") return;
+  window.history.replaceState({}, "", "/login");
+  window.dispatchEvent(new Event("popstate"));
 }
 
 // Apply identity header injection to both clients so silent logouts are also tracked
@@ -104,9 +110,7 @@ apiClient.interceptors.response.use(
     if (status === 401) {
       // Clear auth state and redirect
       useAuthStore.getState().logout();
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
-      }
+      routeToLogin();
     } else if (status === 403 && errorCode === "MUST_CHANGE_PASSWORD") {
       useAuthStore.getState().setMustChangePassword(true);
       routeToChangePassword();

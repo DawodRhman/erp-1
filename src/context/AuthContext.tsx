@@ -18,6 +18,10 @@ export interface User {
     | "department_head"
     | "hr_manager"
     | "hr_executive"
+    | "csr_officer"
+    | "inventory_officer"
+    | "finance_officer"
+    | "inv_fin_admin"
     | "employee";
   employeeId?: string;
   branch?: string | null;
@@ -39,6 +43,10 @@ interface AuthContextType {
     | "department_head"
     | "hr_manager"
     | "hr_executive"
+    | "csr_officer"
+    | "inventory_officer"
+    | "finance_officer"
+    | "inv_fin_admin"
     | "employee";
   loading: boolean;
   login: (email: string, password: string) => Promise<LoginResult>;
@@ -52,6 +60,10 @@ interface AuthContextType {
       | "department_head"
       | "hr_manager"
       | "hr_executive"
+      | "csr_officer"
+      | "inventory_officer"
+      | "finance_officer"
+      | "inv_fin_admin"
       | "employee",
   ) => void;
 }
@@ -86,6 +98,11 @@ export function mapRole(backendRole: string = ""): User["role"] {
   if (normalizedKey === "hr_manager" || normalizedKey === "hr")
     return "hr_manager";
   if (normalizedKey === "hr_executive") return "hr_executive";
+  if (normalizedKey === "csr_officer" || normalizedKey === "csr") return "csr_officer";
+  if (normalizedKey === "inventory_officer") return "inventory_officer";
+  if (normalizedKey === "finance_officer") return "finance_officer";
+  if (normalizedKey === "inv_fin_admin" || normalizedKey === "inventory_finance_admin")
+    return "inv_fin_admin";
   return "employee";
 }
 

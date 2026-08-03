@@ -1,6 +1,20 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarCheck, CalendarRange, LayoutGrid, Megaphone, ShieldCheck, Users, Wallet, AlertTriangle, MapPin } from "lucide-react";
+import {
+  CalendarCheck,
+  CalendarRange,
+  LayoutGrid,
+  Megaphone,
+  ShieldCheck,
+  Users,
+  Wallet,
+  AlertTriangle,
+  MapPin,
+  Package,
+  DollarSign,
+  GitBranch,
+  Calculator,
+} from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 type ModuleCard = {
@@ -33,6 +47,41 @@ const modules: ModuleCard[] = [
     to: "/employees",
     icon: Users,
     roles: ["super_admin", "hr"],
+  },
+  {
+    title: "CSR / CRM",
+    description: "Customers, leads, quotations and client approval handoff",
+    to: "/crm",
+    icon: Users,
+    roles: ["super_admin", "csr_officer"],
+  },
+  {
+    title: "Inventory Logistics",
+    description: "Stock, serials, dispatches, installers and returns",
+    to: "/inventory",
+    icon: Package,
+    roles: ["super_admin", "inventory_officer", "inv_fin_admin"],
+  },
+  {
+    title: "Finance & Client Billing",
+    description: "Accounts, invoice templates, summaries and payment ledger",
+    to: "/client-invoicing",
+    icon: DollarSign,
+    roles: ["super_admin", "finance_officer", "inv_fin_admin"],
+  },
+  {
+    title: "Invoice Builder",
+    description: "Client templates, editable rows, formulas, preview and saved drafts",
+    to: "/invoice-builder",
+    icon: Calculator,
+    roles: ["super_admin", "finance_officer", "inv_fin_admin"],
+  },
+  {
+    title: "Matrix Operations",
+    description: "End-to-end CSR, inventory, installer and finance workflow",
+    to: "/matrix-operations",
+    icon: GitBranch,
+    roles: ["super_admin", "csr_officer", "inventory_officer", "finance_officer", "inv_fin_admin"],
   },
   {
     title: "Payroll",

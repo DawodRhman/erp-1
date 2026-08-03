@@ -1,13 +1,4 @@
-import axios from 'axios';
-import { getApiBaseUrl } from '../config/apiConfig';
-
-const api = axios.create({
-  baseURL: getApiBaseUrl(),
-  withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+import { apiClient as api } from './apiClient';
 
 export interface InventorySummary {
   total_products: number;
@@ -22,6 +13,23 @@ export interface InventorySummary {
   total_invoices: number;
   pending_installations: number;
   active_complaints: number;
+  approved_csr_jobs?: number;
+  sent_csr_quotes?: number;
+}
+
+export interface InventoryWorkQueueJob {
+  id: string;
+  quotation_number: string;
+  customer_id?: string;
+  customer_name?: string;
+  price_tier?: string;
+  template_style?: string;
+  status: 'APPROVED' | 'IN_PROGRESS';
+  total_amount: number;
+  item_count: number;
+  total_requested_qty: number;
+  created_at: string;
+  updated_at?: string;
 }
 
 export interface ItemCategory {
@@ -62,6 +70,23 @@ export interface InventoryItem {
   created_at: string;
 }
 
+export interface InventoryMovement {
+  id: string;
+  product_id?: string;
+  product_name?: string;
+  inventory_item_id?: string;
+  serial_number?: string;
+  imei?: string;
+  movement_type: 'STOCK_IN' | 'STOCK_OUT' | 'TRANSFER' | 'RETURN';
+  quantity: number;
+  reference_type?: string;
+  reference_id?: string;
+  notes?: string;
+  created_by?: string;
+  created_by_email?: string;
+  created_at: string;
+}
+
 export interface Vendor {
   id: string;
   name: string;
@@ -99,6 +124,7 @@ export interface PurchaseOrder {
   status: string;
   total_amount: number;
   order_date: string;
+  expected_delivery_date?: string;
   notes?: string;
   item_count?: number;
 }
@@ -146,6 +172,11 @@ export const inventoryApi = {
     return res.data.data;
   },
 
+  getWorkQueue: async (): Promise<InventoryWorkQueueJob[]> => {
+    const res = await api.get('/inventory/work-queue');
+    return res.data.data;
+  },
+
   getCategories: async (): Promise<ItemCategory[]> => {
     const res = await api.get('/inventory/categories');
     return res.data.data;
@@ -181,6 +212,11 @@ export const inventoryApi = {
 
   getItems: async (params?: Record<string, any>): Promise<InventoryItem[]> => {
     const res = await api.get('/inventory/items', { params });
+    return res.data.data;
+  },
+
+  getMovements: async (params?: Record<string, any>): Promise<InventoryMovement[]> => {
+    const res = await api.get('/inventory/movements', { params });
     return res.data.data;
   },
 

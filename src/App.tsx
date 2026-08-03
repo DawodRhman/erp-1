@@ -45,9 +45,11 @@ const LeaveWalletHistory = lazy(() => import("./pages/LeaveWalletHistory"));
 const PenaltyLedger = lazy(() => import("./pages/PenaltyLedger"));
 const AnnouncementsFeed = lazy(() => import("./pages/AnnouncementsFeed"));
 const Directory = lazy(() => import("./pages/Directory"));
+const InventoryDashboard = lazy(() => import("./pages/InventoryDashboard"));
 const Inventory = lazy(() => import("./pages/Inventory"));
 const CRM = lazy(() => import("./pages/CRM"));
 const ClientInvoicing = lazy(() => import("./pages/ClientInvoicing"));
+const InvoiceBuilder = lazy(() => import("./pages/InvoiceBuilder"));
 const MatrixOperations = lazy(() => import("./pages/MatrixOperations"));
 const EmployeeWidgets = lazy(() => import("./pages/EmployeeWidgets"));
 const Calendar = lazy(() => import("./pages/Calendar"));
@@ -94,6 +96,48 @@ const EMPLOYEE_SELF_SERVICE_ROLES = [
   "hr_executive",
 ];
 
+const HR_WORKSPACE_ROLES = [
+  "super_admin",
+  "ceo",
+  "head_hr",
+  "branch_hr",
+  "department_hr",
+  "department_head",
+  "hr_manager",
+  "hr_executive",
+];
+
+const HR_WRITE_ROLES = [
+  "super_admin",
+  "head_hr",
+  "hr_manager",
+  "branch_hr",
+  "department_hr",
+  "hr_executive",
+];
+
+const HR_ADMIN_ROLES = ["super_admin", "head_hr", "hr_manager"];
+
+function getDefaultRouteForRole(activeRole: string) {
+  if (activeRole === "employee") return "/my-dashboard";
+  if (activeRole === "branch_hr") return "/hr/branch-dashboard";
+  if (activeRole === "head_hr") return "/attendance-head-review";
+  if (activeRole === "csr_officer") return "/crm";
+  if (activeRole === "inventory_officer") return "/inventory-dashboard";
+  if (activeRole === "finance_officer") return "/finance-dashboard";
+  if (activeRole === "inv_fin_admin") return "/inventory-dashboard";
+  if (
+    activeRole === "department_hr" ||
+    activeRole === "department_head" ||
+    activeRole === "ceo" ||
+    activeRole === "hr_manager" ||
+    activeRole === "hr_executive"
+  ) {
+    return "/dashboard";
+  }
+  return "/launchpad";
+}
+
 /**
  * 1. Protected Route Wrapper
  * Checks if user is logged in.
@@ -124,12 +168,7 @@ const ProtectedRoute = ({
   }
 
   if (!allowedRoles.includes(activeRole)) {
-    return (
-      <Navigate
-        to={activeRole === "employee" ? "/my-dashboard" : "/dashboard"}
-        replace
-      />
-    );
+    return <Navigate to={getDefaultRouteForRole(activeRole)} replace />;
   }
 
   if (
@@ -145,7 +184,7 @@ const ProtectedRoute = ({
     anyPermissions.length > 0 &&
     !anyPermissions.some((permission) => hasPermission(permission))
   ) {
-    return <Navigate to={activeRole === "employee" ? "/my-dashboard" : "/dashboard"} replace />;
+    return <Navigate to={getDefaultRouteForRole(activeRole)} replace />;
   }
 
   return <Outlet />;
@@ -162,23 +201,7 @@ function RootRedirect() {
     return <Navigate to="/change-password" />;
   }
 
-  // Route based on role to appropriate dashboard
-  if (activeRole === "employee") {
-    return <Navigate to="/my-dashboard" />;
-  } else if (activeRole === "branch_hr") {
-    return <Navigate to="/hr/branch-dashboard" />; // Branch HR sees branch-specific dashboard
-  } else if (activeRole === "department_hr") {
-    return <Navigate to="/dashboard" />; // Department HR sees filtered dashboard
-  } else if (activeRole === "department_head" || activeRole === "ceo") {
-    return <Navigate to="/dashboard" />;
-  } else if (activeRole === "head_hr") {
-    return <Navigate to="/attendance-head-review" />; // Head HR sees head office review
-  } else if (activeRole === "hr_manager" || activeRole === "hr_executive") {
-    return <Navigate to="/dashboard" />;
-  } else {
-    // super_admin
-    return <Navigate to="/launchpad" />;
-  }
+  return <Navigate to={getDefaultRouteForRole(activeRole)} />;
 }
 
 const App = () => (
@@ -215,6 +238,7 @@ const App = () => (
                     "inventory_officer",
                     "finance_officer",
                     "inv_fin_admin",
+                    "csr_officer",
                   ]}
                 />
               }
@@ -226,17 +250,46 @@ const App = () => (
                 >
                   <Route path="/launchpad" element={<Launchpad />} />
                 </Route>
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/crm" element={<CRM />} />
-                <Route path="/inventory" element={<Inventory />} />
-                <Route path="/client-invoicing" element={<ClientInvoicing />} />
-                <Route path="/matrix-operations" element={<MatrixOperations />} />
+                <Route element={<ProtectedRoute allowedRoles={HR_WORKSPACE_ROLES} />}>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/employees" element={<Employees />} />
+                  <Route path="/employees/:id" element={<EmployeeDetail />} />
+                  <Route path="/attendance" element={<Attendance />} />
+                  <Route path="/leave" element={<Leave />} />
+                  <Route path="/leave-wallet" element={<LeaveWalletHistory />} />
+                  <Route path="/penalty" element={<PenaltyLedger />} />
+                  <Route path="/penalty-ledger" element={<Navigate to="/penalty" replace />} />
+                  <Route path="/announcements" element={<AnnouncementsFeed />} />
+                  <Route path="/calendar" element={<Calendar />} />
+                </Route>
+                <Route
+                  element={<ProtectedRoute allowedRoles={["super_admin", "csr_officer"]} />}
+                >
+                  <Route path="/crm" element={<CRM />} />
+                </Route>
+                <Route
+                  element={<ProtectedRoute allowedRoles={["super_admin", "inventory_officer", "inv_fin_admin"]} />}
+                >
+                  <Route path="/inventory-dashboard" element={<InventoryDashboard />} />
+                  <Route path="/inventory" element={<Inventory />} />
+                </Route>
+                <Route
+                  element={<ProtectedRoute allowedRoles={["super_admin", "finance_officer", "inv_fin_admin"]} />}
+                >
+                  <Route path="/finance-dashboard" element={<ClientInvoicing />} />
+                  <Route path="/client-invoicing" element={<ClientInvoicing />} />
+                  <Route path="/invoice-builder" element={<InvoiceBuilder />} />
+                </Route>
+                <Route
+                  element={<ProtectedRoute allowedRoles={["super_admin", "csr_officer", "inventory_officer", "finance_officer", "inv_fin_admin"]} />}
+                >
+                  <Route path="/matrix-operations" element={<MatrixOperations />} />
+                </Route>
                 <Route path="/directory" element={<Directory />} />
-                <Route path="/employees" element={<Employees />} />
                 <Route
                   element={
                     <ProtectedRoute
-                      allowedRoles={["super_admin", "head_hr", "hr_manager", "branch_hr", "department_hr", "hr_executive"]}
+                      allowedRoles={HR_WRITE_ROLES}
                       requiredPermissions={["employees:write"]}
                     />
                   }
@@ -251,47 +304,39 @@ const App = () => (
                     }
                   />
                 </Route>
-                <Route path="/employees/:id" element={<EmployeeDetail />} />
-                <Route path="/attendance" element={<Attendance />} />
                 <Route
                   element={
                     <ProtectedRoute
-                      allowedRoles={["super_admin", "head_hr", "hr_manager", "branch_hr", "department_hr", "department_head", "hr_executive"]}
+                      allowedRoles={HR_WORKSPACE_ROLES}
                     />
                   }
                 >
                   <Route path="/duty-roster" element={<DutyRoster />} />
                 </Route>
-                <Route path="/leave" element={<Leave />} />
                 <Route
-                  element={<ProtectedRoute allowedRoles={["super_admin", "head_hr", "hr_manager"]} />}
+                  element={<ProtectedRoute allowedRoles={HR_ADMIN_ROLES} />}
                 >
                   <Route path="/payroll" element={<Payroll />} />
                 </Route>
                 <Route
                   element={
                     <ProtectedRoute
-                      allowedRoles={["super_admin", "head_hr", "hr_manager", "branch_hr", "department_hr", "hr_executive"]}
+                      allowedRoles={HR_WRITE_ROLES}
                     />
                   }
                 >
                   <Route path="/promotions" element={<Promotions />} />
                 </Route>
-                <Route path="/leave-wallet" element={<LeaveWalletHistory />} />
-                <Route path="/penalty" element={<PenaltyLedger />} />
-                <Route path="/penalty-ledger" element={<Navigate to="/penalty" replace />} />
-                <Route path="/announcements" element={<AnnouncementsFeed />} />
                 <Route
                   element={
                     <ProtectedRoute
-                      allowedRoles={["super_admin", "head_hr", "hr_manager", "branch_hr", "department_hr", "department_head", "hr_executive"]}
+                      allowedRoles={HR_WORKSPACE_ROLES}
                       anyPermissions={["announcements:write", "announcements:department_write"]}
                     />
                   }
                 >
                   <Route path="/announcements/manage" element={<AnnouncementsSettings />} />
                 </Route>
-                <Route path="/calendar" element={<Calendar />} />
 
                 {/* HR Workflow Pages: Branch HR executes, SuperAdmin watches */}
                 <Route
@@ -320,28 +365,36 @@ const App = () => (
                     element={<HeadOfficeHR />}
                   />
                 </Route>
-                <Route path="/overview" element={<OverviewPage />} />
-                <Route path="/saved-reports" element={<SavedReports />} />
                 <Route
-                  element={<ProtectedRoute allowedRoles={["super_admin", "head_hr", "hr_manager"]} />}
+                  element={<ProtectedRoute allowedRoles={["super_admin", "head_hr"]} />}
+                >
+                  <Route path="/overview" element={<OverviewPage />} />
+                  <Route path="/saved-reports" element={<SavedReports />} />
+                </Route>
+                <Route
+                  element={<ProtectedRoute allowedRoles={HR_ADMIN_ROLES} />}
                 >
                   <Route path="/leave-capacity" element={<LeaveCapacity />} />
                 </Route>
                 <Route
-                  element={<ProtectedRoute allowedRoles={["super_admin", "head_hr", "hr_manager"]} />}
+                  element={<ProtectedRoute allowedRoles={HR_ADMIN_ROLES} />}
                 >
                   <Route path="/penalty-workflow" element={<PenaltyWorkflow />} />
                 </Route>
 
                 {/* Final Report & Oversight */}
                 <Route
-                  path="/attendance-report"
-                  element={<AttendanceReport />}
-                />
+                  element={<ProtectedRoute allowedRoles={["super_admin", "head_hr"]} />}
+                >
+                  <Route
+                    path="/attendance-report"
+                    element={<AttendanceReport />}
+                  />
+                </Route>
 
                 {/* Configuration Pages */}
                 <Route
-                  element={<ProtectedRoute allowedRoles={["super_admin", "head_hr", "hr_manager"]} />}
+                  element={<ProtectedRoute allowedRoles={HR_ADMIN_ROLES} />}
                 >
                   <Route path="/settings/departments" element={<DepartmentsPage />} />
                   <Route path="/settings/designations" element={<DesignationsPage />} />
@@ -371,7 +424,7 @@ const App = () => (
                 {/* SuperAdmin + Head HR Only */}
                 <Route
                   element={
-                    <ProtectedRoute allowedRoles={["super_admin", "head_hr"]} />
+                    <ProtectedRoute allowedRoles={HR_ADMIN_ROLES} />
                   }
                 >
                   <Route path="/accounts" element={<Accounts />} />

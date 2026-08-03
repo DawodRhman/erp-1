@@ -7,6 +7,7 @@ import { inventoryApi } from '../services/inventoryService';
 vi.mock('../services/inventoryService', () => ({
   inventoryApi: {
     getSummary: vi.fn(),
+    getWorkQueue: vi.fn(),
     getCategories: vi.fn(),
     getProducts: vi.fn(),
     getItems: vi.fn(),
@@ -19,6 +20,13 @@ vi.mock('../services/inventoryService', () => ({
     createProduct: vi.fn(),
     createCategory: vi.fn(),
   },
+}));
+
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({
+    activeRole: 'super_admin',
+    user: { role: 'super_admin', username: 'superadmin@esspl.com.pk' },
+  }),
 }));
 
 vi.mock('sonner', () => ({
@@ -45,6 +53,7 @@ describe('Inventory Page', () => {
       pending_installations: 2,
       active_complaints: 1,
     });
+    vi.mocked(inventoryApi.getWorkQueue).mockResolvedValue([]);
     vi.mocked(inventoryApi.getCategories).mockResolvedValue([
       { id: 'cat-1', category_name: 'GPS Trackers', product_count: 5 },
     ]);
@@ -85,7 +94,7 @@ describe('Inventory Page', () => {
   it('renders header, KPI metrics, and low stock warnings', async () => {
     render(<Inventory />);
 
-    expect(await screen.findByText('Inventory & Invoicing Management')).toBeTruthy();
+    expect(await screen.findByText('Inventory & Stock Logistics Management')).toBeTruthy();
     expect(await screen.findByText('15')).toBeTruthy(); // Total products count
     expect(await screen.findByText('Low Stock & Reorder Alerts')).toBeTruthy();
   });
@@ -93,7 +102,7 @@ describe('Inventory Page', () => {
   it('switches tabs and displays product catalog', async () => {
     render(<Inventory />);
 
-    const productsTab = await screen.findByRole('button', { name: /Products \(2\)/i });
+    const productsTab = await screen.findByRole('button', { name: /Products \(15\)/i });
     fireEvent.click(productsTab);
 
     expect(await screen.findByText('Tracker GT-500')).toBeTruthy();
@@ -103,7 +112,7 @@ describe('Inventory Page', () => {
   it('filters products by search input', async () => {
     render(<Inventory />);
 
-    const productsTab = await screen.findByRole('button', { name: /Products \(2\)/i });
+    const productsTab = await screen.findByRole('button', { name: /Products \(15\)/i });
     fireEvent.click(productsTab);
 
     const searchInput = screen.getByPlaceholderText('Search products...');

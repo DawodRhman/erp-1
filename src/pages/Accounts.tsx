@@ -20,9 +20,9 @@ const CSS = `
   .acc-stat-lbl{font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px;}
   .acc-stat-val{font-size:20px;font-weight:800;font-family:monospace;}
   .acc-stat-sub{font-size:10px;color:#9ca3af;margin-top:1px;}
-  .acc-table{width:100%;border-collapse:collapse;}
-  .acc-table th{text-align:left;padding:10px 14px;font-size:10px;font-weight:700;color:#9ca3af;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;border-bottom:1px solid #f1f5f9;}
-  .acc-table td{padding:12px 14px;font-size:12px;color:#374151;border-bottom:1px solid #f8fafc;vertical-align:middle;}
+  .acc-table{width:100%;border-collapse:collapse;min-width:980px;}
+  .acc-table th{text-align:left;padding:9px 10px;font-size:10px;font-weight:700;color:#9ca3af;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;border-bottom:1px solid #f1f5f9;}
+  .acc-table td{padding:10px;font-size:12px;color:#374151;border-bottom:1px solid #f8fafc;vertical-align:middle;}
   .acc-table tbody tr:hover td{background:#f8faff;}
   .acc-avatar{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;}
   .acc-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:800;white-space:nowrap;}
@@ -37,10 +37,14 @@ const CSS = `
   .acc-btn-primary{height:36px;background:#4f46e5;color:#fff;}
   .acc-input{height:36px;border:1px solid #dbe2ef;border-radius:10px;padding:0 12px;font:12px 'Segoe UI',system-ui,sans-serif;outline:none;background:#fff;color:#1e1b4b;}
   .acc-input:focus{border-color:#818cf8;box-shadow:0 0 0 3px rgba(99,102,241,.12);}
-  .acc-textarea{width:100%;min-height:180px;border:1px solid #dbe2ef;border-radius:10px;padding:12px;font:12px/1.5 'Segoe UI',system-ui,sans-serif;resize:vertical;outline:none;}
+  .acc-textarea{width:100%;min-height:122px;border:1px solid #dbe2ef;border-radius:10px;padding:10px;font:11px/1.45 'Segoe UI',system-ui,sans-serif;resize:vertical;outline:none;}
   .acc-help{font-size:11px;color:#64748b;margin-top:8px;line-height:1.5;}
   .acc-toolbar{display:grid;grid-template-columns:minmax(220px,1.3fr) repeat(3,minmax(160px,.9fr)) auto;gap:10px;align-items:end;margin-bottom:14px;}
+  .acc-tools{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:14px;align-items:start;}
+  .acc-message-card{padding:14px;position:sticky;top:12px;}
+  .acc-message-title{font-size:13px!important;line-height:1.2;}
   @media(max-width:1100px){.acc-toolbar{grid-template-columns:1fr 1fr;}}
+  @media(max-width:1180px){.acc-tools{grid-template-columns:1fr;}.acc-message-card{position:static;}}
   @media(max-width:640px){.acc-toolbar{grid-template-columns:1fr;}}
   .acc-muted{font-size:11px;color:#64748b;}
 `;
@@ -225,7 +229,7 @@ export default function Accounts() {
           ))}
         </div>
 
-        <div className="acc-tools" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.4fr) minmax(320px,.8fr)", gap: 14 }}>
+        <div className="acc-tools">
           <div className="acc-card" style={{ overflowX: "auto" }}>
             <table className="acc-table">
               <thead>
@@ -294,10 +298,10 @@ export default function Accounts() {
             </table>
           </div>
 
-          <div className="acc-card" style={{ padding: 16 }}>
+          <div className="acc-card acc-message-card">
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
               <KeyRound size={16} color="#4f46e5" />
-              <h2 style={{ margin: 0, fontSize: 15, color: "#1e1b4b" }}>WhatsApp Credential Message</h2>
+              <h2 className="acc-message-title" style={{ margin: 0, color: "#1e1b4b" }}>WhatsApp Credential Message</h2>
             </div>
             <textarea className="acc-textarea" value={template} onChange={(event) => setTemplate(event.target.value)} />
             <div className="acc-help">

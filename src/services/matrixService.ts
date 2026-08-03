@@ -1,13 +1,4 @@
-import axios from 'axios';
-import { getApiBaseUrl } from '../config/apiConfig';
-
-const api = axios.create({
-  baseURL: getApiBaseUrl(),
-  withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+import { apiClient as api } from './apiClient';
 
 export interface SalesLead {
   id: string;

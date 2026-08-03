@@ -23,6 +23,10 @@ vi.mock('../services/inventoryService', () => ({
   },
 }));
 
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({ activeRole: 'super_admin', user: { role: 'super_admin' } }),
+}));
+
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),

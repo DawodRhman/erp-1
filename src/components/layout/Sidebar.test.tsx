@@ -69,6 +69,17 @@ describe("Sidebar", () => {
     expect(screen.queryByText("My Workspace")).toBeNull();
   });
 
+  it("keeps personal workspace links disabled for service-only finance users", () => {
+    activeRole = "finance_officer";
+
+    renderSidebar();
+
+    expect(screen.getByText("My Workspace")).toBeTruthy();
+    expect(screen.getByText("Personal EMS tools are disabled for this service login.")).toBeTruthy();
+    expect(screen.getByText("My Dashboard").closest("a")).toBeNull();
+    expect(screen.getByText("Finance Dashboard").closest("a")?.getAttribute("href")).toBe("/finance-dashboard");
+  });
+
   it("shows a Logout action and confirms before ending the session", () => {
     renderSidebar();
 

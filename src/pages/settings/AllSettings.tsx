@@ -29,9 +29,13 @@ const genericConfigHooks = Object.fromEntries(
   ]),
 ) as Record<string, () => ConfigHookResult>;
 
+function useSettingsPenaltyRules() {
+  return usePenaltyRules({ includeInactive: true });
+}
+
 const configHooks = {
   ...genericConfigHooks,
-  "penalty-rules": () => usePenaltyRules({ includeInactive: true }),
+  "penalty-rules": useSettingsPenaltyRules,
 } as Record<string, () => ConfigHookResult>;
 
 const useSettingsDepartments = createConfigHook<any>("departments", { includeInactive: true });

@@ -142,17 +142,6 @@ export default function SavedReports() {
   const { activeRole } = useAuth();
   const { show: toast, ToastEl } = useToast();
 
-  // Guard
-  if (activeRole !== 'super_admin' && activeRole !== 'head_hr') {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', flexDirection: 'column', gap: 12, color: '#94a3b8' }}>
-        <span style={{ fontSize: 40 }}></span>
-        <span style={{ fontSize: 14, fontWeight: 700 }}>Access Restricted</span>
-        <span style={{ fontSize: 12 }}>Only SuperAdmin and Head HR can access this page.</span>
-      </div>
-    );
-  }
-
   // ── State ─────────────────────────────────────────────────────────────────
   const [reports,      setReports]      = useState<SavedReport[]>(INITIAL_REPORTS);
   const [locks,        setLocks]        = useState(INITIAL_LOCKS);
@@ -195,6 +184,17 @@ export default function SavedReports() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `all_reports_${new Date().toISOString().split('T')[0]}.json`; a.click();
     toast(' Bulk export complete', 'success');
   };
+
+  // Guard after hooks so role changes never alter the hook order.
+  if (activeRole !== 'super_admin' && activeRole !== 'head_hr') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', flexDirection: 'column', gap: 12, color: '#94a3b8' }}>
+        <span style={{ fontSize: 40 }}></span>
+        <span style={{ fontSize: 14, fontWeight: 700 }}>Access Restricted</span>
+        <span style={{ fontSize: 12 }}>Only SuperAdmin and Head HR can access this page.</span>
+      </div>
+    );
+  }
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
