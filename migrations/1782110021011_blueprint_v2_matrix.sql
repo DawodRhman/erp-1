@@ -163,12 +163,12 @@ CREATE TABLE IF NOT EXISTS public.vehicle_maintenance_logs (
 );
 
 -- 10. Permissions for Matrix Blueprint V2.1
-INSERT INTO public.permissions (permission_key, permission_name, category, description)
+INSERT INTO public.permissions (permission_key, description)
 VALUES
-  ('matrix:sales', 'Sales & CRM', 'Matrix Blueprint', 'Can manage sales leads, quotations, and project activations'),
-  ('matrix:operations', 'Operations & Requisitions', 'Matrix Blueprint', 'Can manage project resources and purchase requisitions'),
-  ('matrix:field_service', 'Field Service & OTP Handshake', 'Matrix Blueprint', 'Can manage service tickets and OTP handshake verification'),
-  ('matrix:finance', 'Finance & Virtual Debt', 'Matrix Blueprint', 'Can reconcile virtual debts and approve commission triggers')
+  ('matrix:sales', 'Can manage sales leads, quotations, and project activations'),
+  ('matrix:operations', 'Can manage project resources and purchase requisitions'),
+  ('matrix:field_service', 'Can manage service tickets and OTP handshake verification'),
+  ('matrix:finance', 'Can reconcile virtual debts and approve commission triggers')
 ON CONFLICT (permission_key) DO NOTHING;
 
 -- Grant permissions to super_admin, head_hr, hr_manager, and department_head
@@ -178,7 +178,7 @@ DECLARE
     v_perm_rec RECORD;
 BEGIN
     FOR v_role_rec IN SELECT id FROM public.roles WHERE role_name IN ('super_admin', 'head_hr', 'hr_manager', 'department_head') LOOP
-        FOR v_perm_rec IN SELECT id FROM public.permissions WHERE category = 'Matrix Blueprint' LOOP
+        FOR v_perm_rec IN SELECT id FROM public.permissions WHERE permission_key LIKE 'matrix:%' LOOP
             INSERT INTO public.role_permissions (role_id, permission_id) VALUES (v_role_rec.id, v_perm_rec.id) ON CONFLICT DO NOTHING;
         END LOOP;
     END LOOP;

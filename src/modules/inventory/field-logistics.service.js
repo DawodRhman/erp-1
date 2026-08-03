@@ -1,7 +1,8 @@
 import pool from '../../config/db.js';
 import { AppError } from '../../utils/errors.js';
+import { recordInventoryMovement } from './inventory.service.js';
 
-export async function createDispatch(data) {
+export async function createDispatch(data, actorId = null) {
   // data: { quotation_id, customer_id, installer_id, site_address, notes, items: [{ product_id, inventory_item_id, quantity_issued, unit_of_measure, unit_price }] }
   const countRes = await pool.query(`SELECT COUNT(*)::int AS total FROM public.installer_field_dispatches`);
   const seq = (countRes.rows[0].total || 0) + 1;
@@ -51,10 +52,33 @@ export async function createDispatch(data) {
 
       // If specific serial item, update status to ALLOCATED
       if (item.inventory_item_id) {
-        await client.query(
-          `UPDATE public.inventory_items SET current_status = 'ALLOCATED', updated_at = NOW() WHERE id = $1`,
+        const itemRes = await client.query(
+          `UPDATE public.inventory_items SET current_status = 'ALLOCATED', updated_at = NOW() WHERE id = $1 RETURNING *`,
           [item.inventory_item_id]
         );
+        const inventoryItem = itemRes.rows[0];
+        if (inventoryItem) {
+          await recordInventoryMovement(client, {
+            product_id: inventoryItem.product_id,
+            inventory_item_id: inventoryItem.id,
+            movement_type: 'STOCK_OUT',
+            quantity: item.quantity_issued || 1,
+            reference_type: 'FIELD_DISPATCH',
+            reference_id: dispatch.id,
+            notes: `Issued to installer from dispatch ${dispatch.dispatch_number}`,
+            created_by: actorId,
+          });
+        }
+      } else if (item.product_id) {
+        await recordInventoryMovement(client, {
+          product_id: item.product_id,
+          movement_type: 'STOCK_OUT',
+          quantity: item.quantity_issued || 1,
+          reference_type: 'FIELD_DISPATCH',
+          reference_id: dispatch.id,
+          notes: `Issued to installer from dispatch ${dispatch.dispatch_number}`,
+          created_by: actorId,
+        });
       }
     }
 
@@ -154,7 +178,7 @@ export async function getDispatchById(id) {
   };
 }
 
-export async function reconcileDispatch(id, { items = [], on_the_go_purchases = [], notes }) {
+export async function reconcileDispatch(id, { items = [], on_the_go_purchases = [], notes }, actorId = null) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -180,15 +204,41 @@ export async function reconcileDispatch(id, { items = [], on_the_go_purchases = 
       // Reconcile Serialized Items status
       if (item.inventory_item_id) {
         if (qUsed > 0) {
-          await client.query(
-            `UPDATE public.inventory_items SET current_status = 'INSTALLED', updated_at = NOW() WHERE id = $1`,
+          const itemRes = await client.query(
+            `UPDATE public.inventory_items SET current_status = 'INSTALLED', updated_at = NOW() WHERE id = $1 RETURNING *`,
             [item.inventory_item_id]
           );
+          const inventoryItem = itemRes.rows[0];
+          if (inventoryItem) {
+            await recordInventoryMovement(client, {
+              product_id: inventoryItem.product_id,
+              inventory_item_id: inventoryItem.id,
+              movement_type: 'STOCK_OUT',
+              quantity: qUsed,
+              reference_type: 'FIELD_RECONCILIATION',
+              reference_id: id,
+              notes: item.notes || 'Installer marked item used/installed',
+              created_by: actorId,
+            });
+          }
         } else if (qReturned > 0) {
-          await client.query(
-            `UPDATE public.inventory_items SET current_status = 'AVAILABLE', updated_at = NOW() WHERE id = $1`,
+          const itemRes = await client.query(
+            `UPDATE public.inventory_items SET current_status = 'AVAILABLE', updated_at = NOW() WHERE id = $1 RETURNING *`,
             [item.inventory_item_id]
           );
+          const inventoryItem = itemRes.rows[0];
+          if (inventoryItem) {
+            await recordInventoryMovement(client, {
+              product_id: inventoryItem.product_id,
+              inventory_item_id: inventoryItem.id,
+              movement_type: 'RETURN',
+              quantity: qReturned,
+              reference_type: 'FIELD_RECONCILIATION',
+              reference_id: id,
+              notes: item.notes || 'Installer returned unused serial item',
+              created_by: actorId,
+            });
+          }
         }
       }
 
@@ -198,6 +248,15 @@ export async function reconcileDispatch(id, { items = [], on_the_go_purchases = 
           `UPDATE public.products SET quantity = quantity + $2, updated_at = NOW() WHERE id = $1`,
           [item.product_id, Math.round(qReturned)]
         );
+        await recordInventoryMovement(client, {
+          product_id: item.product_id,
+          movement_type: 'RETURN',
+          quantity: Math.round(qReturned),
+          reference_type: 'FIELD_RECONCILIATION',
+          reference_id: id,
+          notes: item.notes || 'Installer returned unused non-serial stock',
+          created_by: actorId,
+        });
       }
     }
 

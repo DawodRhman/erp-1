@@ -1,5 +1,54 @@
 import { sendSuccess } from '../../utils/respond.js';
 import * as crmService from './crm.service.js';
+import * as inventoryService from '../inventory/inventory.service.js';
+
+export async function listCustomers(req, res, next) {
+  try {
+    const customers = await inventoryService.getCustomers();
+    return sendSuccess(res, customers, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function listProducts(req, res, next) {
+  try {
+    const products = await inventoryService.getProducts({
+      search: req.query.search,
+      limit: req.query.limit || 100,
+    });
+    return sendSuccess(res, products, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function createCustomer(req, res, next) {
+  try {
+    const customer = await inventoryService.createCustomer(req.body);
+    return sendSuccess(res, customer, 201);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function updateCustomer(req, res, next) {
+  try {
+    const customer = await inventoryService.updateCustomer(req.params.id, req.body);
+    return sendSuccess(res, customer, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function deleteCustomer(req, res, next) {
+  try {
+    const result = await inventoryService.deleteCustomer(req.params.id);
+    return sendSuccess(res, result, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
 
 export async function listLeads(req, res, next) {
   try {
@@ -57,7 +106,7 @@ export async function createQuotation(req, res, next) {
 
 export async function updateQuotationStatus(req, res, next) {
   try {
-    const quote = await crmService.updateQuotationStatus(req.params.id, req.body.status);
+    const quote = await crmService.updateQuotationStatus(req.params.id, req.body.status, req.user?.id);
     return sendSuccess(res, quote, 200);
   } catch (err) {
     return next(err);

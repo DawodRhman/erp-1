@@ -3,7 +3,7 @@ import * as logisticsService from './field-logistics.service.js';
 
 export async function createDispatch(req, res, next) {
   try {
-    const dispatch = await logisticsService.createDispatch(req.body);
+    const dispatch = await logisticsService.createDispatch(req.body, req.user?.user_id);
     return sendSuccess(res, dispatch, 201);
   } catch (err) {
     return next(err);
@@ -30,7 +30,7 @@ export async function getDispatch(req, res, next) {
 
 export async function reconcileDispatch(req, res, next) {
   try {
-    const dispatch = await logisticsService.reconcileDispatch(req.params.id, req.body);
+    const dispatch = await logisticsService.reconcileDispatch(req.params.id, req.body, req.user?.user_id);
     return sendSuccess(res, dispatch, 200);
   } catch (err) {
     return next(err);

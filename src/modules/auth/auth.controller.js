@@ -6,6 +6,7 @@ import { buildAuditRequestContext, recordActivityLog } from '../audit/audit.serv
 import * as authService from './auth.service.js';
 
 const passwordPolicy = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+const DEV_JWT_SECRET = 'track360-dev-only-secret-change-before-production';
 
 export const loginSchema = z.object({
   email: z.string().email(),
@@ -21,9 +22,11 @@ export const changePasswordSchema = z.object({
 });
 
 function signToken(payload) {
-  const secret =
-    process.env.JWT_SECRET ||
-    'a0fc62d9c6bf47dfa93b2efdf69d0cb86e67d24bbd40f06e6eaf92ce4c92a4e3738dc8bf413a4515f1ffea2d921487e4851ec168f7b2b06eddac1f624ba7c239f0e8cd802cbfc7a89be24cecb8231bd493356d871b32b789d2af22b67cbcdfe391e93f05';
+  const secret = process.env.JWT_SECRET || DEV_JWT_SECRET;
+  if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is required in production.');
+  }
+
   return jwt.sign(payload, secret, {
     expiresIn: process.env.JWT_EXPIRES_IN || '8h',
   });

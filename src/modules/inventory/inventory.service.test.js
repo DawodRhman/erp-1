@@ -28,6 +28,9 @@ describe('inventory service', () => {
       })
       .mockResolvedValueOnce({
         rows: [{ total_pos: 8, total_invoices: 12, pending_installations: 3, active_complaints: 1 }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ approved_csr_jobs: 4, sent_csr_quotes: 2 }],
       });
 
     const service = await loadService();
@@ -46,8 +49,10 @@ describe('inventory service', () => {
       total_invoices: 12,
       pending_installations: 3,
       active_complaints: 1,
+      approved_csr_jobs: 4,
+      sent_csr_quotes: 2,
     });
-    expect(query).toHaveBeenCalledTimes(3);
+    expect(query).toHaveBeenCalledTimes(4);
   });
 
   it('lists categories ordered by category name', async () => {
@@ -120,5 +125,99 @@ describe('inventory service', () => {
     expect(sql).toContain('p.quantity <= p.min_stock_level');
     expect(params).toContain('%tracker%');
     expect(params).toContain('ASSET');
+  });
+
+  it('lists inventory movement ledger with search and movement filters', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ table_name: 'inventory_movements' }] })
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: 'product_id' },
+          { column_name: 'inventory_item_id' },
+          { column_name: 'movement_type' },
+          { column_name: 'quantity' },
+          { column_name: 'reference_type' },
+          { column_name: 'reference_id' },
+          { column_name: 'notes' },
+          { column_name: 'created_by' },
+          { column_name: 'created_at' },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 'move-1', product_name: 'CCTV Camera', movement_type: 'STOCK_OUT', quantity: 2 }],
+      });
+
+    const service = await loadService();
+    const movements = await service.getInventoryMovements({ search: 'camera', movement_type: 'stock_out' });
+
+    const [sql, params] = query.mock.calls[2];
+    expect(movements).toHaveLength(1);
+    expect(sql).toContain('FROM public.inventory_movements im');
+    expect(sql).toContain('im.movement_type =');
+    expect(params).toContain('%camera%');
+    expect(params).toContain('STOCK_OUT');
+  });
+
+  it('lists inventory movements when older ledger columns are missing', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ table_name: 'inventory_movements' }] })
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: 'product_id' },
+          { column_name: 'inventory_item_id' },
+          { column_name: 'movement_type' },
+          { column_name: 'remarks' },
+          { column_name: 'moved_by' },
+          { column_name: 'created_at' },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 'move-old-1', product_name: 'CCTV Camera', reference_type: 'Manual', notes: 'Inventory movement' }],
+      });
+
+    const service = await loadService();
+    const movements = await service.getInventoryMovements({ search: 'camera' });
+
+    const [sql] = query.mock.calls[2];
+    expect(movements).toHaveLength(1);
+    expect(sql).toContain("'Manual' AS reference_type");
+    expect(sql).not.toContain('im.reference_type ILIKE');
+    expect(sql).toContain('im.remarks ILIKE');
+  });
+
+  it('records a stock-in ledger entry when creating an inventory item', async () => {
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({
+          rows: [{ id: 'item-1', product_id: 'prod-1', current_status: 'AVAILABLE' }],
+        })
+        .mockResolvedValueOnce({ rows: [{ id: 'move-1' }] })
+        .mockResolvedValueOnce({ rows: [] }),
+      release: vi.fn(),
+    };
+    connect.mockResolvedValueOnce(client);
+    query
+      .mockResolvedValueOnce({ rows: [{ table_name: 'inventory_movements' }] })
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: 'product_id' },
+          { column_name: 'inventory_item_id' },
+          { column_name: 'movement_type' },
+          { column_name: 'quantity' },
+          { column_name: 'reference_type' },
+          { column_name: 'reference_id' },
+          { column_name: 'notes' },
+          { column_name: 'created_by' },
+        ],
+      });
+
+    const service = await loadService();
+    const item = await service.createInventoryItem({ product_id: 'prod-1', serial_number: 'SN-1' }, 'user-1');
+
+    expect(item.id).toBe('item-1');
+    expect(client.query.mock.calls.some((call) => String(call[0]).includes('INSERT INTO public.inventory_movements'))).toBe(true);
+    expect(client.query).toHaveBeenCalledWith('COMMIT');
+    expect(client.release).toHaveBeenCalled();
   });
 });

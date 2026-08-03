@@ -20,6 +20,11 @@ function numberToWords(num) {
   return `${inWords(n)} Rupees Only`;
 }
 
+function toAmount(value, fallback = 0) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : fallback;
+}
+
 export async function listClientTemplates(customerId = null) {
   let query = `SELECT t.*, c.customer_name FROM public.client_invoice_templates t LEFT JOIN public.customers c ON c.id = t.customer_id`;
   const params = [];
@@ -67,8 +72,11 @@ export async function createClientInvoiceFromDispatch(data) {
 
     let itemsToInvoice = [];
 
-    // Pull items from Dispatch if provided
-    if (data.dispatch_id) {
+    // Prefer explicit builder rows so finance can edit/add items before saving.
+    // The dispatch_id / quotation_id still stay linked on the invoice record.
+    if (Array.isArray(data.items) && data.items.length) {
+      itemsToInvoice = data.items;
+    } else if (data.dispatch_id) {
       const dItems = await client.query(
         `
           SELECT di.*, p.product_name
@@ -105,12 +113,10 @@ export async function createClientInvoiceFromDispatch(data) {
       );
       itemsToInvoice = qItems.rows.map((r) => ({
         product_id: r.product_id,
-        description: r.description,
+        description: r.description || r.item_description || r.product_name || 'Service / Item',
         quantity: Number(r.quantity || 1),
         unit_price: Number(r.unit_price || 0),
       }));
-    } else if (Array.isArray(data.items)) {
-      itemsToInvoice = data.items;
     }
 
     const exRate = Number(data.exchange_rate || 1.0);
@@ -119,11 +125,19 @@ export async function createClientInvoiceFromDispatch(data) {
     let totalTax = 0;
 
     const processedItems = itemsToInvoice.map((item) => {
-      const q = Number(item.quantity || 1);
-      const p = Number(item.unit_price || 0) * exRate;
-      const totalNoTax = q * p;
-      const itemTax = (totalNoTax * taxRatePct) / 100;
-      const totalWithTax = totalNoTax + itemTax;
+      const q = toAmount(item.quantity, 1);
+      const p = toAmount(item.unit_price, 0) * exRate;
+      const computedNoTax = q * p;
+      const totalNoTax = item.total_without_tax !== undefined
+        ? toAmount(item.total_without_tax, computedNoTax)
+        : computedNoTax;
+      const computedTax = (totalNoTax * taxRatePct) / 100;
+      const itemTax = item.tax_amount !== undefined
+        ? toAmount(item.tax_amount, computedTax)
+        : computedTax;
+      const totalWithTax = item.total_with_tax !== undefined
+        ? toAmount(item.total_with_tax, totalNoTax + itemTax)
+        : totalNoTax + itemTax;
 
       subtotal += totalNoTax;
       totalTax += itemTax;
@@ -147,9 +161,9 @@ export async function createClientInvoiceFromDispatch(data) {
         INSERT INTO public.customer_invoices (
           invoice_number, dispatch_id, quotation_id, customer_id, currency, exchange_rate,
           template_name, tax_type, tax_rate, subtotal, tax_amount, total_amount,
-          amount_in_words, number_of_copies, status, notes
+        amount_in_words, number_of_copies, status, notes
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'ISSUED', $15)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING *
       `,
       [
@@ -167,6 +181,7 @@ export async function createClientInvoiceFromDispatch(data) {
         grandTotal,
         words,
         data.number_of_copies || 1,
+        data.status || 'DRAFT',
         data.notes || null,
       ]
     );
@@ -232,15 +247,161 @@ export async function listInvoices(filters = {}) {
   return result.rows;
 }
 
+function parseInvoiceNotes(notes) {
+  if (!notes) return {};
+  try {
+    return JSON.parse(notes);
+  } catch {
+    return {};
+  }
+}
+
+export async function listInvoiceSummaries(filters = {}) {
+  const params = [];
+  const where = [];
+
+  if (filters.customer_id) {
+    params.push(filters.customer_id);
+    where.push(`s.customer_id = $${params.length}`);
+  }
+  if (filters.summary_type) {
+    params.push(filters.summary_type);
+    where.push(`s.summary_type = $${params.length}`);
+  }
+
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const result = await pool.query(
+    `
+      SELECT s.*, c.customer_name
+      FROM public.customer_invoice_summaries s
+      LEFT JOIN public.customers c ON c.id = s.customer_id
+      ${whereSql}
+      ORDER BY s.created_at DESC
+    `,
+    params
+  );
+  return result.rows;
+}
+
+export async function createInvoiceSummary({
+  customer_id,
+  summary_period,
+  summary_type = 'operational_expenses',
+  summary_limit = 2000000,
+  invoice_ids = [],
+  notes = null,
+}) {
+  if (!customer_id) throw new AppError(400, 'VALIDATION_ERROR', 'Customer is required for summary.');
+  const allowedTypes = new Set([
+    'operational_expenses',
+    'capital_expenses',
+    'footage_expenses',
+    'rental_expenses',
+  ]);
+  const normalizedType = allowedTypes.has(summary_type) ? summary_type : 'operational_expenses';
+  const editableLimit = toAmount(summary_limit, 2000000);
+  const params = [customer_id];
+  const where = [`customer_id = $1`];
+
+  if (Array.isArray(invoice_ids) && invoice_ids.length) {
+    params.push(invoice_ids);
+    where.push(`id = ANY($${params.length}::uuid[])`);
+  }
+
+  const invoicesRes = await pool.query(
+    `
+      SELECT id, invoice_number, customer_id, subtotal, tax_amount, total_amount, status, notes
+      FROM public.customer_invoices
+      WHERE ${where.join(' AND ')}
+      ORDER BY created_at ASC
+    `,
+    params
+  );
+
+  const invoices = invoicesRes.rows;
+  if (!invoices.length) {
+    throw new AppError(404, 'NOT_FOUND', 'No invoices found for this client summary.');
+  }
+
+  const subtotal = invoices.reduce((sum, invoice) => sum + toAmount(invoice.subtotal), 0);
+  const taxAmount = invoices.reduce((sum, invoice) => sum + toAmount(invoice.tax_amount), 0);
+  const totalAmount = invoices.reduce((sum, invoice) => sum + toAmount(invoice.total_amount), 0);
+  const isOverLimit = editableLimit > 0 && totalAmount > editableLimit;
+  if (isOverLimit) {
+    throw new AppError(
+      400,
+      'SUMMARY_LIMIT_EXCEEDED',
+      `Summary total exceeds the configured limit of ${editableLimit}.`
+    );
+  }
+  const branchBreakdown = invoices.map((invoice, index) => {
+    const meta = parseInvoiceNotes(invoice.notes);
+    return {
+      sr_no: index + 1,
+      branch_name: meta.branch_name || '-',
+      branch_code: meta.branch_code || '-',
+      ticket_number: meta.purchase_order_no || '-',
+      invoice_number: invoice.invoice_number,
+      subtotal: toAmount(invoice.subtotal),
+      tax_amount: toAmount(invoice.tax_amount),
+      total_amount: toAmount(invoice.total_amount),
+      status: invoice.status,
+    };
+  });
+
+  const result = await pool.query(
+    `
+      WITH inserted AS (
+        INSERT INTO public.customer_invoice_summaries (
+          customer_id, summary_period, summary_type, summary_limit, is_over_limit,
+          invoice_ids, invoice_numbers, subtotal, tax_amount, total_amount,
+          branch_breakdown, status, notes
+        )
+        VALUES ($1, $2, $3, $4, $5, $6::uuid[], $7::jsonb, $8, $9, $10, $11::jsonb, $12, $13)
+        RETURNING *
+      )
+      SELECT inserted.*, c.customer_name
+      FROM inserted
+      LEFT JOIN public.customers c ON c.id = inserted.customer_id
+    `,
+    [
+      customer_id,
+      summary_period || 'Monthly Client Summary',
+      normalizedType,
+      editableLimit,
+      isOverLimit,
+      invoices.map((invoice) => invoice.id),
+      JSON.stringify(invoices.map((invoice) => invoice.invoice_number)),
+      subtotal,
+      taxAmount,
+      totalAmount,
+      JSON.stringify(branchBreakdown),
+      'DRAFT',
+      notes,
+    ]
+  );
+
+  return result.rows[0];
+}
+
 export async function getInvoiceById(id) {
+  const customerColumns = await pool.query(
+    `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'customers'
+    `
+  );
+  const customerColumnSet = new Set(customerColumns.rows.map((row) => row.column_name));
   const iRes = await pool.query(
     `
       SELECT
         i.*,
         c.customer_name,
-        c.email AS customer_email,
-        c.phone AS customer_phone,
-        c.address AS customer_address
+        ${customerColumnSet.has('email') ? 'c.email' : 'NULL'} AS customer_email,
+        ${customerColumnSet.has('phone') ? 'c.phone' : 'NULL'} AS customer_phone,
+        ${customerColumnSet.has('address') ? 'c.address' : 'NULL'} AS customer_address
       FROM public.customer_invoices i
       LEFT JOIN public.customers c ON c.id = i.customer_id
       WHERE i.id = $1
@@ -258,6 +419,109 @@ export async function getInvoiceById(id) {
     ...iRes.rows[0],
     items: itemsRes.rows,
   };
+}
+
+export async function updateClientInvoice(id, data) {
+  const current = await getInvoiceById(id);
+  const currentNotes = parseInvoiceNotes(current.notes);
+  const nextNotes = {
+    ...currentNotes,
+    ...(data.notes ? parseInvoiceNotes(data.notes) : {}),
+  };
+  const items = Array.isArray(data.items) ? data.items : current.items;
+  const taxRate = toAmount(data.tax_rate, current.tax_rate || 0);
+  let subtotal = 0;
+  let totalTax = 0;
+
+  const processedItems = items.map((item) => {
+    const quantity = toAmount(item.quantity, 0);
+    const unitPrice = toAmount(item.unit_price, 0);
+    const computedSubtotal = quantity * unitPrice;
+    const totalWithoutTax = item.total_without_tax !== undefined
+      ? toAmount(item.total_without_tax, computedSubtotal)
+      : computedSubtotal;
+    const computedTax = (totalWithoutTax * taxRate) / 100;
+    const taxAmount = item.tax_amount !== undefined ? toAmount(item.tax_amount, computedTax) : computedTax;
+    const totalWithTax = item.total_with_tax !== undefined
+      ? toAmount(item.total_with_tax, totalWithoutTax + taxAmount)
+      : totalWithoutTax + taxAmount;
+    subtotal += totalWithoutTax;
+    totalTax += taxAmount;
+    return {
+      product_id: item.product_id || null,
+      description: item.description || 'Invoice item',
+      quantity,
+      unit_price: unitPrice,
+      total_without_tax: totalWithoutTax,
+      tax_amount: taxAmount,
+      total_with_tax: totalWithTax,
+    };
+  });
+
+  const totalAmount = subtotal + totalTax;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const invoiceRes = await client.query(
+      `
+        UPDATE public.customer_invoices
+        SET invoice_number = $2,
+            tax_rate = $3,
+            subtotal = $4,
+            tax_amount = $5,
+            total_amount = $6,
+            amount_in_words = $7,
+            number_of_copies = $8,
+            status = $9,
+            notes = $10,
+            updated_at = NOW()
+        WHERE id = $1
+        RETURNING *
+      `,
+      [
+        id,
+        data.invoice_number || current.invoice_number,
+        taxRate,
+        subtotal,
+        totalTax,
+        totalAmount,
+        data.amount_in_words || numberToWords(totalAmount),
+        data.number_of_copies || current.number_of_copies || 1,
+        data.status || current.status || 'DRAFT',
+        JSON.stringify(nextNotes),
+      ]
+    );
+
+    await client.query(`DELETE FROM public.customer_invoice_items WHERE invoice_id = $1`, [id]);
+    for (const item of processedItems) {
+      await client.query(
+        `
+          INSERT INTO public.customer_invoice_items (
+            invoice_id, product_id, description, quantity, unit_price, total_without_tax, tax_amount, total_with_tax
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `,
+        [
+          id,
+          item.product_id,
+          item.description,
+          item.quantity,
+          item.unit_price,
+          item.total_without_tax,
+          item.tax_amount,
+          item.total_with_tax,
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+    return invoiceRes.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function updateInvoiceStatus(id, status) {

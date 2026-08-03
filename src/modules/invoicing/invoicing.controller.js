@@ -37,9 +37,36 @@ export async function listInvoices(req, res, next) {
   }
 }
 
+export async function listSummaries(req, res, next) {
+  try {
+    const summaries = await invoicingService.listInvoiceSummaries(req.query);
+    return sendSuccess(res, summaries, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function createSummary(req, res, next) {
+  try {
+    const summary = await invoicingService.createInvoiceSummary(req.body);
+    return sendSuccess(res, summary, 201);
+  } catch (err) {
+    return next(err);
+  }
+}
+
 export async function getInvoice(req, res, next) {
   try {
     const invoice = await invoicingService.getInvoiceById(req.params.id);
+    return sendSuccess(res, invoice, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function updateInvoice(req, res, next) {
+  try {
+    const invoice = await invoicingService.updateClientInvoice(req.params.id, req.body);
     return sendSuccess(res, invoice, 200);
   } catch (err) {
     return next(err);

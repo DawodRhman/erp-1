@@ -102,6 +102,20 @@ async function seedInventoryFinanceUsers() {
       'matrix:finance',
     ];
 
+    for (const key of permKeys) {
+      await client.query(
+        `
+          INSERT INTO public.permissions (permission_key, description)
+          VALUES ($1, $2)
+          ON CONFLICT (permission_key) DO NOTHING
+        `,
+        [
+          key,
+          `Allows ${key} access`,
+        ]
+      );
+    }
+
     const permMap = {};
     for (const key of permKeys) {
       const pRes = await client.query(`SELECT id FROM public.permissions WHERE permission_key = $1`, [key]);

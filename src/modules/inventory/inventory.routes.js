@@ -10,6 +10,8 @@ router.use(verifyToken);
 
 // Summary & Dashboards
 router.get('/summary', requirePermission('inventory:read'), inventoryController.getSummary);
+router.get('/work-queue', requirePermission('inventory:read'), inventoryController.getWorkQueue);
+router.get('/movements', requirePermission('inventory:read'), inventoryController.getInventoryMovements);
 
 // Categories
 router.get('/categories', requirePermission('inventory:read'), inventoryController.getCategories);
@@ -57,9 +59,9 @@ router.post('/customers/:customer_id/generate-draft-invoice', requirePermission(
 
 // Installer Field Dispatches & Reconciliations
 import * as logisticsController from './field-logistics.controller.js';
-router.get('/dispatches', logisticsController.listDispatches);
-router.get('/dispatches/:id', logisticsController.getDispatch);
-router.post('/dispatches', logisticsController.createDispatch);
-router.post('/dispatches/:id/reconcile', logisticsController.reconcileDispatch);
+router.get('/dispatches', requirePermission('inventory:read'), logisticsController.listDispatches);
+router.get('/dispatches/:id', requirePermission('inventory:read'), logisticsController.getDispatch);
+router.post('/dispatches', requirePermission('inventory:write'), logisticsController.createDispatch);
+router.post('/dispatches/:id/reconcile', requirePermission('inventory:write'), logisticsController.reconcileDispatch);
 
 export default router;

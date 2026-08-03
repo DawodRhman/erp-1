@@ -4,6 +4,7 @@
   "description": "",
   "main": "server.js",
   "scripts": {
+    "dev": "nodemon server.js",
     "start": "nodemon server.js",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -11,6 +12,7 @@
     "db:migrate": "node-pg-migrate up",
     "db:rollback": "node-pg-migrate down",
     "db:check": "node-pg-migrate up --dry-run",
+    "db:audit": "node scripts/db-audit.mjs",
     "db:fake": "node-pg-migrate up --fake",
     "db:seed": "node seeds/master_seed.js",
     "db:seed:production": "node seeds/production_seed.js",

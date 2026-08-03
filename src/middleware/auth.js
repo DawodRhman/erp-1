@@ -2,6 +2,8 @@ import jwt from 'jsonwebtoken';
 import pool from '../config/db.js';
 import { sendError } from '../utils/respond.js';
 
+const DEV_JWT_SECRET = 'track360-dev-only-secret-change-before-production';
+
 export async function verifyToken(req, res, next) {
   // Check both cookie and Authorization header
   let token = req.cookies?.ems_jwt;
@@ -22,9 +24,11 @@ export async function verifyToken(req, res, next) {
   }
 
   try {
-    const secret =
-      process.env.JWT_SECRET ||
-      'a0fc62d9c6bf47dfa93b2efdf69d0cb86e67d24bbd40f06e6eaf92ce4c92a4e3738dc8bf413a4515f1ffea2d921487e4851ec168f7b2b06eddac1f624ba7c239f0e8cd802cbfc7a89be24cecb8231bd493356d871b32b789d2af22b67cbcdfe391e93f05';
+    const secret = process.env.JWT_SECRET || DEV_JWT_SECRET;
+    if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+      return sendError(res, 'SERVER_CONFIG_ERROR', 'JWT secret is not configured.', 500);
+    }
+
     const decoded = jwt.verify(token, secret);
     const userResult = await pool.query(
       `

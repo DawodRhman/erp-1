@@ -35,7 +35,7 @@ export async function getQuotations() {
   return result.rows;
 }
 
-export async function createQuotation({ lead_id, customer_id, quotation_type = 'PRODUCT', items = [], created_by }) {
+export async function createQuotation({ lead_id, customer_id, quotation_type = 'PRODUCT', items = [], total_amount = 0, created_by }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -44,6 +44,9 @@ export async function createQuotation({ lead_id, customer_id, quotation_type = '
     items.forEach((item) => {
       total += (parseFloat(item.unit_price) || 0) * (parseInt(item.quantity, 10) || 1);
     });
+    if (!items.length) {
+      total = parseFloat(total_amount) || 0;
+    }
 
     const quoteRes = await client.query(
       `INSERT INTO public.sales_quotations (quotation_number, lead_id, customer_id, quotation_type, total_amount, status, created_by)

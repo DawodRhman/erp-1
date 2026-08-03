@@ -10,6 +10,24 @@ export async function getSummary(req, res, next) {
   }
 }
 
+export async function getWorkQueue(req, res, next) {
+  try {
+    const queue = await inventoryService.getInventoryWorkQueue();
+    sendSuccess(res, queue);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getInventoryMovements(req, res, next) {
+  try {
+    const movements = await inventoryService.getInventoryMovements(req.query);
+    sendSuccess(res, movements);
+  } catch (error) {
+    next(error);
+  }
+}
+
 // Categories
 export async function getCategories(req, res, next) {
   try {
@@ -96,7 +114,7 @@ export async function getInventoryItems(req, res, next) {
 
 export async function createInventoryItem(req, res, next) {
   try {
-    const item = await inventoryService.createInventoryItem(req.body);
+    const item = await inventoryService.createInventoryItem(req.body, req.user?.user_id);
     sendSuccess(res, item, 201);
   } catch (error) {
     next(error);
@@ -105,7 +123,7 @@ export async function createInventoryItem(req, res, next) {
 
 export async function updateInventoryItem(req, res, next) {
   try {
-    const item = await inventoryService.updateInventoryItem(req.params.id, req.body);
+    const item = await inventoryService.updateInventoryItem(req.params.id, req.body, req.user?.user_id);
     sendSuccess(res, item);
   } catch (error) {
     next(error);
@@ -114,7 +132,7 @@ export async function updateInventoryItem(req, res, next) {
 
 export async function deleteInventoryItem(req, res, next) {
   try {
-    const result = await inventoryService.deleteInventoryItem(req.params.id);
+    const result = await inventoryService.deleteInventoryItem(req.params.id, req.user?.user_id);
     sendSuccess(res, result);
   } catch (error) {
     next(error);
@@ -188,7 +206,7 @@ export async function getPurchaseOrders(req, res, next) {
 
 export async function createPurchaseOrder(req, res, next) {
   try {
-    const po = await inventoryService.createPurchaseOrder(req.body);
+    const po = await inventoryService.createPurchaseOrder(req.body, req.user?.user_id);
     sendSuccess(res, po, 201);
   } catch (error) {
     next(error);
@@ -206,7 +224,7 @@ export async function getInvoices(req, res, next) {
 
 export async function createInvoice(req, res, next) {
   try {
-    const invoice = await inventoryService.createInvoice(req.body);
+    const invoice = await inventoryService.createInvoice(req.body, req.user?.user_id);
     sendSuccess(res, invoice, 201);
   } catch (error) {
     next(error);
@@ -225,7 +243,7 @@ export async function getInstallations(req, res, next) {
 
 export async function createInstallation(req, res, next) {
   try {
-    const installation = await inventoryService.createInstallation(req.body);
+    const installation = await inventoryService.createInstallation(req.body, req.user?.user_id);
     sendSuccess(res, installation, 201);
   } catch (error) {
     next(error);
@@ -252,7 +270,7 @@ export async function createComplaint(req, res, next) {
 
 export async function createReplacement(req, res, next) {
   try {
-    const replacement = await inventoryService.createReplacement(req.body);
+    const replacement = await inventoryService.createReplacement(req.body, req.user?.user_id);
     sendSuccess(res, replacement, 201);
   } catch (error) {
     next(error);
