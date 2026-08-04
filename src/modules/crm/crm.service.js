@@ -251,11 +251,15 @@ export async function createQuotation(data) {
     const quotation = qRes.rows[0];
 
     for (const item of items) {
-      if (!item.product_id || !itemColumns.has('product_id')) continue;
+      const description = item.description || item.item_description || item.product_name || null;
+      const hasProduct = Boolean(item.product_id);
+      if (!hasProduct && !description) continue;
+
       const itemValues = {
         quotation_id: quotation.id,
-        product_id: item.product_id,
-        description: item.description,
+        product_id: item.product_id || null,
+        description,
+        item_description: description,
         quantity: item.quantity || 1,
         unit_price: item.unit_price || 0,
         total_price: Number(item.quantity || 1) * Number(item.unit_price || 0),
