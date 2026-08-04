@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowRight,
   Barcode,
@@ -62,6 +62,9 @@ type Quotation = {
   total_amount?: number;
   status: string;
   created_at: string;
+  client_approval_token?: string;
+  sent_at?: string;
+  client_approved_at?: string;
   items?: Array<{
     id?: string;
     product_id?: string;
@@ -314,10 +317,10 @@ function useCrmData() {
     setLoading(true);
     try {
       const [customerRes, leadRes, quoteRes, productRes] = await Promise.all([
-        apiClient.get("/crm/customers"),
-        apiClient.get("/crm/leads"),
-        apiClient.get("/crm/quotations"),
-        apiClient.get("/crm/products", { params: { limit: 500 } }),
+        apiClient.get("/crm/customers").catch(() => ({ data: { data: [] } })),
+        apiClient.get("/crm/leads").catch(() => ({ data: { data: [] } })),
+        apiClient.get("/crm/quotations").catch(() => ({ data: { data: [] } })),
+        apiClient.get("/crm/products", { params: { limit: 500 } }).catch(() => ({ data: { data: [] } })),
       ]);
       setCustomers(customerRes.data.data || []);
       setLeads(leadRes.data.data || []);
@@ -381,6 +384,11 @@ function tokenForQuote(quote: Quotation | InventoryWorkQueueJob) {
   return `TOK-${String(base || "").replace(/[^0-9A-Z]/gi, "").slice(-10).toUpperCase()}`;
 }
 
+function clientQuotationUrl(token?: string) {
+  if (!token) return "";
+  return `${window.location.origin}/client/quotations/${token}`;
+}
+
 export function CrmDashboardPage() {
   const { leads, quotations, customers, loading } = useCrmData();
   const approved = quotations.filter((item) => item.status === "APPROVED").length;
@@ -412,7 +420,7 @@ export function CrmDashboardPage() {
       <div style={{ ...card, padding: 18 }}>
         <h3 style={{ margin: 0 }}>Simple user journey</h3>
         <p style={{ color: "#64748b", lineHeight: 1.6 }}>
-          First create or select the client. Then create a quotation with stock items from the dropdown and manual purchase-required items when stock is not available. Send the quotation to the client. When the client approves, mark it approved; Inventory will receive it in its queue with a generated token.
+          First create or select the client. Then create a quotation with stock items from the dropdown and manual purchase-required items when stock is not available. On the Quotations page click Send to Client. The system creates a client approval link. For now CSR shares that link manually; email delivery will be connected later. The client opens the link and approves it. After approval, Inventory receives the job with a generated token.
         </p>
       </div>
     </div>
@@ -538,9 +546,25 @@ export function CrmQuotationsPage() {
   const filtered = quotations.filter((quote) => [quote.quotation_number, quote.customer_name, quote.status, quote.template_style].join(" ").toLowerCase().includes(q.toLowerCase()));
 
   const updateStatus = async (id: string, status: string) => {
-    await apiClient.patch(`/crm/quotations/${id}/status`, { status });
-    showToast(status === "APPROVED" ? "Client approval recorded. Inventory queue received this job." : `Quotation marked ${status}.`, "success");
+    const response = await apiClient.patch(`/crm/quotations/${id}/status`, { status });
+    const updated = response.data?.data as Quotation | undefined;
+    if (status === "SENT") {
+      const link = clientQuotationUrl(updated?.client_approval_token);
+      if (link && navigator.clipboard) {
+        await navigator.clipboard.writeText(link).catch(() => undefined);
+      }
+      showToast(link ? "Quotation sent status saved. Client approval link copied." : "Quotation sent status saved.", "success");
+    } else {
+      showToast(status === "APPROVED" ? "Client approval recorded. Inventory queue received this job." : `Quotation marked ${status}.`, "success");
+    }
     reload();
+  };
+
+  const copyClientLink = async (quote: Quotation) => {
+    const link = clientQuotationUrl(quote.client_approval_token);
+    if (!link) return showToast("Client approval link is missing. Click Send first.", "error");
+    await navigator.clipboard?.writeText(link).catch(() => undefined);
+    showToast("Client approval link copied.", "success");
   };
 
   return (
@@ -550,10 +574,13 @@ export function CrmQuotationsPage() {
         <SearchBox value={q} onChange={setQ} placeholder="Search quotation number, client or status" />
       </div>
       <DataTable
-        columns={["Quotation", "Client", "Token / Receipt", "Amount", "Status", "Actions"]}
+        columns={["Quotation", "Client", "Client Approval", "Token / Receipt", "Amount", "Status", "Actions"]}
         rows={filtered.map((quote) => [
           <strong>{quote.quotation_number}</strong>,
           quote.customer_name || "-",
+          quote.status === "DRAFT"
+            ? <span style={{ color: "#94a3b8" }}>Click Send to generate/share client link</span>
+            : <Button onClick={() => copyClientLink(quote)} tone="light"><FileText size={14} /> Copy Approval Link</Button>,
           quote.status === "APPROVED" ? <strong>{tokenForQuote(quote)}</strong> : <span style={{ color: "#94a3b8" }}>Generated after approval</span>,
           money(quote.total_amount),
           statusChip(quote.status),
@@ -715,6 +742,110 @@ export function CrmCreateQuotationPage() {
           <button type="submit" className="btn btn-primary" disabled={savingQuotation}>{savingQuotation ? "Saving..." : "Save Quotation Draft"}</button>
         </div>
       </form>
+    </div>
+  );
+}
+
+export function ClientQuotationApprovalPage() {
+  const { token = "" } = useParams();
+  const { showToast } = useToastContext();
+  const [quotation, setQuotation] = useState<Quotation | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [approving, setApproving] = useState(false);
+  const [clientName, setClientName] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const response = await apiClient.get(`/crm/public/quotations/${token}`);
+      setQuotation(response.data.data || null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (token) load();
+  }, [token]);
+
+  const approve = async () => {
+    if (!quotation || approving) return;
+    setApproving(true);
+    try {
+      const response = await apiClient.post(`/crm/public/quotations/${token}/approve`, {
+        client_name: clientName || quotation.customer_name || "Client approved",
+      });
+      setQuotation({ ...quotation, ...response.data.data, status: "APPROVED" });
+      showToast("Quotation approved. The inventory team can now process this job.", "success");
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  if (loading) {
+    return <div style={{ padding: 40, fontFamily: "'Outfit', sans-serif" }}>Loading quotation...</div>;
+  }
+
+  if (!quotation) {
+    return (
+      <div style={{ padding: 40, fontFamily: "'Outfit', sans-serif" }}>
+        <div style={{ ...card, padding: 24, maxWidth: 720, margin: "80px auto" }}>
+          <h1 style={{ marginTop: 0 }}>Quotation link not found</h1>
+          <p style={{ color: "#64748b" }}>Please ask CSR to send the latest approval link.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg,#eef6ff,#f8fbff)", padding: 28, fontFamily: "'Outfit', sans-serif" }}>
+      <div style={{ maxWidth: 960, margin: "0 auto" }}>
+        <div style={{ ...card, padding: 24, marginBottom: 16, background: "#0f172a", color: "#ffffff" }}>
+          <div style={{ color: "#bfdbfe", fontWeight: 900, fontSize: 12, letterSpacing: ".08em", textTransform: "uppercase" }}>TRACK360 Client Approval</div>
+          <h1 style={{ margin: "10px 0 8px" }}>Quotation {quotation.quotation_number}</h1>
+          <p style={{ margin: 0, color: "#dbeafe" }}>
+            Review the quotation items below. Once approved, the job moves to Inventory for stock and installer dispatch.
+          </p>
+        </div>
+
+        <div style={{ ...card, padding: 20, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 14 }}>
+            <div>
+              <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900 }}>Client</div>
+              <div style={{ fontWeight: 900 }}>{quotation.customer_name || "-"}</div>
+            </div>
+            <div>
+              <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900 }}>Status</div>
+              {statusChip(quotation.status)}
+            </div>
+            <div>
+              <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900 }}>Total</div>
+              <div style={{ fontWeight: 950, fontSize: 22 }}>{money(quotation.total_amount)}</div>
+            </div>
+          </div>
+        </div>
+
+        <DataTable
+          columns={["Item", "Quantity", "Unit Price", "Total"]}
+          rows={(quotation.items || []).map((item) => [
+            <strong>{item.description || item.item_description || item.product_name || "Quotation item"}</strong>,
+            item.quantity || 1,
+            money(item.unit_price || 0),
+            money(Number(item.quantity || 1) * Number(item.unit_price || 0)),
+          ])}
+          empty="No quotation items found."
+        />
+
+        <div style={{ ...card, padding: 18, marginTop: 16 }}>
+          <label style={{ display: "grid", gap: 6, marginBottom: 12 }}>
+            <span style={{ color: "#475569", fontSize: 12, fontWeight: 900 }}>Approver name / remarks</span>
+            <input style={input} value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Your name or approval note" />
+          </label>
+          <button className="btn btn-primary" disabled={approving || quotation.status === "APPROVED"} onClick={approve}>
+            {quotation.status === "APPROVED" ? "Already Approved" : approving ? "Approving..." : "Approve Quotation"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

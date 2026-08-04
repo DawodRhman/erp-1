@@ -53,6 +53,7 @@ const CrmLeads = lazy(() => import("./pages/CrmLeads"));
 const CrmClients = lazy(() => import("./pages/CrmClients"));
 const CrmQuotations = lazy(() => import("./pages/CrmQuotations"));
 const CrmCreateQuotation = lazy(() => import("./pages/CrmCreateQuotation"));
+const ClientQuotationApproval = lazy(() => import("./pages/ClientQuotationApproval"));
 const InventoryQueue = lazy(() => import("./pages/InventoryQueue"));
 const InventoryProducts = lazy(() => import("./pages/InventoryProducts"));
 const InventorySerials = lazy(() => import("./pages/InventorySerials"));
@@ -233,6 +234,7 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/change-password" element={<ChangePassword />} />
             <Route path="/unauthorized" element={<Unauthorized />} />
+            <Route path="/client/quotations/:token" element={<ClientQuotationApproval />} />
             <Route path="/" element={<RootRedirect />} />
 
             {/* --- ADMIN & HR ROUTES (MainLayout) --- */}
