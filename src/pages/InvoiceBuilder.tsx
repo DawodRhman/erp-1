@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Building2,
   Calculator,
@@ -226,6 +226,14 @@ function evaluateRow(row: BuilderRow, columns: BuilderColumn[], index: number) {
   return values;
 }
 
+function makeIdempotencyKey(prefix: string) {
+  const randomPart =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${prefix}-${randomPart}`;
+}
+
 export default function InvoiceBuilder() {
   const { showToast } = useToastContext();
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -268,6 +276,9 @@ export default function InvoiceBuilder() {
   const [summaryLimit, setSummaryLimit] = useState(String(summaryTypes[0].defaultLimit));
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([]);
   const [summaries, setSummaries] = useState<SavedSummary[]>([]);
+  const [savingInvoice, setSavingInvoice] = useState(false);
+  const savingInvoiceRef = useRef(false);
+  const invoiceIdempotencyKeyRef = useRef(makeIdempotencyKey("invoice"));
 
   const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId);
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
@@ -556,6 +567,7 @@ export default function InvoiceBuilder() {
   };
 
   const saveInvoice = async () => {
+    if (savingInvoiceRef.current) return;
     if (!selectedCustomerId) {
       showToast("Select a client before saving invoice", "error");
       return;
@@ -566,53 +578,62 @@ export default function InvoiceBuilder() {
       return;
     }
 
-    const invoice = await invoicingApi.createInvoice({
-      customer_id: selectedCustomerId,
-      dispatch_id: billingDispatch?.id || null,
-      quotation_id: billingQuotation?.id || null,
-      template_name: selectedTemplate?.template_name || billingQuotation?.template_style || (billingDispatch ? "Installer Dispatch Billing" : "Custom Invoice Builder"),
-      tax_type: "GST",
-      tax_rate: 18,
-      number_of_copies: 1,
-      status: "DRAFT",
-      notes: JSON.stringify({
-        invoice_name: invoiceName,
-        invoice_date: invoiceDate,
-        quotation_id: billingQuotation?.id || null,
-        quotation_number: billingQuotation?.quotation_number || "",
+    savingInvoiceRef.current = true;
+    setSavingInvoice(true);
+    try {
+      const invoice = await invoicingApi.createInvoice({
+        idempotency_key: invoiceIdempotencyKeyRef.current,
+        customer_id: selectedCustomerId,
         dispatch_id: billingDispatch?.id || null,
-        dispatch_number: billingDispatch?.dispatch_number || "",
-        purchase_order_no: purchaseOrderNo,
-        branch_name: branchName,
-        branch_code: branchCode,
-        region,
-        ntn_no: ntnNo,
-        gst_no: gstNo,
-        dc_no: dcNo,
-        columns,
-        footer_note: footerNote,
-        bank_line: bankLine,
-        signature_name: signatureName,
-        signature_image: signatureImage,
-      }),
-      items: billableRows.map((row) => {
-        const sourceIndex = rows.findIndex((candidate) => candidate.id === row.id);
-        const values = evaluatedRows[sourceIndex] || evaluateRow(row, columns, sourceIndex);
-        return {
-          product_id: row.product_id || null,
-          description: row.description || row.brand_model || "Invoice item",
-          quantity: Number(row.quantity || 1),
-          unit_price: Number(row.unit_price || 0),
-          total_without_tax: Number(values.value_excl || 0),
-          tax_amount: Number(values.gst_amount || 0),
-          total_with_tax: Number(values.value_incl || 0),
-        };
-      }),
-    });
+        quotation_id: billingQuotation?.id || null,
+        template_name: selectedTemplate?.template_name || billingQuotation?.template_style || (billingDispatch ? "Installer Dispatch Billing" : "Custom Invoice Builder"),
+        tax_type: "GST",
+        tax_rate: 18,
+        number_of_copies: 1,
+        status: "DRAFT",
+        notes: JSON.stringify({
+          invoice_name: invoiceName,
+          invoice_date: invoiceDate,
+          quotation_id: billingQuotation?.id || null,
+          quotation_number: billingQuotation?.quotation_number || "",
+          dispatch_id: billingDispatch?.id || null,
+          dispatch_number: billingDispatch?.dispatch_number || "",
+          purchase_order_no: purchaseOrderNo,
+          branch_name: branchName,
+          branch_code: branchCode,
+          region,
+          ntn_no: ntnNo,
+          gst_no: gstNo,
+          dc_no: dcNo,
+          columns,
+          footer_note: footerNote,
+          bank_line: bankLine,
+          signature_name: signatureName,
+          signature_image: signatureImage,
+        }),
+        items: billableRows.map((row) => {
+          const sourceIndex = rows.findIndex((candidate) => candidate.id === row.id);
+          const values = evaluatedRows[sourceIndex] || evaluateRow(row, columns, sourceIndex);
+          return {
+            product_id: row.product_id || null,
+            description: row.description || row.brand_model || "Invoice item",
+            quantity: Number(row.quantity || 1),
+            unit_price: Number(row.unit_price || 0),
+            total_without_tax: Number(values.value_excl || 0),
+            tax_amount: Number(values.gst_amount || 0),
+            total_with_tax: Number(values.value_incl || 0),
+          };
+        }),
+      });
 
-    setInvoices((current) => [invoice, ...current]);
-    setSelectedInvoiceIds([invoice.id]);
-    showToast("Invoice saved as draft. It is not emailed yet.", "success");
+      setInvoices((current) => current.some((item) => item.id === invoice.id) ? current : [invoice, ...current]);
+      setSelectedInvoiceIds([invoice.id]);
+      invoiceIdempotencyKeyRef.current = makeIdempotencyKey("invoice");
+      showToast(`Invoice saved once as ${invoice.invoice_number}. It is not emailed yet.`, "success");
+    } finally {
+      savingInvoiceRef.current = false;
+      setSavingInvoice(false);
+    }
   };
 
   const createSummary = async () => {
@@ -728,8 +749,8 @@ export default function InvoiceBuilder() {
             <button className="btn" onClick={() => setActiveStep("preview")}>
               <Eye size={16} /> Preview
             </button>
-            <button className="btn btn-primary" onClick={saveInvoice}>
-              <CheckCircle2 size={16} /> Save Draft Invoice
+            <button className="btn btn-primary" onClick={saveInvoice} disabled={savingInvoice}>
+              <CheckCircle2 size={16} /> {savingInvoice ? "Saving..." : "Save Draft Invoice"}
             </button>
           </div>
         </div>
@@ -1133,8 +1154,8 @@ export default function InvoiceBuilder() {
               <button className="btn" onClick={() => window.print()}>
                 <Download size={15} /> Print / Save PDF
               </button>
-              <button className="btn btn-primary" onClick={saveInvoice}>
-                <Save size={15} /> Save Draft
+              <button className="btn btn-primary" onClick={saveInvoice} disabled={savingInvoice}>
+                <Save size={15} /> {savingInvoice ? "Saving..." : "Save Draft"}
               </button>
               <button className="btn" onClick={() => showToast("Email will be connected in the email phase. Draft remains saved.", "success")}>
                 <Mail size={15} /> Email Later

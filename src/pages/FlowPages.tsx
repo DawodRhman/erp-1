@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
@@ -129,6 +129,14 @@ function money(value?: number | string) {
   return `Rs ${Number(value || 0).toLocaleString("en-PK", {
     maximumFractionDigits: 2,
   })}`;
+}
+
+function makeIdempotencyKey(prefix: string) {
+  const randomPart =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${prefix}-${randomPart}`;
 }
 
 function statusChip(status?: string) {
@@ -571,6 +579,9 @@ export function CrmCreateQuotationPage() {
   const [templateStyle, setTemplateStyle] = useState("HBL Sales Tax Invoice");
   const [taxRate, setTaxRate] = useState(18);
   const [lines, setLines] = useState<QuoteLine[]>([{ product_id: "", manual_description: "", quantity: 1, unit_price: 0 }]);
+  const [savingQuotation, setSavingQuotation] = useState(false);
+  const savingQuotationRef = useRef(false);
+  const quotationIdempotencyKeyRef = useRef(makeIdempotencyKey("quotation"));
 
   const normalizedLines = lines.map((line) => {
     const product = products.find((item) => item.id === line.product_id);
@@ -591,25 +602,35 @@ export function CrmCreateQuotationPage() {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (savingQuotationRef.current) return;
     if (!customerId) return showToast("Select a client first.", "error");
     if (normalizedLines.some((line) => !line.description || line.quantity <= 0)) {
       return showToast("Each line needs a product or manual purchase description.", "error");
     }
-    await apiClient.post("/crm/quotations", {
-      customer_id: customerId,
-      price_tier: priceTier,
-      template_style: templateStyle,
-      tax_amount: tax,
-      items: normalizedLines.map((line) => ({
-        product_id: line.product_id || null,
-        description: line.description,
-        quantity: line.quantity,
-        unit_price: line.unit_price,
-      })),
-    });
-    showToast("Quotation saved. Next: send to client from quotations page.", "success");
-    reload();
-    navigate("/crm/quotations");
+    savingQuotationRef.current = true;
+    setSavingQuotation(true);
+    try {
+      const response = await apiClient.post("/crm/quotations", {
+        idempotency_key: quotationIdempotencyKeyRef.current,
+        customer_id: customerId,
+        price_tier: priceTier,
+        template_style: templateStyle,
+        tax_amount: tax,
+        items: normalizedLines.map((line) => ({
+          product_id: line.product_id || null,
+          description: line.description,
+          quantity: line.quantity,
+          unit_price: line.unit_price,
+        })),
+      });
+      quotationIdempotencyKeyRef.current = makeIdempotencyKey("quotation");
+      showToast(`Quotation saved once as ${response.data?.data?.quotation_number || "new draft"}. Next: send to client from quotations page.`, "success");
+      reload();
+      navigate("/crm/quotations");
+    } finally {
+      savingQuotationRef.current = false;
+      setSavingQuotation(false);
+    }
   };
 
   return (
@@ -651,17 +672,32 @@ export function CrmCreateQuotationPage() {
               const product = products.find((item) => item.id === line.product_id);
               return (
                 <div key={index} style={{ display: "grid", gridTemplateColumns: "1.5fr 1.5fr .5fr .7fr .7fr 40px", gap: 8, alignItems: "center" }}>
-                  <select value={line.product_id} onChange={(e) => updateLine(index, { product_id: e.target.value, unit_price: Number(products.find((p) => p.id === e.target.value)?.unit_price || 0) })} style={input}>
+                  <select value={line.product_id} onChange={(e) => {
+                    const product = products.find((p) => p.id === e.target.value);
+                    updateLine(index, {
+                      product_id: e.target.value,
+                      manual_description: e.target.value ? "" : line.manual_description,
+                      unit_price: Number(product?.unit_price || product?.cost_price || 0),
+                    });
+                  }} style={input}>
                     <option value="">Manual purchase / not in stock</option>
                     {products.map((productItem) => (
                       <option key={productItem.id} value={productItem.id}>
-                        {productItem.product_name} - available {productItem.available_count ?? productItem.quantity ?? 0}
+                        {productItem.product_name} - {money(Number(productItem.unit_price || productItem.cost_price || 0))} - available {productItem.available_count ?? productItem.quantity ?? 0}
                       </option>
                     ))}
                   </select>
                   <input style={input} placeholder="Manual item needed to buy" value={line.manual_description} onChange={(e) => updateLine(index, { manual_description: e.target.value })} disabled={Boolean(line.product_id)} />
                   <input type="number" min="1" style={input} value={line.quantity} onChange={(e) => updateLine(index, { quantity: Number(e.target.value) || 1 })} />
-                  <input type="number" min="0" style={input} value={line.unit_price} onChange={(e) => updateLine(index, { unit_price: Number(e.target.value) || 0 })} />
+                  <input
+                    type="number"
+                    min="0"
+                    style={{ ...input, background: line.product_id ? "#eef6ff" : input.background }}
+                    value={line.unit_price}
+                    onChange={(e) => updateLine(index, { unit_price: Number(e.target.value) || 0 })}
+                    readOnly={Boolean(line.product_id)}
+                    title={line.product_id ? "Auto-filled from selected product" : "Manual purchase estimate"}
+                  />
                   <div style={{ fontWeight: 900, textAlign: "right" }}>{money(Number(line.quantity || 0) * Number(line.unit_price || 0))}<br /><span style={{ color: product && Number(product.available_count ?? product.quantity ?? 0) < Number(line.quantity || 1) ? "#b45309" : "#047857", fontSize: 11 }}>{product ? "Stock check" : "Purchase required"}</span></div>
                   <Button tone="light" disabled={lines.length === 1} onClick={() => setLines(lines.filter((_, i) => i !== index))}>X</Button>
                 </div>
@@ -676,7 +712,7 @@ export function CrmCreateQuotationPage() {
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
           <Button to="/crm/quotations" tone="light">Cancel</Button>
-          <button type="submit" className="btn btn-primary">Save Quotation Draft</button>
+          <button type="submit" className="btn btn-primary" disabled={savingQuotation}>{savingQuotation ? "Saving..." : "Save Quotation Draft"}</button>
         </div>
       </form>
     </div>
@@ -1091,4 +1127,3 @@ export function InventoryMovementsPage() {
     </div>
   );
 }
-
