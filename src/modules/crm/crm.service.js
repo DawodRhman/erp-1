@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import pool from '../../config/db.js';
 import { AppError } from '../../utils/errors.js';
 
@@ -150,6 +151,9 @@ export async function listQuotations(filters = {}) {
         ${hasLeadId ? 'l.title' : 'NULL'} AS lead_title,
         ${quoteColumns.has('price_tier') ? 'q.price_tier' : "'Standard'"} AS price_tier,
         ${quoteColumns.has('template_style') ? 'q.template_style' : "'HBL Sales Tax Invoice'"} AS template_style,
+        ${quoteColumns.has('client_approval_token') ? 'q.client_approval_token' : 'NULL'} AS client_approval_token,
+        ${quoteColumns.has('sent_at') ? 'q.sent_at' : 'NULL'} AS sent_at,
+        ${quoteColumns.has('client_approved_at') ? 'q.client_approved_at' : 'NULL'} AS client_approved_at,
         c.customer_name,
         c.email AS customer_email,
         c.phone AS customer_phone
@@ -247,6 +251,7 @@ export async function createQuotation(data) {
       terms: data.terms || 'Payment within 30 days of quotation approval.',
       notes: data.notes || null,
       idempotency_key: idempotencyKey,
+      client_approval_token: data.client_approval_token || randomUUID(),
     };
     const insertColumns = Object.keys(quoteValues).filter((column) => quoteColumns.has(column));
     const placeholders = insertColumns.map((_, index) => `$${index + 1}`).join(', ');
@@ -312,8 +317,17 @@ export async function updateQuotationStatus(id, status, userId = null) {
   if (quoteColumns.has('updated_at')) {
     fields.push('updated_at = NOW()');
   }
+  if (status === 'SENT' && quoteColumns.has('sent_at')) {
+    fields.push('sent_at = COALESCE(sent_at, NOW())');
+  }
+  if (status === 'SENT' && quoteColumns.has('client_approval_token')) {
+    fields.push(`client_approval_token = COALESCE(client_approval_token, gen_random_uuid()::text)`);
+  }
   if (status === 'APPROVED' && quoteColumns.has('approved_at')) {
     fields.push('approved_at = NOW()');
+  }
+  if (status === 'APPROVED' && quoteColumns.has('client_approved_at')) {
+    fields.push('client_approved_at = COALESCE(client_approved_at, NOW())');
   }
   if (status === 'APPROVED' && userId && quoteColumns.has('approved_by')) {
     params.push(userId);
@@ -325,5 +339,89 @@ export async function updateQuotationStatus(id, status, userId = null) {
     params
   );
   if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Quotation not found.');
+  return result.rows[0];
+}
+
+export async function getPublicQuotationByToken(token) {
+  const quoteColumns = await getPublicTableColumns('quotations');
+  if (!quoteColumns.has('client_approval_token')) {
+    throw new AppError(404, 'NOT_FOUND', 'Client approval links are not enabled.');
+  }
+
+  const qResult = await pool.query(
+    `
+      SELECT
+        q.id,
+        ${quoteColumns.has('quotation_number') ? 'q.quotation_number' : quoteColumns.has('quotation_id') ? 'q.quotation_id AS quotation_number' : 'q.id::text AS quotation_number'},
+        q.status,
+        q.total_amount,
+        ${quoteColumns.has('subtotal') ? 'q.subtotal' : 'NULL AS subtotal'},
+        ${quoteColumns.has('tax_amount') ? 'q.tax_amount' : 'NULL AS tax_amount'},
+        ${quoteColumns.has('template_style') ? 'q.template_style' : "'Standard' AS template_style"},
+        ${quoteColumns.has('sent_at') ? 'q.sent_at' : 'NULL AS sent_at'},
+        ${quoteColumns.has('client_approved_at') ? 'q.client_approved_at' : 'NULL AS client_approved_at'},
+        c.customer_name,
+        c.email AS customer_email,
+        c.phone AS customer_phone
+      FROM public.quotations q
+      LEFT JOIN public.customers c ON c.id = q.customer_id
+      WHERE q.client_approval_token = $1
+    `,
+    [token],
+  );
+  if (!qResult.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Quotation link not found.');
+
+  const itemsResult = await pool.query(
+    `
+      SELECT
+        qi.id,
+        qi.product_id,
+        COALESCE(qi.description, qi.item_description, p.product_name, 'Quotation item') AS description,
+        qi.quantity,
+        qi.unit_price,
+        qi.total_price,
+        p.product_name
+      FROM public.quotation_items qi
+      LEFT JOIN public.products p ON p.id = qi.product_id
+      WHERE qi.quotation_id = $1
+      ORDER BY qi.id
+    `,
+    [qResult.rows[0].id],
+  );
+
+  return {
+    ...qResult.rows[0],
+    items: itemsResult.rows,
+  };
+}
+
+export async function approvePublicQuotationByToken(token, data = {}) {
+  const quoteColumns = await getPublicTableColumns('quotations');
+  if (!quoteColumns.has('client_approval_token')) {
+    throw new AppError(404, 'NOT_FOUND', 'Client approval links are not enabled.');
+  }
+
+  const fields = [`status = 'APPROVED'`];
+  if (quoteColumns.has('approved_at')) fields.push('approved_at = NOW()');
+  if (quoteColumns.has('client_approved_at')) fields.push('client_approved_at = NOW()');
+  if (quoteColumns.has('approval_remarks')) {
+    fields.push(`approval_remarks = COALESCE($2, approval_remarks)`);
+  }
+  if (quoteColumns.has('updated_at')) fields.push('updated_at = NOW()');
+
+  const params = quoteColumns.has('approval_remarks')
+    ? [token, data.approval_remarks || data.client_name || null]
+    : [token];
+
+  const result = await pool.query(
+    `
+      UPDATE public.quotations
+      SET ${fields.join(', ')}
+      WHERE client_approval_token = $1
+      RETURNING *
+    `,
+    params,
+  );
+  if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Quotation link not found.');
   return result.rows[0];
 }

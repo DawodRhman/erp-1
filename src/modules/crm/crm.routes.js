@@ -7,6 +7,8 @@ import {
   updateLead,
   listQuotations,
   getQuotation,
+  getPublicQuotation,
+  approvePublicQuotation,
   createQuotation,
   updateQuotationStatus,
   setProductPriceTiers,
@@ -19,6 +21,9 @@ import {
 } from './crm.controller.js';
 
 const router = Router();
+
+router.get('/public/quotations/:token', getPublicQuotation);
+router.post('/public/quotations/:token/approve', approvePublicQuotation);
 
 router.use(verifyToken);
 

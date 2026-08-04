@@ -95,6 +95,24 @@ export async function getQuotation(req, res, next) {
   }
 }
 
+export async function getPublicQuotation(req, res, next) {
+  try {
+    const quote = await crmService.getPublicQuotationByToken(req.params.token);
+    return sendSuccess(res, quote, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function approvePublicQuotation(req, res, next) {
+  try {
+    const quote = await crmService.approvePublicQuotationByToken(req.params.token, req.body);
+    return sendSuccess(res, quote, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
 export async function createQuotation(req, res, next) {
   try {
     const quote = await crmService.createQuotation({
