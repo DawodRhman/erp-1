@@ -14,6 +14,12 @@ async function getPublicTableColumns(tableName) {
   return new Set(result.rows.map((row) => row.column_name));
 }
 
+async function nextQuotationNumber(client) {
+  const seqResult = await client.query(`SELECT nextval('public.crm_quotation_number_seq')::int AS seq`);
+  const seq = seqResult.rows[0].seq;
+  return `QT-${new Date().toISOString().slice(0, 7).replace('-', '')}-${String(seq).padStart(4, '0')}`;
+}
+
 // --- Price Tiers ---
 export async function setProductPriceTiers(productId, tiers = []) {
   // tiers: [{ tier_name: 'TIER_A', price: 100 }, ...]
@@ -204,14 +210,17 @@ export async function getQuotationById(id) {
 export async function createQuotation(data) {
   const quoteColumns = await getPublicTableColumns('quotations');
   const itemColumns = await getPublicTableColumns('quotation_items');
-  // Generate Quotation Number e.g. QT-202607-001
-  const countRes = await pool.query(`SELECT COUNT(*)::int AS total FROM public.quotations`);
-  const seq = (countRes.rows[0].total || 0) + 1;
-  const quoteNum = `QT-${new Date().toISOString().slice(0, 7).replace('-', '')}-${String(seq).padStart(4, '0')}`;
+  const idempotencyKey = String(data.idempotency_key || '').trim() || null;
+
+  if (idempotencyKey && quoteColumns.has('idempotency_key')) {
+    const existing = await pool.query(`SELECT * FROM public.quotations WHERE idempotency_key = $1`, [idempotencyKey]);
+    if (existing.rows[0]) return existing.rows[0];
+  }
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const quoteNum = await nextQuotationNumber(client);
 
     let subtotal = 0;
     const items = data.items || [];
@@ -237,6 +246,7 @@ export async function createQuotation(data) {
       status: 'DRAFT',
       terms: data.terms || 'Payment within 30 days of quotation approval.',
       notes: data.notes || null,
+      idempotency_key: idempotencyKey,
     };
     const insertColumns = Object.keys(quoteValues).filter((column) => quoteColumns.has(column));
     const placeholders = insertColumns.map((_, index) => `$${index + 1}`).join(', ');
@@ -284,6 +294,10 @@ export async function createQuotation(data) {
     return quotation;
   } catch (err) {
     await client.query('ROLLBACK');
+    if (err?.code === '23505' && idempotencyKey && quoteColumns.has('idempotency_key')) {
+      const existing = await pool.query(`SELECT * FROM public.quotations WHERE idempotency_key = $1`, [idempotencyKey]);
+      if (existing.rows[0]) return existing.rows[0];
+    }
     throw err;
   } finally {
     client.release();

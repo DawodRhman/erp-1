@@ -21,7 +21,10 @@ export async function saveClientTemplate(req, res, next) {
 
 export async function createClientInvoice(req, res, next) {
   try {
-    const invoice = await invoicingService.createClientInvoiceFromDispatch(req.body);
+    const invoice = await invoicingService.createClientInvoiceFromDispatch({
+      ...req.body,
+      idempotency_key: req.get('Idempotency-Key') || req.body.idempotency_key,
+    });
     return sendSuccess(res, invoice, 201);
   } catch (err) {
     return next(err);

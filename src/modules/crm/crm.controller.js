@@ -97,7 +97,10 @@ export async function getQuotation(req, res, next) {
 
 export async function createQuotation(req, res, next) {
   try {
-    const quote = await crmService.createQuotation(req.body);
+    const quote = await crmService.createQuotation({
+      ...req.body,
+      idempotency_key: req.get('Idempotency-Key') || req.body.idempotency_key,
+    });
     return sendSuccess(res, quote, 201);
   } catch (err) {
     return next(err);

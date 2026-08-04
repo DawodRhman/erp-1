@@ -25,6 +25,25 @@ function toAmount(value, fallback = 0) {
   return Number.isFinite(amount) ? amount : fallback;
 }
 
+async function getPublicTableColumns(tableName) {
+  const result = await pool.query(
+    `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = $1
+    `,
+    [tableName],
+  );
+  return new Set(result.rows.map((row) => row.column_name));
+}
+
+async function nextCustomerInvoiceNumber(client) {
+  const seqResult = await client.query(`SELECT nextval('public.customer_invoice_number_seq')::int AS seq`);
+  const seq = seqResult.rows[0].seq;
+  return `INV-${new Date().toISOString().slice(0, 7).replace('-', '')}-${String(seq).padStart(4, '0')}`;
+}
+
 export async function listClientTemplates(customerId = null) {
   let query = `SELECT t.*, c.customer_name FROM public.client_invoice_templates t LEFT JOIN public.customers c ON c.id = t.customer_id`;
   const params = [];
@@ -62,13 +81,18 @@ export async function saveClientTemplate(data) {
 
 export async function createClientInvoiceFromDispatch(data) {
   // data: { dispatch_id, quotation_id, customer_id, template_name, currency, exchange_rate, tax_type, tax_rate, number_of_copies, notes }
-  const countRes = await pool.query(`SELECT COUNT(*)::int AS total FROM public.customer_invoices`);
-  const seq = (countRes.rows[0].total || 0) + 1;
-  const invNum = `INV-${new Date().toISOString().slice(0, 7).replace('-', '')}-${String(seq).padStart(4, '0')}`;
+  const invoiceColumns = await getPublicTableColumns('customer_invoices');
+  const idempotencyKey = String(data.idempotency_key || '').trim() || null;
+
+  if (idempotencyKey && invoiceColumns.has('idempotency_key')) {
+    const existing = await pool.query(`SELECT * FROM public.customer_invoices WHERE idempotency_key = $1`, [idempotencyKey]);
+    if (existing.rows[0]) return existing.rows[0];
+  }
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const invNum = await nextCustomerInvoiceNumber(client);
 
     let itemsToInvoice = [];
 
@@ -156,34 +180,34 @@ export async function createClientInvoiceFromDispatch(data) {
     const grandTotal = subtotal + totalTax;
     const words = numberToWords(grandTotal);
 
+    const invoiceValues = {
+      invoice_number: invNum,
+      dispatch_id: data.dispatch_id || null,
+      quotation_id: data.quotation_id || null,
+      customer_id: data.customer_id,
+      currency: data.currency || 'PKR',
+      exchange_rate: exRate,
+      template_name: data.template_name || 'Standard',
+      tax_type: data.tax_type || 'GST',
+      tax_rate: taxRatePct,
+      subtotal,
+      tax_amount: totalTax,
+      total_amount: grandTotal,
+      amount_in_words: words,
+      number_of_copies: data.number_of_copies || 1,
+      status: data.status || 'DRAFT',
+      notes: data.notes || null,
+      idempotency_key: idempotencyKey,
+    };
+    const insertColumns = Object.keys(invoiceValues).filter((column) => invoiceColumns.has(column));
+    const placeholders = insertColumns.map((_, index) => `$${index + 1}`).join(', ');
     const invRes = await client.query(
       `
-        INSERT INTO public.customer_invoices (
-          invoice_number, dispatch_id, quotation_id, customer_id, currency, exchange_rate,
-          template_name, tax_type, tax_rate, subtotal, tax_amount, total_amount,
-        amount_in_words, number_of_copies, status, notes
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        INSERT INTO public.customer_invoices (${insertColumns.join(', ')})
+        VALUES (${placeholders})
         RETURNING *
       `,
-      [
-        invNum,
-        data.dispatch_id || null,
-        data.quotation_id || null,
-        data.customer_id,
-        data.currency || 'PKR',
-        exRate,
-        data.template_name || 'Standard',
-        data.tax_type || 'GST',
-        taxRatePct,
-        subtotal,
-        totalTax,
-        grandTotal,
-        words,
-        data.number_of_copies || 1,
-        data.status || 'DRAFT',
-        data.notes || null,
-      ]
+      insertColumns.map((column) => invoiceValues[column]),
     );
     const invoice = invRes.rows[0];
 
@@ -518,6 +542,10 @@ export async function updateClientInvoice(id, data) {
     return invoiceRes.rows[0];
   } catch (err) {
     await client.query('ROLLBACK');
+    if (err?.code === '23505' && idempotencyKey && invoiceColumns.has('idempotency_key')) {
+      const existing = await pool.query(`SELECT * FROM public.customer_invoices WHERE idempotency_key = $1`, [idempotencyKey]);
+      if (existing.rows[0]) return existing.rows[0];
+    }
     throw err;
   } finally {
     client.release();
