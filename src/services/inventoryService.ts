@@ -166,6 +166,50 @@ export interface CustomerComplaint {
   reported_at: string;
 }
 
+export interface FieldDispatch {
+  id: string;
+  dispatch_number: string;
+  quotation_id?: string;
+  quotation_number?: string;
+  customer_id?: string;
+  customer_name?: string;
+  installer_id?: string;
+  installer_email?: string;
+  site_address?: string;
+  status: string;
+  notes?: string;
+  dispatched_at?: string;
+  completed_at?: string;
+  created_at?: string;
+  items?: FieldDispatchItem[];
+  on_the_go_purchases?: FieldPurchase[];
+}
+
+export interface FieldDispatchItem {
+  id?: string;
+  product_id?: string;
+  product_name?: string;
+  product_type?: string;
+  inventory_item_id?: string;
+  serial_number?: string;
+  imei?: string;
+  quantity_issued: number;
+  quantity_used?: number;
+  quantity_returned?: number;
+  unit_of_measure?: string;
+  unit_price?: number;
+  notes?: string;
+}
+
+export interface FieldPurchase {
+  id?: string;
+  item_description: string;
+  vendor_name?: string;
+  amount: number;
+  receipt_url?: string;
+  notes?: string;
+}
+
 export const inventoryApi = {
   getSummary: async (): Promise<InventorySummary> => {
     const res = await api.get('/inventory/summary');
@@ -302,6 +346,26 @@ export const inventoryApi = {
 
   createReplacement: async (data: any): Promise<any> => {
     const res = await api.post('/inventory/replacements', data);
+    return res.data.data;
+  },
+
+  getDispatches: async (params?: Record<string, any>): Promise<FieldDispatch[]> => {
+    const res = await api.get('/inventory/dispatches', { params });
+    return res.data.data;
+  },
+
+  getDispatch: async (id: string): Promise<FieldDispatch> => {
+    const res = await api.get(`/inventory/dispatches/${id}`);
+    return res.data.data;
+  },
+
+  createDispatch: async (data: any): Promise<FieldDispatch> => {
+    const res = await api.post('/inventory/dispatches', data);
+    return res.data.data;
+  },
+
+  reconcileDispatch: async (id: string, data: any): Promise<FieldDispatch> => {
+    const res = await api.post(`/inventory/dispatches/${id}/reconcile`, data);
     return res.data.data;
   },
 

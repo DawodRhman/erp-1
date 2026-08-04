@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { useToastContext } from "../context/ToastContext";
 import { apiClient } from "../services/apiClient";
-import { inventoryApi, Customer, Product } from "../services/inventoryService";
+import { inventoryApi, Customer, FieldDispatch, Product } from "../services/inventoryService";
 import {
   ClientInvoice,
   ClientInvoiceSummary,
@@ -234,12 +234,16 @@ export default function InvoiceBuilder() {
   const [invoices, setInvoices] = useState<ClientInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeStep, setActiveStep] = useState<"builder" | "preview" | "summaries">("builder");
-  const billingQuotationId = new URLSearchParams(window.location.search).get("quotationId") || "";
+  const routeParams = new URLSearchParams(window.location.search);
+  const billingQuotationId = routeParams.get("quotationId") || "";
+  const billingDispatchId = routeParams.get("dispatchId") || "";
 
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [loadedBillingQuotationId, setLoadedBillingQuotationId] = useState("");
+  const [loadedBillingDispatchId, setLoadedBillingDispatchId] = useState("");
   const [billingQuotation, setBillingQuotation] = useState<BillingQuotation | null>(null);
+  const [billingDispatch, setBillingDispatch] = useState<FieldDispatch | null>(null);
   const [invoiceName, setInvoiceName] = useState(`INV-DRAFT-${new Date().getFullYear()}`);
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [purchaseOrderNo, setPurchaseOrderNo] = useState("");
@@ -376,6 +380,59 @@ export default function InvoiceBuilder() {
     }
   };
 
+  const loadBillingDispatch = async (dispatchId: string) => {
+    try {
+      const dispatch = await inventoryApi.getDispatch(dispatchId);
+      const dispatchItems = Array.isArray(dispatch.items) ? dispatch.items : [];
+      const fieldPurchases = Array.isArray(dispatch.on_the_go_purchases) ? dispatch.on_the_go_purchases : [];
+
+      setBillingDispatch(dispatch);
+      setLoadedBillingDispatchId(dispatchId);
+      setBillingQuotation(null);
+      setLoadedBillingQuotationId("");
+      setSelectedTemplateId("");
+      setSelectedCustomerId(dispatch.customer_id || "");
+      setInvoiceName(`INV-DRAFT-${dispatch.dispatch_number || new Date().getFullYear()}`);
+      setPurchaseOrderNo(dispatch.quotation_number || dispatch.dispatch_number || "");
+      setBranchName(dispatch.site_address || "");
+      setHeaderTitle("Sales Tax Invoice");
+      setActiveStep("builder");
+
+      const dispatchRows = dispatchItems
+        .filter((item) => Number(item.quantity_used || item.quantity_issued || 0) > 0)
+        .map((item) => {
+          const quantity = Number(item.quantity_used || item.quantity_issued || 1);
+          return createRow({
+            product_id: item.product_id,
+            brand_model: item.product_name || item.serial_number || item.imei || "Installed item",
+            description: item.serial_number || item.imei
+              ? `${item.product_name || "Installed item"} - Serial ${item.serial_number || item.imei}`
+              : item.product_name || "Installed item",
+            quantity,
+            unit_price: Number(item.unit_price || 0),
+          });
+        });
+
+      const purchaseRows = fieldPurchases.map((purchase) =>
+        createRow({
+          brand_model: "Field purchase",
+          description: `${purchase.item_description}${purchase.vendor_name ? ` - ${purchase.vendor_name}` : ""}`,
+          quantity: 1,
+          unit_price: Number(purchase.amount || 0),
+        }),
+      );
+
+      const nextRows = [...dispatchRows, ...purchaseRows];
+      setRows(nextRows.length ? nextRows : [createRow()]);
+      showToast(`${dispatch.customer_name || "Client"} invoice auto-filled from installer dispatch ${dispatch.dispatch_number}`, "success");
+    } catch {
+      setBillingDispatch(null);
+      setLoadedBillingDispatchId("");
+      setRows([createRow()]);
+      showToast("Unable to load installer dispatch for billing", "error");
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -391,7 +448,7 @@ export default function InvoiceBuilder() {
       setTemplates(templateData);
       setInvoices(invoiceData);
       setSummaries(summaryData.map(mapApiSummary));
-      if (!billingQuotationId && !selectedCustomerId && customerData[0]) setSelectedCustomerId(customerData[0].id);
+      if (!billingQuotationId && !billingDispatchId && !selectedCustomerId && customerData[0]) setSelectedCustomerId(customerData[0].id);
     } finally {
       setLoading(false);
     }
@@ -405,6 +462,11 @@ export default function InvoiceBuilder() {
     if (loading || !billingQuotationId || loadedBillingQuotationId === billingQuotationId) return;
     loadBillingQuotation(billingQuotationId);
   }, [billingQuotationId, loadedBillingQuotationId, loading, products]);
+
+  useEffect(() => {
+    if (loading || !billingDispatchId || loadedBillingDispatchId === billingDispatchId) return;
+    loadBillingDispatch(billingDispatchId);
+  }, [billingDispatchId, loadedBillingDispatchId, loading]);
 
   useEffect(() => {
     if (!selectedTemplate) return;
@@ -506,8 +568,9 @@ export default function InvoiceBuilder() {
 
     const invoice = await invoicingApi.createInvoice({
       customer_id: selectedCustomerId,
+      dispatch_id: billingDispatch?.id || null,
       quotation_id: billingQuotation?.id || null,
-      template_name: selectedTemplate?.template_name || billingQuotation?.template_style || "Custom Invoice Builder",
+      template_name: selectedTemplate?.template_name || billingQuotation?.template_style || (billingDispatch ? "Installer Dispatch Billing" : "Custom Invoice Builder"),
       tax_type: "GST",
       tax_rate: 18,
       number_of_copies: 1,
@@ -517,6 +580,8 @@ export default function InvoiceBuilder() {
         invoice_date: invoiceDate,
         quotation_id: billingQuotation?.id || null,
         quotation_number: billingQuotation?.quotation_number || "",
+        dispatch_id: billingDispatch?.id || null,
+        dispatch_number: billingDispatch?.dispatch_number || "",
         purchase_order_no: purchaseOrderNo,
         branch_name: branchName,
         branch_code: branchCode,

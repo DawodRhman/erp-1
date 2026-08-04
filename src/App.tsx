@@ -46,8 +46,21 @@ const PenaltyLedger = lazy(() => import("./pages/PenaltyLedger"));
 const AnnouncementsFeed = lazy(() => import("./pages/AnnouncementsFeed"));
 const Directory = lazy(() => import("./pages/Directory"));
 const InventoryDashboard = lazy(() => import("./pages/InventoryDashboard"));
+const InventoryFlowDashboard = lazy(() => import("./pages/InventoryFlowDashboard"));
 const Inventory = lazy(() => import("./pages/Inventory"));
-const CRM = lazy(() => import("./pages/CRM"));
+const CrmDashboard = lazy(() => import("./pages/CrmDashboard"));
+const CrmLeads = lazy(() => import("./pages/CrmLeads"));
+const CrmClients = lazy(() => import("./pages/CrmClients"));
+const CrmQuotations = lazy(() => import("./pages/CrmQuotations"));
+const CrmCreateQuotation = lazy(() => import("./pages/CrmCreateQuotation"));
+const InventoryQueue = lazy(() => import("./pages/InventoryQueue"));
+const InventoryProducts = lazy(() => import("./pages/InventoryProducts"));
+const InventorySerials = lazy(() => import("./pages/InventorySerials"));
+const InventoryPurchasing = lazy(() => import("./pages/InventoryPurchasing"));
+const InventoryDispatches = lazy(() => import("./pages/InventoryDispatches"));
+const InstallerReturns = lazy(() => import("./pages/InstallerReturns"));
+const InventoryBillingApproval = lazy(() => import("./pages/InventoryBillingApproval"));
+const InventoryMovements = lazy(() => import("./pages/InventoryMovements"));
 const ClientInvoicing = lazy(() => import("./pages/ClientInvoicing"));
 const InvoiceBuilder = lazy(() => import("./pages/InvoiceBuilder"));
 const MatrixOperations = lazy(() => import("./pages/MatrixOperations"));
@@ -265,13 +278,26 @@ const App = () => (
                 <Route
                   element={<ProtectedRoute allowedRoles={["super_admin", "csr_officer"]} />}
                 >
-                  <Route path="/crm" element={<CRM />} />
+                  <Route path="/crm" element={<CrmDashboard />} />
+                  <Route path="/crm/leads" element={<CrmLeads />} />
+                  <Route path="/crm/clients" element={<CrmClients />} />
+                  <Route path="/crm/quotations" element={<CrmQuotations />} />
+                  <Route path="/crm/quotations/new" element={<CrmCreateQuotation />} />
                 </Route>
                 <Route
                   element={<ProtectedRoute allowedRoles={["super_admin", "inventory_officer", "inv_fin_admin"]} />}
                 >
                   <Route path="/inventory-dashboard" element={<InventoryDashboard />} />
-                  <Route path="/inventory" element={<Inventory />} />
+                  <Route path="/inventory" element={<InventoryFlowDashboard />} />
+                  <Route path="/inventory/queue" element={<InventoryQueue />} />
+                  <Route path="/inventory/products" element={<InventoryProducts />} />
+                  <Route path="/inventory/serials" element={<InventorySerials />} />
+                  <Route path="/inventory/purchasing" element={<InventoryPurchasing />} />
+                  <Route path="/inventory/dispatches" element={<InventoryDispatches />} />
+                  <Route path="/inventory/returns" element={<InstallerReturns />} />
+                  <Route path="/inventory/billing-approval" element={<InventoryBillingApproval />} />
+                  <Route path="/inventory/movements" element={<InventoryMovements />} />
+                  <Route path="/inventory/master-setup" element={<Inventory />} />
                 </Route>
                 <Route
                   element={<ProtectedRoute allowedRoles={["super_admin", "finance_officer", "inv_fin_admin"]} />}
