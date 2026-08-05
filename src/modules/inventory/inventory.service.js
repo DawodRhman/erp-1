@@ -144,10 +144,16 @@ export async function getProducts(options = {}) {
       COUNT(ii.id) FILTER (WHERE ii.current_status = 'AVAILABLE')::int AS available_count,
       COUNT(ii.id) FILTER (WHERE ii.current_status = 'ALLOCATED')::int AS allocated_count,
       COUNT(ii.id) FILTER (WHERE ii.current_status = 'INSTALLED')::int AS installed_count,
-      COUNT(ii.id) FILTER (WHERE ii.current_status = 'DAMAGED')::int AS damaged_count
+      COUNT(ii.id) FILTER (WHERE ii.current_status = 'DAMAGED')::int AS damaged_count,
+      COALESCE(price_tiers.price_tiers, '{}'::jsonb) AS price_tiers
     FROM public.products p
     LEFT JOIN public.item_categories ic ON ic.id = p.category_id
     LEFT JOIN public.inventory_items ii ON ii.product_id = p.id
+    LEFT JOIN LATERAL (
+      SELECT jsonb_object_agg(tier_name, price) AS price_tiers
+      FROM public.product_price_tiers
+      WHERE product_id = p.id
+    ) price_tiers ON TRUE
     WHERE 1=1
   `;
   const params = [];
@@ -181,7 +187,7 @@ export async function getProducts(options = {}) {
   }
 
   query += `
-    GROUP BY p.id, ic.category_name
+    GROUP BY p.id, ic.category_name, price_tiers.price_tiers
     ORDER BY p.product_name ASC
     LIMIT $${params.length + 1} OFFSET $${params.length + 2}
   `;
