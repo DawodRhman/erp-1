@@ -370,6 +370,7 @@ export default function InvoiceBuilder() {
       setInvoiceName(`INV-DRAFT-${quote.quotation_number || new Date().getFullYear()}`);
       setPurchaseOrderNo(quote.quotation_number || "");
       setHeaderTitle(quote.template_style || "Sales Tax Invoice");
+      setColumns(defaultColumns);
       setActiveStep("builder");
 
       if (quoteItems.length) {
@@ -407,6 +408,8 @@ export default function InvoiceBuilder() {
       const dispatch = await inventoryApi.getDispatch(dispatchId);
       const dispatchItems = Array.isArray(dispatch.items) ? dispatch.items : [];
       const fieldPurchases = Array.isArray(dispatch.on_the_go_purchases) ? dispatch.on_the_go_purchases : [];
+      let linkedQuote: BillingQuotation | null = null;
+      let quotationRows: BuilderRow[] = [];
 
       setBillingDispatch(dispatch);
       setLoadedBillingDispatchId(dispatchId);
@@ -418,7 +421,34 @@ export default function InvoiceBuilder() {
       setPurchaseOrderNo(dispatch.quotation_number || dispatch.dispatch_number || "");
       setBranchName(dispatch.site_address || "");
       setHeaderTitle("Sales Tax Invoice");
+      setColumns(defaultColumns);
       setActiveStep("builder");
+
+      if (dispatch.quotation_id) {
+        const response = await apiClient.get(`/crm/quotations/${dispatch.quotation_id}`);
+        linkedQuote = response.data.data as BillingQuotation;
+        const quoteItems = Array.isArray(linkedQuote.items) ? linkedQuote.items : [];
+        setBillingQuotation(linkedQuote);
+        setLoadedBillingQuotationId(dispatch.quotation_id);
+        quotationRows = quoteItems.map((item) => {
+          const product = products.find((productItem) => productItem.id === item.product_id);
+          const label = item.product_name || product?.product_name || item.item_description || item.description || "Invoice item";
+          const quantity = Number(item.quantity || 1);
+          const unitPrice = Number(item.unit_price || 0) || (Number(item.total_price || 0) && quantity ? Number(item.total_price || 0) / quantity : 0);
+          return createRow({
+            product_id: item.product_id,
+            brand_model: item.product_name || product?.product_name || label,
+            description: item.item_description || item.description || product?.description || label,
+            quantity,
+            unit_price: unitPrice,
+          });
+        });
+      }
+
+      const quoteRowByProduct = new Map(quotationRows.filter((row) => row.product_id).map((row) => [row.product_id, row]));
+      const quoteRowByName = new Map(
+        quotationRows.map((row) => [String(row.brand_model || row.description).trim().toLowerCase(), row]),
+      );
 
       const dispatchRows = dispatchItems
         .filter((item) => (
@@ -427,14 +457,18 @@ export default function InvoiceBuilder() {
         ))
         .map((item) => {
           const quantity = Number(item.quantity_used || item.quantity_issued || 1);
+          const quoteRow =
+            (item.product_id ? quoteRowByProduct.get(item.product_id) : undefined)
+            || quoteRowByName.get(String(item.product_name || "").trim().toLowerCase());
+          const unitPrice = Number(item.unit_price || 0) || Number(quoteRow?.unit_price || 0);
           return createRow({
             product_id: item.product_id,
-            brand_model: item.product_name || item.serial_number || item.imei || "Installed item",
+            brand_model: item.product_name || quoteRow?.brand_model || item.serial_number || item.imei || "Installed item",
             description: item.serial_number || item.imei
               ? `${item.product_name || "Installed item"} - Serial ${item.serial_number || item.imei}`
-              : item.product_name || "Installed item",
+              : quoteRow?.description || item.product_name || "Installed item",
             quantity,
-            unit_price: Number(item.unit_price || 0),
+            unit_price: unitPrice,
           });
         });
 
@@ -447,7 +481,10 @@ export default function InvoiceBuilder() {
         }),
       );
 
-      const nextRows = [...dispatchRows, ...purchaseRows];
+      const nextRows = [
+        ...(dispatchRows.length ? dispatchRows : quotationRows),
+        ...purchaseRows,
+      ];
       if (!nextRows.length && dispatch.quotation_id) {
         await loadBillingQuotation(dispatch.quotation_id);
         setBillingDispatch(dispatch);
