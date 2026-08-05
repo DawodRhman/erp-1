@@ -389,6 +389,13 @@ function clientQuotationUrl(token?: string) {
   return `${window.location.origin}/client/quotations/${token}`;
 }
 
+function productPrice(product?: Product, tierName = "TIER_A") {
+  if (!product) return 0;
+  const tierPrice = product.price_tiers?.[tierName];
+  const amount = Number(tierPrice ?? product.unit_price ?? product.cost_price ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
 export function CrmDashboardPage() {
   const { leads, quotations, customers, loading } = useCrmData();
   const approved = quotations.filter((item) => item.status === "APPROVED").length;
@@ -610,13 +617,23 @@ export function CrmCreateQuotationPage() {
   const savingQuotationRef = useRef(false);
   const quotationIdempotencyKeyRef = useRef(makeIdempotencyKey("quotation"));
 
+  useEffect(() => {
+    setLines((current) =>
+      current.map((line) => {
+        if (!line.product_id) return line;
+        const product = products.find((item) => item.id === line.product_id);
+        return { ...line, unit_price: productPrice(product, priceTier) };
+      }),
+    );
+  }, [priceTier, products]);
+
   const normalizedLines = lines.map((line) => {
     const product = products.find((item) => item.id === line.product_id);
     return {
       product_id: line.product_id || "",
       description: product?.product_name || line.manual_description,
       quantity: Number(line.quantity || 1),
-      unit_price: Number(line.unit_price || product?.unit_price || 0),
+      unit_price: line.product_id ? productPrice(product, priceTier) : Number(line.unit_price || 0),
       stock_available: product ? Number(product.available_count ?? product.quantity ?? 0) >= Number(line.quantity || 1) : false,
     };
   });
@@ -704,13 +721,13 @@ export function CrmCreateQuotationPage() {
                     updateLine(index, {
                       product_id: e.target.value,
                       manual_description: e.target.value ? "" : line.manual_description,
-                      unit_price: Number(product?.unit_price || product?.cost_price || 0),
+                      unit_price: productPrice(product, priceTier),
                     });
                   }} style={input}>
                     <option value="">Manual purchase / not in stock</option>
                     {products.map((productItem) => (
                       <option key={productItem.id} value={productItem.id}>
-                        {productItem.product_name} - {money(Number(productItem.unit_price || productItem.cost_price || 0))} - available {productItem.available_count ?? productItem.quantity ?? 0}
+                        {productItem.product_name} - {money(productPrice(productItem, priceTier))} - available {productItem.available_count ?? productItem.quantity ?? 0}
                       </option>
                     ))}
                   </select>

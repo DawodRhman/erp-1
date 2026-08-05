@@ -50,6 +50,7 @@ export interface Product {
   min_stock_level: number;
   unit_price: number;
   cost_price: number;
+  price_tiers?: Record<string, number | string>;
   description?: string;
   available_count?: number;
   allocated_count?: number;
