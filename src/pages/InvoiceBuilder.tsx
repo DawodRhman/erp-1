@@ -410,7 +410,10 @@ export default function InvoiceBuilder() {
       setActiveStep("builder");
 
       const dispatchRows = dispatchItems
-        .filter((item) => Number(item.quantity_used || item.quantity_issued || 0) > 0)
+        .filter((item) => (
+          Number(item.quantity_used || item.quantity_issued || 0) > 0
+          && Boolean(item.product_id || item.product_name || item.serial_number || item.imei || Number(item.unit_price || 0) > 0)
+        ))
         .map((item) => {
           const quantity = Number(item.quantity_used || item.quantity_issued || 1);
           return createRow({
@@ -434,6 +437,14 @@ export default function InvoiceBuilder() {
       );
 
       const nextRows = [...dispatchRows, ...purchaseRows];
+      if (!nextRows.length && dispatch.quotation_id) {
+        await loadBillingQuotation(dispatch.quotation_id);
+        setBillingDispatch(dispatch);
+        setLoadedBillingDispatchId(dispatchId);
+        showToast("Dispatch had no billable item rows, so billing was loaded from the linked quotation.", "success");
+        return;
+      }
+
       setRows(nextRows.length ? nextRows : [createRow()]);
       showToast(`${dispatch.customer_name || "Client"} invoice auto-filled from installer dispatch ${dispatch.dispatch_number}`, "success");
     } catch {
