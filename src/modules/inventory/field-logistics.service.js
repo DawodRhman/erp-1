@@ -137,7 +137,7 @@ export async function getDispatchById(id) {
         d.*,
         c.customer_name,
         c.phone AS customer_phone,
-        c.address AS customer_address,
+        NULL AS customer_address,
         u.email AS installer_email,
         q.quotation_number
       FROM public.installer_field_dispatches d
