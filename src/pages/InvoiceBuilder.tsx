@@ -234,6 +234,10 @@ function makeIdempotencyKey(prefix: string) {
   return `${prefix}-${randomPart}`;
 }
 
+function isBillableRow(row: BuilderRow) {
+  return Boolean(row.product_id || row.brand_model.trim() || row.description.trim() || Number(row.quantity || 0) * Number(row.unit_price || 0) > 0);
+}
+
 export default function InvoiceBuilder() {
   const { showToast } = useToastContext();
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -248,6 +252,7 @@ export default function InvoiceBuilder() {
 
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [selectedProductToAddId, setSelectedProductToAddId] = useState("");
   const [loadedBillingQuotationId, setLoadedBillingQuotationId] = useState("");
   const [loadedBillingDispatchId, setLoadedBillingDispatchId] = useState("");
   const [billingQuotation, setBillingQuotation] = useState<BillingQuotation | null>(null);
@@ -290,8 +295,14 @@ export default function InvoiceBuilder() {
     [rows, columns],
   );
 
+  const previewRows = useMemo(() => rows.filter(isBillableRow), [rows]);
+  const previewEvaluatedRows = useMemo(
+    () => previewRows.map((row, index) => evaluateRow(row, columns, index)),
+    [previewRows, columns],
+  );
+
   const totals = useMemo(() => {
-    return evaluatedRows.reduce(
+    return previewEvaluatedRows.reduce(
       (acc, row) => ({
         subtotal: acc.subtotal + Number(row.value_excl || row.quantity * row.unit_price || 0),
         tax: acc.tax + Number(row.gst_amount || 0),
@@ -299,7 +310,7 @@ export default function InvoiceBuilder() {
       }),
       { subtotal: 0, tax: 0, total: 0 },
     );
-  }, [evaluatedRows]);
+  }, [previewEvaluatedRows]);
 
   const selectedSummaryInvoices =
     selectedInvoiceIds.length > 0
@@ -315,7 +326,7 @@ export default function InvoiceBuilder() {
 
   const stockImpactRows = useMemo(
     () =>
-      rows.map((row) => {
+      previewRows.map((row) => {
         const product = products.find((item) => item.id === row.product_id);
         const availableBefore = Number(product?.available_count ?? product?.quantity ?? 0);
         const outgoingQty = Number(row.quantity || 0);
@@ -328,7 +339,7 @@ export default function InvoiceBuilder() {
           isManual: !row.product_id,
         };
       }),
-    [products, rows],
+    [products, previewRows],
   );
 
   const handleSignatureUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -556,16 +567,19 @@ export default function InvoiceBuilder() {
   const addProductToInvoice = (productId: string) => {
     const product = products.find((item) => item.id === productId);
     if (!product) return;
-    setRows((current) => [
-      ...current,
-      createRow({
+    const nextRow = createRow({
         product_id: product.id,
         brand_model: product.product_name,
         description: product.description || product.product_name,
         quantity: 1,
         unit_price: Number(product.unit_price || product.cost_price || 0),
-      }),
-    ]);
+      });
+    setRows((current) => {
+      if (current.length === 1 && !isBillableRow(current[0])) return [nextRow];
+      return [...current, nextRow];
+    });
+    setSelectedProductToAddId("");
+    setActiveStep("builder");
     showToast(`${product.product_name} added to invoice rows`, "success");
   };
 
@@ -608,7 +622,7 @@ export default function InvoiceBuilder() {
       showToast("Select a client before saving invoice", "error");
       return;
     }
-    const billableRows = rows.filter((row) => row.brand_model.trim() || row.description.trim() || row.product_id);
+    const billableRows = rows.filter(isBillableRow);
     if (!billableRows.length) {
       showToast("Invoice cannot be saved without quotation/product rows", "error");
       return;
@@ -835,7 +849,7 @@ export default function InvoiceBuilder() {
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <span style={{ padding: "7px 10px", borderRadius: 999, background: "#dbeafe", color: "#1d4ed8", fontSize: 12, fontWeight: 900 }}>
-                {rows.length} invoice lines
+                {previewRows.length} invoice lines
               </span>
               <span style={{ padding: "7px 10px", borderRadius: 999, background: "#dcfce7", color: "#047857", fontSize: 12, fontWeight: 900 }}>
                 Total {money(totals.total)}
@@ -954,8 +968,12 @@ export default function InvoiceBuilder() {
             <h3 style={{ margin: "0 0 14px", fontSize: 16, fontWeight: 900, display: "flex", alignItems: "center", gap: 8 }}>
               <Package size={18} /> Add Inventory Item
             </h3>
-            <div style={{ display: "flex", gap: 8 }}>
-              <select onChange={(event) => event.target.value && addProductToInvoice(event.target.value)} style={inputStyle} defaultValue="">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+              <select
+                value={selectedProductToAddId}
+                onChange={(event) => setSelectedProductToAddId(event.target.value)}
+                style={inputStyle}
+              >
                 <option value="">Search/select product</option>
                 {products.map((product) => (
                   <option key={product.id} value={product.id}>
@@ -963,6 +981,15 @@ export default function InvoiceBuilder() {
                   </option>
                 ))}
               </select>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => addProductToInvoice(selectedProductToAddId)}
+                disabled={!selectedProductToAddId}
+                style={{ whiteSpace: "nowrap" }}
+              >
+                <Plus size={14} /> Add Item
+              </button>
             </div>
 
             <div style={{ height: 1, background: "#e2e8f0", margin: "18px 0" }} />
@@ -1230,11 +1257,17 @@ export default function InvoiceBuilder() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, index) => (
+                {previewRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={columns.length} style={{ border: "1px solid #111827", padding: 12, textAlign: "center", color: "#64748b" }}>
+                      No billable invoice rows yet. Add an inventory item or manual row first.
+                    </td>
+                  </tr>
+                ) : previewRows.map((row, index) => (
                   <tr key={row.id}>
                     {columns.map((column) => (
                       <td key={column.key} style={{ border: "1px solid #111827", padding: 8, textAlign: column.align || "left" }}>
-                        {renderCell(row, evaluatedRows[index], column, index)}
+                        {renderCell(row, previewEvaluatedRows[index], column, index)}
                       </td>
                     ))}
                   </tr>
