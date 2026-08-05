@@ -437,10 +437,35 @@ export default function InvoiceBuilder() {
       setRows(nextRows.length ? nextRows : [createRow()]);
       showToast(`${dispatch.customer_name || "Client"} invoice auto-filled from installer dispatch ${dispatch.dispatch_number}`, "success");
     } catch {
+      try {
+        const dispatches = await inventoryApi.getDispatches();
+        const fallbackDispatch = dispatches.find((item) => item.id === dispatchId);
+        if (fallbackDispatch) {
+          setBillingDispatch(fallbackDispatch);
+          setLoadedBillingDispatchId(dispatchId);
+          setSelectedCustomerId(fallbackDispatch.customer_id || "");
+          setInvoiceName(`INV-DRAFT-${fallbackDispatch.dispatch_number || new Date().getFullYear()}`);
+          setPurchaseOrderNo(fallbackDispatch.quotation_number || fallbackDispatch.dispatch_number || "");
+          setBranchName(fallbackDispatch.site_address || "");
+          setHeaderTitle("Sales Tax Invoice");
+          setActiveStep("builder");
+
+          if (fallbackDispatch.quotation_id) {
+            await loadBillingQuotation(fallbackDispatch.quotation_id);
+            setBillingDispatch(fallbackDispatch);
+            setLoadedBillingDispatchId(dispatchId);
+            showToast("Dispatch detail was incomplete, so billing was loaded from the linked quotation.", "success");
+            return;
+          }
+        }
+      } catch {
+        // Keep the final error below focused for the user.
+      }
+
       setBillingDispatch(null);
       setLoadedBillingDispatchId("");
       setRows([createRow()]);
-      showToast("Unable to load installer dispatch for billing", "error");
+      showToast("Unable to load installer dispatch for billing. Refresh data or open billing from an approved quotation.", "error");
     }
   };
 
