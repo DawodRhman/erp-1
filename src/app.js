@@ -109,12 +109,12 @@ app.use('/api/audit', auditRoutes);
 app.use('/api/accounts', accountsRoutes);
 app.use('/api/employees', employeesModuleRoutes);
 app.use('/api/config', configModuleRoutes);
-app.use('/api', penaltiesModuleRoutes);
 app.use('/api/directory', directoryModuleRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/matrix', matrixRoutes);
 app.use('/api/crm', crmRoutes);
 app.use('/api/invoicing', invoicingRoutes);
+app.use('/api', penaltiesModuleRoutes);
 
 app.use(errorHandler);
 

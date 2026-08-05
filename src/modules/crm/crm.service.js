@@ -344,6 +344,7 @@ export async function updateQuotationStatus(id, status, userId = null) {
 
 export async function getPublicQuotationByToken(token) {
   const quoteColumns = await getPublicTableColumns('quotations');
+  const itemColumns = await getPublicTableColumns('quotation_items');
   if (!quoteColumns.has('client_approval_token')) {
     throw new AppError(404, 'NOT_FOUND', 'Client approval links are not enabled.');
   }
@@ -375,14 +376,19 @@ export async function getPublicQuotationByToken(token) {
     `
       SELECT
         qi.id,
-        qi.product_id,
-        COALESCE(qi.description, qi.item_description, p.product_name, 'Quotation item') AS description,
-        qi.quantity,
-        qi.unit_price,
-        qi.total_price,
+        ${itemColumns.has('product_id') ? 'qi.product_id' : 'NULL'} AS product_id,
+        COALESCE(
+          ${itemColumns.has('description') ? 'qi.description' : 'NULL'},
+          ${itemColumns.has('item_description') ? 'qi.item_description' : 'NULL'},
+          p.product_name,
+          'Quotation item'
+        ) AS description,
+        ${itemColumns.has('quantity') ? 'qi.quantity' : '1'} AS quantity,
+        ${itemColumns.has('unit_price') ? 'qi.unit_price' : '0'} AS unit_price,
+        ${itemColumns.has('total_price') ? 'qi.total_price' : itemColumns.has('quantity') && itemColumns.has('unit_price') ? '(qi.quantity * qi.unit_price)' : '0'} AS total_price,
         p.product_name
       FROM public.quotation_items qi
-      LEFT JOIN public.products p ON p.id = qi.product_id
+      LEFT JOIN public.products p ON p.id = ${itemColumns.has('product_id') ? 'qi.product_id' : 'NULL'}
       WHERE qi.quotation_id = $1
       ORDER BY qi.id
     `,
