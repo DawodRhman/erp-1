@@ -31,7 +31,29 @@ export async function createDispatch(data, actorId = null) {
     );
     const dispatch = dRes.rows[0];
 
-    const items = data.items || [];
+    const requestItems = Array.isArray(data.items) ? data.items : [];
+    let items = requestItems.filter(
+      (item) => item?.product_id || item?.inventory_item_id || Number(item?.unit_price || 0) > 0,
+    );
+
+    if (!items.length && data.quotation_id) {
+      const quoteItems = await client.query(
+        `
+          SELECT product_id, quantity, unit_price
+          FROM public.quotation_items
+          WHERE quotation_id = $1
+            AND product_id IS NOT NULL
+        `,
+        [data.quotation_id],
+      );
+      items = quoteItems.rows.map((item) => ({
+        product_id: item.product_id,
+        quantity_issued: item.quantity || 1,
+        unit_price: item.unit_price || 0,
+        unit_of_measure: 'UNITS',
+      }));
+    }
+
     for (const item of items) {
       await client.query(
         `
