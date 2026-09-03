@@ -6,7 +6,73 @@ export const DEFAULT_CREDENTIAL_WHATSAPP_TEMPLATE =
 
 const CREDENTIAL_TEMPLATE_KEY = 'credential_whatsapp_template';
 
+const ROLE_PORTAL_META = {
+  super_admin: {
+    role_label: 'Super Admin',
+    portal_group: 'Admin',
+    portal_access_level: 'Full ERP access',
+    access_summary: 'Controls CRM, Inventory, Finance, EMS and user management.',
+  },
+  csr_officer: {
+    role_label: 'CSR Officer',
+    portal_group: 'CRM',
+    portal_access_level: 'CRM service access',
+    access_summary: 'Clients, leads, quotations, approvals, orders and complaints.',
+  },
+  crm_officer: {
+    role_label: 'CRM Officer',
+    portal_group: 'CRM',
+    portal_access_level: 'CRM service access',
+    access_summary: 'Clients, leads, quotations, approvals, orders and complaints.',
+  },
+  inventory_officer: {
+    role_label: 'Inventory Officer',
+    portal_group: 'Inventory',
+    portal_access_level: 'Full inventory access',
+    access_summary: 'Stock, tokens, purchase orders, dispatches, returns and setup.',
+  },
+  finance_officer: {
+    role_label: 'Finance Officer',
+    portal_group: 'Finance',
+    portal_access_level: 'Finance service access',
+    access_summary: 'Billing approvals, invoices, summaries, accounts and settlements.',
+  },
+  inv_fin_admin: {
+    role_label: 'Inventory + Finance Admin',
+    portal_group: 'Inventory + Finance',
+    portal_access_level: 'Dual service access',
+    access_summary: 'Inventory and finance operations without full super admin scope.',
+  },
+  employee: {
+    role_label: 'Employee',
+    portal_group: 'EMS',
+    portal_access_level: 'Self-service access',
+    access_summary: 'Personal dashboard, attendance, leave, penalties and profile.',
+  },
+};
+
+function formatRoleLabel(roleName) {
+  return String(roleName || 'Not provided')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getRolePortalMeta(roleName) {
+  const normalized = String(roleName || '').trim();
+  if (normalized && ROLE_PORTAL_META[normalized]) {
+    return ROLE_PORTAL_META[normalized];
+  }
+
+  return {
+    role_label: formatRoleLabel(normalized),
+    portal_group: 'EMS',
+    portal_access_level: 'Role-based access',
+    access_summary: 'Access is controlled by assigned permissions.',
+  };
+}
+
 function mapAccount(row) {
+  const roleMeta = getRolePortalMeta(row.role_name);
   return {
     id: row.id,
     employee_id: row.employee_id || null,
@@ -14,6 +80,10 @@ function mapAccount(row) {
     role_id: row.role_id,
     role_name: row.role_name || null,
     role_description: row.role_description || null,
+    role_label: roleMeta.role_label,
+    portal_group: roleMeta.portal_group,
+    portal_access_level: roleMeta.portal_access_level,
+    access_summary: roleMeta.access_summary,
     department_id: row.department_id || null,
     department_name: row.department_name || null,
     designation_title: row.designation_title || null,
@@ -38,6 +108,8 @@ export async function listAccounts(filters = {}) {
   const departmentId = String(filters.department_id || '').trim();
   const status = String(filters.status || 'all').trim().toLowerCase();
 
+  whereParts.push(`COALESCE(r.role_name, '') <> 'installer'`);
+
   if (search) {
     params.push(`%${search}%`);
     whereParts.push(`(
@@ -45,6 +117,7 @@ export async function listAccounts(filters = {}) {
       OR ei.name ILIKE $${params.length}
       OR ei.employee_id ILIKE $${params.length}
       OR r.role_name ILIKE $${params.length}
+      OR r.description ILIKE $${params.length}
       OR dep.department_name ILIKE $${params.length}
       OR dsg.title ILIKE $${params.length}
     )`);

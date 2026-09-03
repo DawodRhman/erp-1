@@ -952,36 +952,7 @@ export async function seedEmployeesAndHR(client, ctx) {
     audRows
   );
 
-  const vendors = [
-    'Hikvision Pakistan',
-    'Dahua Pakistan',
-    'CP Plus Distributor - Karachi',
-    'Cisco Reseller Pak',
-    'MikroTik Pakistan',
-    'Genetec Pakistan',
-    'Axis Communications',
-    'Bosch Security Pakistan',
-    'Honeywell Distributor',
-    'Pelco Pakistan',
-    'TP-Link Pakistan',
-    'D-Link Pakistan',
-    'ZKTeco Pakistan',
-    'Suprema Biometrics Pakistan',
-    'Hanwha Vision Pakistan',
-    'Ezviz Pakistan',
-    'Uniview Pakistan',
-    'IC Realtime Pakistan',
-    'Milestone Systems',
-    'Seagate Storage Solutions',
-  ];
-  const vid = [];
-  for (const vn of vendors) {
-    const r = await client.query(
-      `INSERT INTO vendors (vendor_name, contact_person, phone, email) VALUES ($1,$2,$3,$4) RETURNING id`,
-      [vn, 'Sales Desk', '0300-1234567', 'sales@vendor.pk']
-    );
-    vid.push(r.rows[0].id);
-  }
+  // Suppliers are intentionally not seeded. Inventory officers add real suppliers from Master Setup.
 
   const custRows = [];
   const custNames = [
@@ -1073,7 +1044,7 @@ export async function seedEmployeesAndHR(client, ctx) {
     const rng = mulberry32(pr.id.charCodeAt(0) * 999);
     const r = await client.query(
       `INSERT INTO purchase_orders (pr_id, vendor_id, created_by, total_amount) VALUES ($1,$2,$3,$4) RETURNING id`,
-      [pr.id, vid[Math.floor(rng() * vid.length)], procUid, 100000 + Math.floor(rng() * 400000)]
+      [pr.id, null, procUid, 100000 + Math.floor(rng() * 400000)]
     );
     poInserted.push({ poId: r.rows[0].id, prId: pr.id });
   }
@@ -1134,7 +1105,7 @@ export async function seedEmployeesAndHR(client, ctx) {
         break;
       }
     }
-    invItems.push([PROD[pk], `SN-HIK-2024-${String(i + 1).padStart(5, '0')}`, st]);
+    invItems.push([PROD[pk], `SN-2026-${String(i + 1).padStart(5, '0')}`, st]);
   }
   await batchInsert(
     client,

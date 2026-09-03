@@ -23,6 +23,7 @@ import inventoryRoutes from './modules/inventory/inventory.routes.js';
 import matrixRoutes from './modules/matrix/matrix.routes.js';
 import crmRoutes from './modules/crm/crm.routes.js';
 import invoicingRoutes from './modules/invoicing/invoicing.routes.js';
+import financeRoutes from './modules/finance/finance.routes.js';
 import pool from './config/db.js';
 import { logger } from './utils/logger.js';
 
@@ -47,6 +48,7 @@ const corsOptions = {
     'x-client-hostname',
     'x-request-id',
     'x-correlation-id',
+    'Idempotency-Key',
   ],
   exposedHeaders: ['x-request-id'],
   preflightContinue: false,
@@ -114,6 +116,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/matrix', matrixRoutes);
 app.use('/api/crm', crmRoutes);
 app.use('/api/invoicing', invoicingRoutes);
+app.use('/api/finance', financeRoutes);
 app.use('/api', penaltiesModuleRoutes);
 
 app.use(errorHandler);

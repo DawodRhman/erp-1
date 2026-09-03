@@ -44,11 +44,13 @@ export async function login(email, password) {
         u.email,
         u.employee_id,
         u.role_id,
-      u.password,
+        r.role_name,
+        u.password,
         u.must_change_password,
         COALESCE(u.is_active, true) AS is_active,
         js.status_name AS job_status_name
       FROM public.users u
+      LEFT JOIN public.roles r ON r.id = u.role_id
       LEFT JOIN public.job_info ji ON ji.employee_id = u.employee_id
       LEFT JOIN public.job_statuses js ON js.id = ji.job_status_id
       WHERE u.email = $1
@@ -76,10 +78,15 @@ export async function login(email, password) {
     throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password.');
   }
 
+  if (user.role_name === 'installer') {
+    throw new AppError(403, 'ROLE_DISABLED', 'Installer login has been retired. Use the Inventory Officer portal for dispatch and returns work.');
+  }
+
   return {
     user_id: user.id,
     employee_id: user.employee_id,
     role_id: user.role_id,
+    role_name: user.role_name,
     must_change_password: user.must_change_password,
     email: user.email,
     id: user.id,

@@ -36,3 +36,39 @@ export async function reconcileDispatch(req, res, next) {
     return next(err);
   }
 }
+
+export async function listReturnRequests(req, res, next) {
+  try {
+    const list = await logisticsService.listReturnRequests(req.query);
+    return sendSuccess(res, list, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function getReturnRequest(req, res, next) {
+  try {
+    const request = await logisticsService.getReturnRequestById(req.params.id);
+    return sendSuccess(res, request, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function confirmReturnRequest(req, res, next) {
+  try {
+    const request = await logisticsService.confirmReturnRequest(req.params.id, req.body, req.user?.user_id);
+    return sendSuccess(res, request, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function sendAdjustedBillToFinance(req, res, next) {
+  try {
+    const request = await logisticsService.sendAdjustedBillToFinance(req.params.id, req.user?.user_id);
+    return sendSuccess(res, request, 200);
+  } catch (err) {
+    return next(err);
+  }
+}

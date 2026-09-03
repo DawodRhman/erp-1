@@ -12,6 +12,15 @@ router.use(verifyToken);
 router.get('/summary', requirePermission('inventory:read'), inventoryController.getSummary);
 router.get('/work-queue', requirePermission('inventory:read'), inventoryController.getWorkQueue);
 router.get('/movements', requirePermission('inventory:read'), inventoryController.getInventoryMovements);
+router.get('/tokens', requirePermission('inventory:read'), inventoryController.getInventoryTokens);
+router.get('/installers', requirePermission('inventory:read'), inventoryController.getInventoryInstallers);
+router.patch('/installers/:id/status', requirePermission('inventory:admin'), inventoryController.updateInstallerStatus);
+router.post('/orders/:orderId/token', requirePermission('inventory:write'), inventoryController.generateOrderToken);
+
+// Master Setup Settings
+router.get('/master-settings', requirePermission('inventory:read'), inventoryController.getMasterSettings);
+router.put('/master-settings/company', requirePermission('inventory:admin'), inventoryController.updateCompanySettings);
+router.put('/master-settings/inventory', requirePermission('inventory:admin'), inventoryController.updateInventorySettings);
 
 // Categories
 router.get('/categories', requirePermission('inventory:read'), inventoryController.getCategories);
@@ -28,12 +37,15 @@ router.delete('/products/:id', requirePermission('inventory:admin'), inventoryCo
 // Serials / Serials Items
 router.get('/items', requirePermission('inventory:read'), inventoryController.getInventoryItems);
 router.post('/items', requirePermission('inventory:write'), inventoryController.createInventoryItem);
+router.post('/items/:id/confirm-return', requirePermission('inventory:write'), inventoryController.confirmReturnedInventoryItem);
 router.patch('/items/:id', requirePermission('inventory:write'), inventoryController.updateInventoryItem);
 router.delete('/items/:id', requirePermission('inventory:admin'), inventoryController.deleteInventoryItem);
 
 // Vendors & Customers
 router.get('/vendors', requirePermission('inventory:read'), inventoryController.getVendors);
 router.post('/vendors', requirePermission('inventory:write'), inventoryController.createVendor);
+router.patch('/vendors/:id', requirePermission('inventory:write'), inventoryController.updateVendor);
+router.delete('/vendors/:id', requirePermission('inventory:admin'), inventoryController.deleteVendor);
 router.get('/customers', requirePermission('inventory:read'), inventoryController.getCustomers);
 router.post('/customers', requirePermission('inventory:write'), inventoryController.createCustomer);
 router.get('/vehicles', requirePermission('inventory:read'), inventoryController.getCustomerVehicles);
@@ -42,6 +54,7 @@ router.post('/vehicles', requirePermission('inventory:write'), inventoryControll
 // Purchase Orders & Invoices
 router.get('/purchase-orders', requirePermission('inventory:read'), inventoryController.getPurchaseOrders);
 router.post('/purchase-orders', requirePermission('inventory:write'), inventoryController.createPurchaseOrder);
+router.post('/purchase-orders/:id/receive', requirePermission('inventory:write'), inventoryController.receivePurchaseOrder);
 router.get('/invoices', requirePermission('inventory:read'), inventoryController.getInvoices);
 router.post('/invoices', requirePermission('inventory:write'), inventoryController.createInvoice);
 
@@ -59,6 +72,10 @@ router.post('/customers/:customer_id/generate-draft-invoice', requirePermission(
 
 // Installer Field Dispatches & Reconciliations
 import * as logisticsController from './field-logistics.controller.js';
+router.get('/returns', requirePermission('inventory:read'), logisticsController.listReturnRequests);
+router.get('/returns/:id', requirePermission('inventory:read'), logisticsController.getReturnRequest);
+router.post('/returns/:id/confirm', requirePermission('inventory:write'), logisticsController.confirmReturnRequest);
+router.post('/returns/:id/send-bill', requirePermission('inventory:write'), logisticsController.sendAdjustedBillToFinance);
 router.get('/dispatches', requirePermission('inventory:read'), logisticsController.listDispatches);
 router.get('/dispatches/:id', requirePermission('inventory:read'), logisticsController.getDispatch);
 router.post('/dispatches', requirePermission('inventory:write'), logisticsController.createDispatch);

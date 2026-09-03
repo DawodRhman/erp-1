@@ -1,6 +1,7 @@
 import { sendSuccess } from '../../utils/respond.js';
 import * as crmService from './crm.service.js';
 import * as inventoryService from '../inventory/inventory.service.js';
+import * as invoicingService from '../invoicing/invoicing.service.js';
 
 export async function listCustomers(req, res, next) {
   try {
@@ -113,11 +114,21 @@ export async function approvePublicQuotation(req, res, next) {
   }
 }
 
+export async function rejectPublicQuotation(req, res, next) {
+  try {
+    const quote = await crmService.rejectPublicQuotationByToken(req.params.token, req.body);
+    return sendSuccess(res, quote, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
 export async function createQuotation(req, res, next) {
   try {
     const quote = await crmService.createQuotation({
       ...req.body,
       idempotency_key: req.get('Idempotency-Key') || req.body.idempotency_key,
+      created_by: req.user?.user_id,
     });
     return sendSuccess(res, quote, 201);
   } catch (err) {
@@ -125,10 +136,73 @@ export async function createQuotation(req, res, next) {
   }
 }
 
+export async function updateQuotation(req, res, next) {
+  try {
+    const quote = await crmService.updateQuotation(req.params.id, req.body);
+    return sendSuccess(res, quote, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
 export async function updateQuotationStatus(req, res, next) {
   try {
-    const quote = await crmService.updateQuotationStatus(req.params.id, req.body.status, req.user?.id);
+    const quote = await crmService.updateQuotationStatus(req.params.id, req.body.status, req.user?.user_id, req.body);
     return sendSuccess(res, quote, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function listOrders(req, res, next) {
+  try {
+    const orders = await crmService.listOrders(req.query);
+    return sendSuccess(res, orders, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function listComplaints(req, res, next) {
+  try {
+    const complaints = await inventoryService.getComplaints();
+    return sendSuccess(res, complaints, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function createComplaint(req, res, next) {
+  try {
+    const complaint = await inventoryService.createComplaint(req.body);
+    return sendSuccess(res, complaint, 201);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function listInvoices(req, res, next) {
+  try {
+    const invoices = await invoicingService.listInvoices(req.query);
+    return sendSuccess(res, invoices, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function getInvoice(req, res, next) {
+  try {
+    const invoice = await invoicingService.getInvoiceById(req.params.id);
+    return sendSuccess(res, invoice, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function convertQuotationToOrder(req, res, next) {
+  try {
+    const order = await crmService.convertQuotationToOrder(req.params.id, req.user?.user_id);
+    return sendSuccess(res, order, 201);
   } catch (err) {
     return next(err);
   }

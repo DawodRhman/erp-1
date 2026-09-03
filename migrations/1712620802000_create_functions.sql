@@ -32,7 +32,7 @@ BEGIN NEW.pr_id := 'PR-' || EXTRACT(YEAR FROM NOW()) || '-' || LPAD(nextval('pub
 CREATE FUNCTION public.generate_quotation_id() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
-BEGIN NEW.quotation_id := 'QUO-' || EXTRACT(YEAR FROM NOW()) || '-' || LPAD(nextval('public.quotation_seq')::TEXT, 4, '0'); RETURN NEW; END; $$;
+BEGIN NEW.quotation_id := 'QT-' || EXTRACT(YEAR FROM NOW()) || '-' || LPAD(nextval('public.quotation_seq')::TEXT, 4, '0'); RETURN NEW; END; $$;
 
 CREATE FUNCTION public.generate_vendor_id() RETURNS trigger
     LANGUAGE plpgsql

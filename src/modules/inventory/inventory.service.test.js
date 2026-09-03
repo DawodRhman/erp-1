@@ -21,7 +21,7 @@ describe('inventory service', () => {
   it('fetches inventory summary metrics correctly', async () => {
     query
       .mockResolvedValueOnce({
-        rows: [{ total_products: 10, low_stock_count: 2, total_inventory_value: 50000 }],
+        rows: [{ total_products: 10, total_stock_qty: 125, available_stock_qty: 90, low_stock_count: 2, total_inventory_value: 50000 }],
       })
       .mockResolvedValueOnce({
         rows: [{ total_serials: 25, available_serials: 15, allocated_serials: 5, installed_serials: 4, damaged_serials: 1 }],
@@ -31,6 +31,9 @@ describe('inventory service', () => {
       })
       .mockResolvedValueOnce({
         rows: [{ approved_csr_jobs: 4, sent_csr_quotes: 2 }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ period_stock_in_qty: 30, period_stock_out_qty: 12, period_return_qty: 3, period_movement_count: 5 }],
       });
 
     const service = await loadService();
@@ -38,6 +41,8 @@ describe('inventory service', () => {
 
     expect(summary).toEqual({
       total_products: 10,
+      total_stock_qty: 125,
+      available_stock_qty: 90,
       low_stock_count: 2,
       total_inventory_value: 50000,
       total_serials: 25,
@@ -51,8 +56,15 @@ describe('inventory service', () => {
       active_complaints: 1,
       approved_csr_jobs: 4,
       sent_csr_quotes: 2,
+      period_stock_in_qty: 30,
+      period_stock_out_qty: 12,
+      period_return_qty: 3,
+      period_movement_count: 5,
+      summary_period: "Monthly",
+      period_start: expect.any(String),
+      period_end: expect.any(String),
     });
-    expect(query).toHaveBeenCalledTimes(4);
+    expect(query).toHaveBeenCalledTimes(5);
   });
 
   it('lists categories ordered by category name', async () => {
@@ -107,6 +119,30 @@ describe('inventory service', () => {
       code: 'VALIDATION_ERROR',
       statusCode: 400,
     });
+  });
+
+  it('builds the purchase-order list without referencing a missing total_price column', async () => {
+    query.mockImplementation(async (sql, params = []) => {
+      const statement = String(sql);
+      if (statement.includes('information_schema.columns')) {
+        const columnsByTable = {
+          purchase_orders: ['id', 'po_number', 'status', 'order_date', 'expected_delivery_date', 'created_at', 'vendor_id', 'crm_order_id', 'quotation_id'],
+          purchase_order_items: ['id', 'purchase_order_id', 'product_id', 'quotation_item_id', 'quantity', 'received_quantity', 'unit_price', 'remarks'],
+          vendors: ['id', 'vendor_name'],
+          quotations: ['id', 'quotation_number'],
+        };
+        return { rows: (columnsByTable[params[0]] || []).map((column_name) => ({ column_name })) };
+      }
+      return { rows: [] };
+    });
+
+    const service = await loadService();
+    await service.getPurchaseOrders();
+
+    const listCall = query.mock.calls.find(([sql]) => String(sql).includes('jsonb_agg'));
+    expect(listCall).toBeTruthy();
+    expect(String(listCall[0])).not.toContain('poi.total_price');
+    expect(String(listCall[0])).toContain("COALESCE(poi.quantity, 1) * COALESCE(poi.unit_price, 0)");
   });
 
   it('applies filters when querying products', async () => {
@@ -219,5 +255,93 @@ describe('inventory service', () => {
     expect(client.query.mock.calls.some((call) => String(call[0]).includes('INSERT INTO public.inventory_movements'))).toBe(true);
     expect(client.query).toHaveBeenCalledWith('COMMIT');
     expect(client.release).toHaveBeenCalled();
+  });
+
+  it('generates one token per incoming order and marks stocked orders as ready to dispatch', async () => {
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockResolvedValueOnce({ rows: [] }) // ensure token sequence
+        .mockResolvedValueOnce({ rows: [] }) // drop not null
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'order-1',
+            quotation_id: 'quote-1',
+            customer_id: 'cust-1',
+            token_number: null,
+            status: 'PENDING_REVIEW',
+            quotation_number: 'QT-2026-0001',
+            total_amount: 11800,
+            customer_name: 'Engro Corporation',
+            item_count: 1,
+          }],
+        })
+        .mockResolvedValueOnce({ rows: [] }) // next token ensures sequence
+        .mockResolvedValueOnce({ rows: [{ seq: 1 }] }) // next token
+        .mockResolvedValueOnce({ rows: [{ total_items: 1, shortage_items: 0 }] }) // stock check
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'order-1',
+            quotation_id: 'quote-1',
+            token_number: 'TKN-2026-0001',
+            status: 'STOCK_OK',
+          }],
+        })
+        .mockResolvedValueOnce({ rows: [] }), // COMMIT
+      release: vi.fn(),
+    };
+    connect.mockResolvedValueOnce(client);
+
+    const service = await loadService();
+    const token = await service.generateOrderToken('order-1', 'user-1');
+
+    expect(token.token_number).toBe('TKN-2026-0001');
+    expect(token.status).toBe('STOCK_OK');
+    expect(token.already_generated).toBe(false);
+    expect(client.query.mock.calls.some((call) => String(call[0]).includes('status = $3'))).toBe(true);
+    expect(client.query).toHaveBeenCalledWith('COMMIT');
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it('returns an existing token instead of creating a duplicate and refreshes stock status', async () => {
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockResolvedValueOnce({ rows: [] }) // ensure token sequence
+        .mockResolvedValueOnce({ rows: [] }) // drop not null
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'order-1',
+            quotation_id: 'quote-1',
+            token_number: 'TKN-2026-0001',
+            status: 'TOKEN_GENERATED',
+            quotation_number: 'QT-2026-0001',
+            total_amount: 11800,
+            customer_name: 'Engro Corporation',
+            item_count: 1,
+          }],
+        })
+        .mockResolvedValueOnce({ rows: [{ total_items: 1, shortage_items: 1 }] }) // stock check
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'order-1',
+            quotation_id: 'quote-1',
+            token_number: 'TKN-2026-0001',
+            status: 'AWAITING_STOCK',
+          }],
+        })
+        .mockResolvedValueOnce({ rows: [] }), // COMMIT
+      release: vi.fn(),
+    };
+    connect.mockResolvedValueOnce(client);
+
+    const service = await loadService();
+    const token = await service.generateOrderToken('order-1', 'user-1');
+
+    expect(token.token_number).toBe('TKN-2026-0001');
+    expect(token.status).toBe('AWAITING_STOCK');
+    expect(token.already_generated).toBe(true);
+    expect(client.query.mock.calls.some((call) => String(call[0]).includes("nextval('public.inventory_token_number_seq')"))).toBe(false);
+    expect(client.query).toHaveBeenCalledWith('COMMIT');
   });
 });

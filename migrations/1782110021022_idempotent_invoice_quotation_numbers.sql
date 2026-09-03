@@ -6,17 +6,17 @@ DECLARE
   max_quote_seq integer;
   max_invoice_seq integer;
 BEGIN
-  SELECT COALESCE(MAX((substring(quotation_number FROM 'QT-[0-9]{6}-([0-9]+)$'))::integer), 0)
+  SELECT COALESCE(MAX((substring(quotation_number FROM 'QT-[0-9]{4}-([0-9]+)$'))::integer), 0)
   INTO max_quote_seq
   FROM public.quotations
-  WHERE quotation_number ~ '^QT-[0-9]{6}-[0-9]+$';
+  WHERE quotation_number ~ '^QT-[0-9]{4}-[0-9]+$';
 
   PERFORM setval('public.crm_quotation_number_seq', GREATEST(max_quote_seq, 1), true);
 
-  SELECT COALESCE(MAX((substring(invoice_number FROM 'INV-[0-9]{6}-([0-9]+)$'))::integer), 0)
+  SELECT COALESCE(MAX((substring(invoice_number FROM 'INV-[0-9]{4}-([0-9]+)$'))::integer), 0)
   INTO max_invoice_seq
   FROM public.customer_invoices
-  WHERE invoice_number ~ '^INV-[0-9]{6}-[0-9]+$';
+  WHERE invoice_number ~ '^INV-[0-9]{4}-[0-9]+$';
 
   PERFORM setval('public.customer_invoice_number_seq', GREATEST(max_invoice_seq, 1), true);
 END $$;

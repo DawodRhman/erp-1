@@ -5,16 +5,22 @@ import { sendError } from '../utils/respond.js';
 const DEV_JWT_SECRET = 'track360-dev-only-secret-change-before-production';
 
 export async function verifyToken(req, res, next) {
-  // Check both cookie and Authorization header
-  let token = req.cookies?.ems_jwt;
-  let source = 'cookie';
+  // Prefer explicit Bearer tokens so different frontend origins/tabs can keep
+  // independent role sessions. Cookie remains as a fallback for normal browsing.
+  let token = null;
+  let source = null;
 
-  if (!token && req.headers.authorization) {
+  if (req.headers.authorization) {
     const authHeader = req.headers.authorization;
     if (authHeader.startsWith('Bearer ')) {
       token = authHeader.substring(7);
       source = 'header';
     }
+  }
+
+  if (!token) {
+    token = req.cookies?.ems_jwt;
+    source = token ? 'cookie' : null;
   }
 
   console.log(`[AUTH DEBUG] Request to ${req.originalUrl} | Token found: ${!!token} | Source: ${source}`);

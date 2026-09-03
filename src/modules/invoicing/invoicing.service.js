@@ -41,7 +41,7 @@ async function getPublicTableColumns(tableName) {
 async function nextCustomerInvoiceNumber(client) {
   const seqResult = await client.query(`SELECT nextval('public.customer_invoice_number_seq')::int AS seq`);
   const seq = seqResult.rows[0].seq;
-  return `INV-${new Date().toISOString().slice(0, 7).replace('-', '')}-${String(seq).padStart(4, '0')}`;
+  return `INV-${new Date().getUTCFullYear()}-${String(seq).padStart(4, '0')}`;
 }
 
 export async function listClientTemplates(customerId = null) {
@@ -69,7 +69,7 @@ export async function saveClientTemplate(data) {
       data.customer_id || null,
       data.template_name || 'Standard',
       data.tax_type || 'GST',
-      data.default_tax_rate || 18.0,
+      data.default_tax_rate ?? 18.0,
       data.number_of_copies || 1,
       data.custom_header || null,
       data.custom_footer || null,
@@ -144,7 +144,10 @@ export async function createClientInvoiceFromDispatch(data) {
     }
 
     const exRate = Number(data.exchange_rate || 1.0);
-    const taxRatePct = Number(data.tax_rate || 18.0);
+    const taxRatePct = Number(data.tax_rate ?? 18.0);
+    if (!Number.isFinite(taxRatePct) || taxRatePct < 0 || taxRatePct > 100) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'GST rate must be between 0 and 100.');
+    }
     let subtotal = 0;
     let totalTax = 0;
 
@@ -178,6 +181,13 @@ export async function createClientInvoiceFromDispatch(data) {
     });
 
     const grandTotal = subtotal + totalTax;
+    if (data.dispatch_id && grandTotal <= 0) {
+      throw new AppError(
+        409,
+        'ZERO_VALUE_INVOICE',
+        'A dispatch with no billable items cannot generate an invoice.',
+      );
+    }
     const words = numberToWords(grandTotal);
 
     const invoiceValues = {
@@ -319,6 +329,7 @@ export async function createInvoiceSummary({
   const allowedTypes = new Set([
     'operational_expenses',
     'capital_expenses',
+    'complex_expenses',
     'footage_expenses',
     'rental_expenses',
   ]);
@@ -408,6 +419,86 @@ export async function createInvoiceSummary({
   return result.rows[0];
 }
 
+async function getDispatchBillBreakdown(dispatchId, invoice) {
+  const [itemsRes, extrasRes] = await Promise.all([
+    pool.query(
+      `
+        SELECT di.*, p.product_name
+        FROM public.installer_dispatch_items di
+        LEFT JOIN public.products p ON p.id = di.product_id
+        WHERE di.dispatch_id = $1
+        ORDER BY di.id ASC
+      `,
+      [dispatchId],
+    ),
+    pool.query(
+      `
+        SELECT *
+        FROM public.installer_on_the_go_purchases
+        WHERE dispatch_id = $1
+        ORDER BY purchased_at ASC, id ASC
+      `,
+      [dispatchId],
+    ),
+  ]);
+
+  const installedItems = [];
+  const returnedItems = [];
+  let originalTotal = 0;
+  let returnsDeducted = 0;
+
+  for (const item of itemsRes.rows) {
+    const issued = toAmount(item.quantity_issued);
+    const used = toAmount(item.quantity_used);
+    const returned = toAmount(item.quantity_returned);
+    const unitPrice = toAmount(item.unit_price);
+    const productName = item.product_name || item.description || 'Stock item';
+    originalTotal += issued * unitPrice;
+
+    if (used > 0) {
+      installedItems.push({
+        id: item.id,
+        product_name: productName,
+        quantity: used,
+        unit_price: unitPrice,
+        amount: used * unitPrice,
+      });
+    }
+    if (returned > 0) {
+      returnedItems.push({
+        id: item.id,
+        product_name: productName,
+        quantity: returned,
+        unit_price: unitPrice,
+        amount: returned * unitPrice,
+      });
+      returnsDeducted += returned * unitPrice;
+    }
+  }
+
+  const extraItems = extrasRes.rows.map((item) => ({
+    id: item.id,
+    product_name: item.item_description || 'Extra item',
+    quantity: 1,
+    unit_price: toAmount(item.amount),
+    amount: toAmount(item.amount),
+  }));
+  const extraAdded = extraItems.reduce((sum, item) => sum + item.amount, 0);
+
+  return {
+    installed_items: installedItems,
+    returned_items: returnedItems,
+    extra_items: extraItems,
+    original_total: originalTotal,
+    original_amount: originalTotal,
+    returns_deducted: returnsDeducted,
+    extra_added: extraAdded,
+    final_before_tax: Math.max(0, originalTotal - returnsDeducted + extraAdded),
+    tax_amount: toAmount(invoice.tax_amount),
+    final_amount: toAmount(invoice.total_amount),
+  };
+}
+
 export async function getInvoiceById(id) {
   const customerColumns = await pool.query(
     `
@@ -439,9 +530,15 @@ export async function getInvoiceById(id) {
     [id]
   );
 
+  const invoice = iRes.rows[0];
+  const billBreakdown = invoice.dispatch_id
+    ? await getDispatchBillBreakdown(invoice.dispatch_id, invoice)
+    : null;
+
   return {
-    ...iRes.rows[0],
+    ...invoice,
     items: itemsRes.rows,
+    bill_breakdown: billBreakdown,
   };
 }
 
@@ -542,10 +639,6 @@ export async function updateClientInvoice(id, data) {
     return invoiceRes.rows[0];
   } catch (err) {
     await client.query('ROLLBACK');
-    if (err?.code === '23505' && idempotencyKey && invoiceColumns.has('idempotency_key')) {
-      const existing = await pool.query(`SELECT * FROM public.customer_invoices WHERE idempotency_key = $1`, [idempotencyKey]);
-      if (existing.rows[0]) return existing.rows[0];
-    }
     throw err;
   } finally {
     client.release();
@@ -553,9 +646,14 @@ export async function updateClientInvoice(id, data) {
 }
 
 export async function updateInvoiceStatus(id, status) {
+  const nextStatus = String(status || '').toUpperCase();
+  const allowedStatuses = ['DRAFT', 'ISSUED', 'PAID', 'CANCELLED', 'VOIDED'];
+  if (!allowedStatuses.includes(nextStatus)) {
+    throw new AppError(400, 'INVALID_INVOICE_STATUS', 'Valid invoice statuses are DRAFT, ISSUED, PAID, CANCELLED and VOIDED.');
+  }
   const result = await pool.query(
     `UPDATE public.customer_invoices SET status = $2, updated_at = NOW() WHERE id = $1 RETURNING *`,
-    [id, status]
+    [id, nextStatus]
   );
   if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Invoice not found.');
   return result.rows[0];

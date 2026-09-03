@@ -3,7 +3,7 @@ import * as inventoryService from './inventory.service.js';
 
 export async function getSummary(req, res, next) {
   try {
-    const summary = await inventoryService.getInventorySummary();
+    const summary = await inventoryService.getInventorySummary(req.query);
     sendSuccess(res, summary);
   } catch (error) {
     next(error);
@@ -12,7 +12,7 @@ export async function getSummary(req, res, next) {
 
 export async function getWorkQueue(req, res, next) {
   try {
-    const queue = await inventoryService.getInventoryWorkQueue();
+    const queue = await inventoryService.getInventoryWorkQueue(req.query);
     sendSuccess(res, queue);
   } catch (error) {
     next(error);
@@ -23,6 +23,69 @@ export async function getInventoryMovements(req, res, next) {
   try {
     const movements = await inventoryService.getInventoryMovements(req.query);
     sendSuccess(res, movements);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function generateOrderToken(req, res, next) {
+  try {
+    const token = await inventoryService.generateOrderToken(req.params.orderId, req.user?.user_id);
+    sendSuccess(res, token);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getInventoryTokens(req, res, next) {
+  try {
+    const tokens = await inventoryService.getInventoryTokens();
+    sendSuccess(res, tokens);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getInventoryInstallers(req, res, next) {
+  try {
+    const installers = await inventoryService.getInventoryInstallers({ includeInactive: req.query.includeInactive });
+    sendSuccess(res, installers);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getMasterSettings(req, res, next) {
+  try {
+    const settings = await inventoryService.getMasterSettings();
+    sendSuccess(res, settings);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateCompanySettings(req, res, next) {
+  try {
+    const settings = await inventoryService.updateCompanySettings(req.body, req.user?.user_id);
+    sendSuccess(res, settings);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateInventorySettings(req, res, next) {
+  try {
+    const settings = await inventoryService.updateInventorySettings(req.body, req.user?.user_id);
+    sendSuccess(res, settings);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateInstallerStatus(req, res, next) {
+  try {
+    const installer = await inventoryService.updateInstallerStatus(req.params.id, req.body);
+    sendSuccess(res, installer);
   } catch (error) {
     next(error);
   }
@@ -130,6 +193,15 @@ export async function updateInventoryItem(req, res, next) {
   }
 }
 
+export async function confirmReturnedInventoryItem(req, res, next) {
+  try {
+    const item = await inventoryService.confirmReturnedInventoryItem(req.params.id, req.user?.user_id);
+    sendSuccess(res, item);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function deleteInventoryItem(req, res, next) {
   try {
     const result = await inventoryService.deleteInventoryItem(req.params.id, req.user?.user_id);
@@ -153,6 +225,24 @@ export async function createVendor(req, res, next) {
   try {
     const vendor = await inventoryService.createVendor(req.body);
     sendSuccess(res, vendor, 201);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateVendor(req, res, next) {
+  try {
+    const vendor = await inventoryService.updateVendor(req.params.id, req.body);
+    sendSuccess(res, vendor);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteVendor(req, res, next) {
+  try {
+    const result = await inventoryService.deleteVendor(req.params.id);
+    sendSuccess(res, result);
   } catch (error) {
     next(error);
   }
@@ -208,6 +298,15 @@ export async function createPurchaseOrder(req, res, next) {
   try {
     const po = await inventoryService.createPurchaseOrder(req.body, req.user?.user_id);
     sendSuccess(res, po, 201);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function receivePurchaseOrder(req, res, next) {
+  try {
+    const po = await inventoryService.receivePurchaseOrder(req.params.id, req.body, req.user?.user_id);
+    sendSuccess(res, po);
   } catch (error) {
     next(error);
   }

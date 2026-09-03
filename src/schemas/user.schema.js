@@ -7,7 +7,6 @@ export const createUserSchema = z.object({
     employee_id: z.string().min(1).max(10),
     role_id: z.string().uuid(),
 })
-
 export const updateUserRoleSchema = z.object({
     role_id: z.string().uuid(),
 })

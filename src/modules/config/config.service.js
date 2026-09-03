@@ -266,6 +266,10 @@ export async function getEntityRecords(entity, { isSuperAdminCaller, includeInac
   const whereParts = [];
   const params = [];
 
+  if (entity === 'roles') {
+    whereParts.push(`role_name <> 'installer'`);
+  }
+
   if (hasIsActive) {
     params.push(shouldIncludeInactive);
     whereParts.push(`($${params.length}::boolean = true OR is_active = true)`);
@@ -311,6 +315,10 @@ export async function getEntityRecords(entity, { isSuperAdminCaller, includeInac
 export async function createEntityRecord(entity, payload) {
   if (entity === 'departments') {
     return createDepartment(payload);
+  }
+
+  if (entity === 'roles' && String(payload.role_name || '').trim().toLowerCase() === 'installer') {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Installer is handled inside Inventory operations and is not a separate login portal role.');
   }
 
   if (entity === 'locations') {
@@ -360,6 +368,10 @@ export async function createEntityRecord(entity, payload) {
 export async function updateEntityRecord(entity, id, payload) {
   if (entity === 'departments') {
     return updateDepartment(id, payload);
+  }
+
+  if (entity === 'roles' && String(payload.role_name || '').trim().toLowerCase() === 'installer') {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Installer is handled inside Inventory operations and is not a separate login portal role.');
   }
 
   if (entity === 'locations') {

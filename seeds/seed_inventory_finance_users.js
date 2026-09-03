@@ -135,8 +135,9 @@ async function seedInventoryFinanceUsers() {
       }
     }
 
-    // Grant Finance Officer permissions
-    const finPerms = ['accounts:read', 'accounts:write', 'matrix:finance', 'inventory:read'];
+    // Grant Finance Officer permissions. Keep raw inventory access out of finance-only logins;
+    // inventory-to-invoice handoff is exposed through invoicing/finance endpoints.
+    const finPerms = ['accounts:read', 'accounts:write', 'matrix:finance'];
     for (const k of finPerms) {
       if (permMap[k]) {
         await client.query(

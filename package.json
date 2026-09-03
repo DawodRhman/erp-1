@@ -13,6 +13,8 @@
     "db:rollback": "node-pg-migrate down",
     "db:check": "node-pg-migrate up --dry-run",
     "db:audit": "node scripts/db-audit.mjs",
+    "db:fix-product-prices": "node scripts/fix-product-prices.mjs",
+    "db:ensure-service-users": "node scripts/ensure-service-demo-users.mjs",
     "db:fake": "node-pg-migrate up --fake",
     "db:seed": "node seeds/master_seed.js",
     "db:seed:production": "node seeds/production_seed.js",
