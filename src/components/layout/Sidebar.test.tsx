@@ -80,6 +80,29 @@ describe("Sidebar", () => {
     expect(screen.getByText("Finance Dashboard").closest("a")?.getAttribute("href")).toBe("/finance-dashboard");
   });
 
+  it("shows only inventory service links for inventory officers", () => {
+    activeRole = "inventory_officer";
+
+    renderSidebar();
+
+    expect(screen.getByText("Inventory Dashboard").closest("a")?.getAttribute("href")).toBe("/inventory-dashboard");
+    expect(screen.getByText("Product Catalog").closest("a")?.getAttribute("href")).toBe("/inventory/products");
+    expect(screen.queryByText("Finance Dashboard")).toBeNull();
+    expect(screen.queryByText("CSR / CRM")).toBeNull();
+  });
+
+  it("shows inventory and finance links for combined admins without the HR dashboard route", () => {
+    activeRole = "inv_fin_admin";
+
+    const { container } = renderSidebar();
+
+    expect(screen.getByText("Inventory Dashboard").closest("a")?.getAttribute("href")).toBe("/inventory-dashboard");
+    expect(screen.getByText("Billing Approvals").closest("a")?.getAttribute("href")).toBe("/finance/billing-approvals");
+    expect(screen.getByText("Invoices").closest("a")?.getAttribute("href")).toBe("/finance/invoices");
+    expect(screen.getByText("Summaries").closest("a")?.getAttribute("href")).toBe("/finance/summaries");
+    expect(container.querySelectorAll('a[href="/dashboard"]')).toHaveLength(0);
+  });
+
   it("shows a Logout action and confirms before ending the session", () => {
     renderSidebar();
 

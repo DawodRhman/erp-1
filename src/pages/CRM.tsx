@@ -1310,7 +1310,7 @@ export default function CRM() {
                 ))}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: '16px', marginTop: '16px', alignItems: 'start' }}>
                   <div style={{ padding: '12px', borderRadius: '12px', background: '#ffffff', border: '1px dashed #cbd5e1', color: '#64748b', fontSize: '13px' }}>
-                    Tip: Product dropdown inventory catalog se aa raha hai. Agar product missing ho to pehle Inventory Logistics me catalog product add karein.
+                    Tip: The product dropdown comes from the inventory catalog. If a product is missing, add it in Inventory Logistics first.
                   </div>
                   <div style={{ padding: '14px', borderRadius: '12px', background: '#ffffff', border: '1px solid #e2e8f0' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px', color: '#475569' }}>

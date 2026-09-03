@@ -1,1 +1,1 @@
-export { CrmClientsPage as default } from "./FlowPages";
+export { default } from "./crm/ClientsList";

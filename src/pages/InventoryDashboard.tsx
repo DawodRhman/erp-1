@@ -1,40 +1,43 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
-  ArrowDownToLine,
   ArrowUpFromLine,
-  BarChart3,
   Boxes,
+  CalendarDays,
   ClipboardCheck,
   FileText,
-  PackageCheck,
   RefreshCw,
-  ShoppingCart,
-  Warehouse,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
-  InventoryItem,
+  FieldDispatch,
   InventorySummary,
   InventoryWorkQueueJob,
-  InventoryMovement,
   Product,
-  PurchaseOrder,
-  Invoice,
   inventoryApi,
 } from "../services/inventoryService";
 import { useToastContext } from "../context/ToastContext";
 
 type LoadingState = "idle" | "loading" | "ready" | "error";
+type DashboardPeriod = "daily" | "weekly" | "monthly";
+
+const periodOptions: Array<{ value: DashboardPeriod; label: string; detail: string }> = [
+  { value: "daily", label: "Daily", detail: "Today" },
+  { value: "weekly", label: "Weekly", detail: "Last 7 days" },
+  { value: "monthly", label: "Monthly", detail: "This month" },
+];
 
 const statusColors: Record<string, { bg: string; color: string }> = {
-  AVAILABLE: { bg: "#dcfce7", color: "#047857" },
-  ALLOCATED: { bg: "#dbeafe", color: "#1d4ed8" },
-  INSTALLED: { bg: "#ede9fe", color: "#6d28d9" },
-  DAMAGED: { bg: "#fee2e2", color: "#b91c1c" },
-  RETURNED: { bg: "#fef3c7", color: "#b45309" },
   DRAFT: { bg: "#fef3c7", color: "#b45309" },
+  SENT: { bg: "#dbeafe", color: "#1d4ed8" },
   APPROVED: { bg: "#dcfce7", color: "#047857" },
+  PENDING_REVIEW: { bg: "#fef3c7", color: "#b45309" },
+  READY_FOR_INVENTORY: { bg: "#e0f2fe", color: "#0369a1" },
+  TOKEN_GENERATED: { bg: "#dbeafe", color: "#1d4ed8" },
+  STOCK_OK: { bg: "#dcfce7", color: "#047857" },
+  AWAITING_STOCK: { bg: "#fee2e2", color: "#b91c1c" },
+  DISPATCHED: { bg: "#ede9fe", color: "#6d28d9" },
+  COMPLETED: { bg: "#dcfce7", color: "#047857" },
 };
 
 async function safeLoad<T>(label: string, loader: () => Promise<T>, fallback: T): Promise<T> {
@@ -48,10 +51,6 @@ async function safeLoad<T>(label: string, loader: () => Promise<T>, fallback: T)
 
 function fmt(value?: number) {
   return new Intl.NumberFormat("en-PK").format(Number(value || 0));
-}
-
-function currency(value?: number) {
-  return `Rs ${fmt(value)}`;
 }
 
 function pill(status?: string) {
@@ -70,7 +69,7 @@ function pill(status?: string) {
         color: colors.color,
       }}
     >
-      {key}
+      {key.replace(/_/g, " ")}
     </span>
   );
 }
@@ -81,466 +80,323 @@ export default function InventoryDashboard() {
   const [state, setState] = useState<LoadingState>("idle");
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
-  const [items, setItems] = useState<InventoryItem[]>([]);
-  const [movements, setMovements] = useState<InventoryMovement[]>([]);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [workQueue, setWorkQueue] = useState<InventoryWorkQueueJob[]>([]);
+  const [dispatches, setDispatches] = useState<FieldDispatch[]>([]);
+  const [period, setPeriod] = useState<DashboardPeriod>("monthly");
 
   const loadDashboard = useCallback(async () => {
     try {
       setState("loading");
-      const [summaryRes, productRes, itemRes, movementRes, poRes, invoiceRes, queueRes] = await Promise.all([
-        safeLoad<InventorySummary | null>("summary", () => inventoryApi.getSummary(), null),
+      const [summaryRes, productRes, queueRes, dispatchRes] = await Promise.all([
+        safeLoad<InventorySummary | null>("summary", () => inventoryApi.getSummary({ period }), null),
         safeLoad<Product[]>("products", () => inventoryApi.getProducts({ limit: 500 }), []),
-        safeLoad<InventoryItem[]>("serials", () => inventoryApi.getItems({ limit: 500 }), []),
-        safeLoad<InventoryMovement[]>("stock ledger", () => inventoryApi.getMovements({ limit: 10 }), []),
-        safeLoad<PurchaseOrder[]>("purchase orders", () => inventoryApi.getPurchaseOrders(), []),
-        safeLoad<Invoice[]>("invoices", () => inventoryApi.getInvoices(), []),
-        safeLoad<InventoryWorkQueueJob[]>("CSR queue", () => inventoryApi.getWorkQueue(), []),
+        safeLoad<InventoryWorkQueueJob[]>("incoming orders", () => inventoryApi.getWorkQueue(), []),
+        safeLoad<FieldDispatch[]>("dispatches", () => inventoryApi.getDispatches(), []),
       ]);
 
       setSummary(summaryRes);
       setProducts(productRes);
-      setItems(itemRes);
-      setMovements(movementRes);
-      setPurchaseOrders(poRes);
-      setInvoices(invoiceRes);
       setWorkQueue(queueRes);
+      setDispatches(dispatchRes);
       setState("ready");
-      if (!summaryRes && productRes.length === 0 && itemRes.length === 0) {
-        showToast("Inventory dashboard ka core data abhi available nahi hai", "error");
+
+      if (!summaryRes && productRes.length === 0 && queueRes.length === 0) {
+        showToast("Inventory dashboard data could not be loaded.", "error");
       }
     } catch (error) {
       console.error(error);
       setState("error");
-      showToast("Inventory dashboard data load nahi ho saka", "error");
+      showToast("Inventory dashboard data could not be loaded.", "error");
     }
-  }, [showToast]);
+  }, [period, showToast]);
 
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
 
-  const metrics = useMemo(() => {
-    const serialStockIn = items.length || summary?.total_serials || 0;
-    const nonSerialQty = products
-      .filter((product) => product.tracking_type === "NONE")
-      .reduce((total, product) => total + Number(product.quantity || 0), 0);
-    const stockIn = serialStockIn + nonSerialQty;
-    const allocated = items.filter((item) => item.current_status === "ALLOCATED").length || summary?.allocated_serials || 0;
-    const installed = items.filter((item) => item.current_status === "INSTALLED").length || summary?.installed_serials || 0;
-    const damaged = items.filter((item) => item.current_status === "DAMAGED").length || summary?.damaged_serials || 0;
-    const returned = items.filter((item) => item.current_status === "RETURNED").length;
-    const available = items.filter((item) => item.current_status === "AVAILABLE").length || summary?.available_serials || 0;
-    const stockOut = allocated + installed;
-    const lowStock = products.filter((product) => Number(product.quantity || 0) <= Number(product.min_stock_level || 0));
-    const totalValue = products.reduce(
-      (total, product) => total + Number(product.quantity || 0) * Number(product.unit_price || product.cost_price || 0),
-      0,
-    );
-
-    return {
-      stockIn,
-      stockOut,
-      available,
-      allocated,
-      installed,
-      damaged,
-      returned,
-      lowStock,
-      totalValue: totalValue || summary?.total_inventory_value || 0,
-    };
-  }, [items, products, summary]);
-
-  const topProducts = useMemo(
+  const lowStockAlerts = useMemo(
     () =>
-      [...products]
-        .sort((a, b) => Number(b.quantity || 0) - Number(a.quantity || 0))
-        .slice(0, 7),
+      products
+        .filter((product) => Number(product.quantity || 0) <= Number(product.min_stock_level || 0))
+        .sort((a, b) => {
+          const shortA = Number(a.min_stock_level || 0) - Number(a.quantity || 0);
+          const shortB = Number(b.min_stock_level || 0) - Number(b.quantity || 0);
+          return shortB - shortA;
+        })
+        .slice(0, 5),
     [products],
   );
 
-  const recentSerials = useMemo(() => items.slice(0, 8), [items]);
-  const recentMovements = useMemo(() => movements.slice(0, 8), [movements]);
-  const recentOrders = useMemo(() => purchaseOrders.slice(0, 5), [purchaseOrders]);
-  const recentReceipts = useMemo(() => invoices.slice(0, 5), [invoices]);
+  const incomingOrders = useMemo(() => workQueue.slice(0, 5), [workQueue]);
 
-  const stockOutPercent =
-    metrics.stockIn > 0 ? Math.min(100, Math.round((metrics.stockOut / metrics.stockIn) * 100)) : 0;
-  const availablePercent =
-    metrics.stockIn > 0 ? Math.min(100, Math.round((metrics.available / metrics.stockIn) * 100)) : 0;
+  const activeDispatches = useMemo(
+    () =>
+      dispatches.filter(
+        (dispatch) => ["PENDING", "ASSIGNED", "DISPATCHED", "IN_PROGRESS"].includes(String(dispatch.status || "").toUpperCase()),
+      ),
+    [dispatches],
+  );
+
+  const pendingIncomingOrders =
+    summary?.pending_incoming_orders ??
+    workQueue.filter((order) =>
+      ["PENDING_REVIEW", "READY_FOR_INVENTORY"].includes(String(order.order_status || order.status || "").toUpperCase()),
+    ).length;
+
+  const totalStockQty = Number(
+    summary?.total_stock_qty ??
+      products.reduce((sum, product) => sum + Number(product.quantity || 0), 0),
+  );
+  const availableStockQty = Number(summary?.available_stock_qty ?? summary?.available_serials ?? 0);
+  const periodLabel = periodOptions.find((option) => option.value === period)?.detail || "Selected period";
+  const stockInQty = Number(summary?.period_stock_in_qty || 0);
+  const stockOutQty = Number(summary?.period_stock_out_qty || 0);
+  const pendingReturns = Number(summary?.pending_returns || 0);
+  const pendingBills = Number(summary?.pending_bills || 0);
+  const activeDispatchCount = Number(summary?.active_dispatches ?? activeDispatches.length);
 
   const statCards = [
     {
-      label: "Total Stock In",
-      value: fmt(metrics.stockIn),
-      note: "Serials plus non-serial quantity recorded",
-      icon: ArrowDownToLine,
+      label: "Total Products",
+      value: fmt(summary?.total_products || products.length),
+      detail: `${fmt(totalStockQty)} total stock units | ${fmt(availableStockQty)} available now`,
+      icon: Boxes,
       color: "#2563eb",
       bg: "#dbeafe",
     },
     {
-      label: "Total Stock Out",
-      value: fmt(metrics.stockOut),
-      note: `${fmt(metrics.allocated)} allocated, ${fmt(metrics.installed)} installed`,
-      icon: ArrowUpFromLine,
+      label: "Pending Incoming Orders",
+      value: fmt(pendingIncomingOrders),
+      detail: "CRM approved jobs waiting for inventory",
+      icon: ClipboardCheck,
       color: "#0f766e",
       bg: "#ccfbf1",
     },
     {
-      label: "Available To Issue",
-      value: fmt(metrics.available),
-      note: `${availablePercent}% of tracked stock is available`,
-      icon: PackageCheck,
-      color: "#059669",
-      bg: "#dcfce7",
-    },
-    {
       label: "Low Stock Alerts",
-      value: fmt(summary?.low_stock_count || metrics.lowStock.length),
-      note: "At or below reorder level",
+      value: fmt(summary?.low_stock_count || lowStockAlerts.length),
+      detail: "Products at or below minimum level",
       icon: AlertTriangle,
       color: "#b45309",
       bg: "#fef3c7",
+    },
+    {
+      label: "Active Dispatches",
+      value: fmt(activeDispatchCount),
+      detail: "Installer jobs currently in progress",
+      icon: ArrowUpFromLine,
+      color: "#7c3aed",
+      bg: "#ede9fe",
+    },
+    {
+      label: "Pending Returns",
+      value: fmt(pendingReturns),
+      detail: "Installer returns waiting for Inventory review",
+      icon: RefreshCw,
+      color: "#0284c7",
+      bg: "#e0f2fe",
+    },
+    {
+      label: "Pending Bills",
+      value: fmt(pendingBills),
+      detail: "Confirmed returns ready to send to Finance",
+      icon: FileText,
+      color: "#059669",
+      bg: "#d1fae5",
     },
   ];
 
   return (
     <div
+      className="inventory-dashboard"
       style={{
-        padding: "32px",
+        padding: "22px 28px",
         minHeight: "100%",
-        background:
-          "linear-gradient(135deg, rgba(239,246,255,.9), rgba(248,250,252,.95) 42%, rgba(236,253,245,.55))",
+        background: "linear-gradient(135deg, rgba(239,246,255,.9), rgba(248,250,252,.96) 55%, rgba(236,253,245,.5))",
       }}
     >
       <section
+        className="inventory-dashboard-hero"
         style={{
+          marginBottom: 14,
+          background: "linear-gradient(135deg,#14213d,#155e75)",
           borderRadius: 18,
-          padding: 28,
-          color: "white",
-          background: "linear-gradient(135deg, #0f172a, #1e3a8a 56%, #0f766e)",
-          boxShadow: "0 22px 50px rgba(15,23,42,.18)",
-          display: "grid",
-          gridTemplateColumns: "1fr auto",
-          gap: 24,
+          padding: 18,
+          boxShadow: "0 16px 35px rgba(15,23,42,.14)",
+          display: "flex",
+          justifyContent: "space-between",
           alignItems: "center",
+          gap: 18,
+          color: "white",
         }}
       >
-        <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
-          <div
-            style={{
-              width: 60,
-              height: 60,
-              borderRadius: 16,
-              display: "grid",
-              placeItems: "center",
-              background: "rgba(255,255,255,.12)",
-              border: "1px solid rgba(255,255,255,.18)",
-            }}
-          >
-            <Warehouse size={30} />
+        <div>
+          <div style={{ textTransform: "uppercase", letterSpacing: ".12em", fontSize: 12, fontWeight: 950, color: "#bae6fd" }}>
+            Inventory service dashboard
           </div>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".12em", color: "#bfdbfe" }}>
-              INVENTORY SERVICE DASHBOARD
-            </div>
-            <h1 style={{ margin: "8px 0 8px", fontSize: 32, lineHeight: 1.1 }}>
-              Stock, Purchasing, Dispatch & Billing Health
-            </h1>
-            <p style={{ margin: 0, maxWidth: 900, color: "#dbeafe", fontSize: 15 }}>
-              Total stock, stock-in, stock-out, available serials, low-stock alerts, CSR handoff and vendor receipts in one command view.
-            </p>
-          </div>
+          <h1 style={{ margin: "7px 0 4px", fontSize: 28, lineHeight: 1.1 }}>Stock Movement Health</h1>
+          <p style={{ margin: 0, color: "#dbeafe", fontSize: 14 }}>
+            Total stock, issued stock, incoming orders, low-stock alerts and billing queues refresh from live backend data.
+          </p>
         </div>
-        <button
-          onClick={loadDashboard}
-          disabled={state === "loading"}
-          style={{
-            border: "1px solid rgba(255,255,255,.28)",
-            background: "rgba(255,255,255,.12)",
-            color: "white",
-            borderRadius: 12,
-            padding: "12px 16px",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            fontWeight: 900,
-            cursor: "pointer",
-          }}
-        >
-          <RefreshCw size={16} />
-          {state === "loading" ? "Refreshing..." : "Refresh Live Data"}
-        </button>
-      </section>
-
-      <section
-        style={{
-          marginTop: 22,
-          display: "grid",
-          gridTemplateColumns: "repeat(4, minmax(180px, 1fr))",
-          gap: 16,
-        }}
-      >
-        {statCards.map((card) => (
-          <div
-            key={card.label}
-            style={{
-              background: "white",
-              border: "1px solid #dbe5f2",
-              borderRadius: 16,
-              padding: 20,
-              boxShadow: "0 14px 30px rgba(15,23,42,.07)",
-              borderTop: `4px solid ${card.color}`,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-              <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900, letterSpacing: ".08em" }}>
-                {card.label.toUpperCase()}
-              </div>
-              <div
-                style={{
-                  width: 40,
-                  height: 40,
-                  display: "grid",
-                  placeItems: "center",
-                  borderRadius: 12,
-                  background: card.bg,
-                  color: card.color,
-                }}
-              >
-                <card.icon size={20} />
-              </div>
-            </div>
-            <div style={{ marginTop: 16, fontSize: 34, fontWeight: 950, color: "#0f172a" }}>{card.value}</div>
-            <div style={{ marginTop: 5, fontSize: 13, color: "#64748b" }}>{card.note}</div>
-          </div>
-        ))}
-      </section>
-
-      <section style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1.2fr .8fr", gap: 16 }}>
-        <div
-          style={{
-            background: "white",
-            border: "1px solid #dbe5f2",
-            borderRadius: 16,
-            padding: 20,
-            boxShadow: "0 14px 30px rgba(15,23,42,.06)",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
-            <div>
-              <div style={{ fontSize: 12, color: "#2563eb", fontWeight: 900, letterSpacing: ".1em" }}>STOCK MOVEMENT</div>
-              <h2 style={{ margin: "6px 0 0", fontSize: 20 }}>Inventory Position</h2>
-            </div>
+        <div className="inventory-period-switcher" style={{ display: "flex", gap: 8, alignItems: "center", background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.22)", padding: 7, borderRadius: 14 }}>
+          <CalendarDays size={18} />
+          {periodOptions.map((option) => (
             <button
-              onClick={() => navigate("/inventory")}
+              key={option.value}
+              onClick={() => setPeriod(option.value)}
               style={{
                 border: 0,
-                borderRadius: 11,
-                padding: "10px 14px",
-                color: "white",
-                background: "#2563eb",
-                fontWeight: 900,
+                borderRadius: 10,
+                padding: "9px 12px",
+                background: period === option.value ? "#ffffff" : "transparent",
+                color: period === option.value ? "#0f172a" : "#dbeafe",
+                fontWeight: 950,
                 cursor: "pointer",
               }}
             >
-              Open Inventory Logistics
-            </button>
-          </div>
-          <div style={{ marginTop: 20, display: "grid", gap: 14 }}>
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 900 }}>
-                <span>Available stock</span>
-                <span>{availablePercent}%</span>
-              </div>
-              <div style={{ marginTop: 8, height: 10, borderRadius: 999, background: "#e2e8f0", overflow: "hidden" }}>
-                <div style={{ width: `${availablePercent}%`, height: "100%", background: "#10b981" }} />
-              </div>
-            </div>
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 900 }}>
-                <span>Stock out / issued</span>
-                <span>{stockOutPercent}%</span>
-              </div>
-              <div style={{ marginTop: 8, height: 10, borderRadius: 999, background: "#e2e8f0", overflow: "hidden" }}>
-                <div style={{ width: `${stockOutPercent}%`, height: "100%", background: "#2563eb" }} />
-              </div>
-            </div>
-          </div>
-          <div style={{ marginTop: 20, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-            {[
-              ["Catalog Products", summary?.total_products || products.length],
-              ["Allocated", metrics.allocated],
-              ["Installed", metrics.installed],
-              ["Damaged/Returned", metrics.damaged + metrics.returned],
-            ].map(([label, value]) => (
-              <div key={String(label)} style={{ background: "#f8fafc", borderRadius: 12, padding: 14, border: "1px solid #e2e8f0" }}>
-                <div style={{ fontSize: 18, fontWeight: 950, color: "#0f172a" }}>{fmt(Number(value))}</div>
-                <div style={{ marginTop: 4, fontSize: 12, color: "#64748b" }}>{label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div
-          style={{
-            background: "white",
-            border: "1px solid #dbe5f2",
-            borderRadius: 16,
-            padding: 20,
-            boxShadow: "0 14px 30px rgba(15,23,42,.06)",
-          }}
-        >
-          <div style={{ fontSize: 12, color: "#0f766e", fontWeight: 900, letterSpacing: ".1em" }}>OPERATION QUEUE</div>
-          <h2 style={{ margin: "6px 0 16px", fontSize: 20 }}>What Needs Action</h2>
-          {[
-            { label: "CSR approved jobs", value: summary?.approved_csr_jobs || workQueue.length, icon: ClipboardCheck, to: "/inventory" },
-            { label: "Purchase orders", value: summary?.total_pos || purchaseOrders.length, icon: ShoppingCart, to: "/inventory" },
-            { label: "Vendor receipts", value: summary?.total_invoices || invoices.length, icon: FileText, to: "/inventory" },
-            { label: "Inventory value", value: currency(metrics.totalValue), icon: BarChart3, to: "/inventory" },
-          ].map((row) => (
-            <button
-              key={row.label}
-              onClick={() => navigate(row.to)}
-              style={{
-                width: "100%",
-                border: "1px solid #e2e8f0",
-                background: "#f8fafc",
-                borderRadius: 13,
-                padding: 13,
-                marginBottom: 10,
-                display: "grid",
-                gridTemplateColumns: "34px 1fr auto",
-                alignItems: "center",
-                gap: 12,
-                cursor: "pointer",
-                textAlign: "left",
-              }}
-            >
-              <span style={{ color: "#2563eb" }}>
-                <row.icon size={20} />
-              </span>
-              <span style={{ color: "#334155", fontWeight: 800 }}>{row.label}</span>
-              <span style={{ color: "#0f172a", fontWeight: 950 }}>{row.value}</span>
+              {option.label}
             </button>
           ))}
         </div>
       </section>
 
-      <section style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <DashboardTable
-          title="Top Stock Position"
-          eyebrow="PRODUCTS"
-          actionLabel="+ New Product"
-          onAction={() => navigate("/inventory")}
-          columns={["Product", "Type", "Qty", "Reorder", "Value"]}
-          rows={topProducts.map((product) => [
-            product.product_name,
-            product.product_type,
-            fmt(product.quantity),
-            fmt(product.min_stock_level),
-            currency(Number(product.quantity || 0) * Number(product.unit_price || product.cost_price || 0)),
-          ])}
-          empty="No products found."
-        />
-        <DashboardTable
-          title="Recent Serial Movement"
-          eyebrow="SERIALS / IMEI"
-          actionLabel="Assign Serial"
-          onAction={() => navigate("/inventory")}
-          columns={["Product", "Serial", "Status", "Location"]}
-          rows={recentSerials.map((item) => [
-            item.product_name || "-",
-            item.serial_number || item.imei || "N/A",
-            pill(item.current_status),
-            item.location || "Warehouse Main",
-          ])}
-          empty="No serial records found."
-        />
+      <section className="inventory-stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(140px, 1fr))", gap: 14 }}>
+        {statCards.map((card) => (
+          <div
+            className="inventory-stat-card"
+            key={card.label}
+            style={{
+              background: "white",
+              border: "1px solid #dbe5f2",
+              borderRadius: 14,
+              padding: "16px 16px 14px",
+              boxShadow: "0 10px 24px rgba(15,23,42,.06)",
+              borderTop: `4px solid ${card.color}`,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+              <div style={{ color: "#64748b", fontSize: 11, fontWeight: 900, letterSpacing: ".06em", lineHeight: 1.35 }}>
+                {card.label.toUpperCase()}
+              </div>
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  display: "grid",
+                  placeItems: "center",
+                  borderRadius: 11,
+                  background: card.bg,
+                  color: card.color,
+                  flex: "0 0 auto",
+                }}
+              >
+                <card.icon size={18} />
+              </div>
+            </div>
+            <div style={{ marginTop: 12, fontSize: 30, fontWeight: 950, color: "#0f172a", lineHeight: 1 }}>{card.value}</div>
+            <div style={{ marginTop: 7, color: "#64748b", fontSize: 12, fontWeight: 800, lineHeight: 1.35 }}>{card.detail}</div>
+          </div>
+        ))}
       </section>
 
-      <section style={{ marginTop: 16 }}>
-        <DashboardTable
-          title="Latest Stock Ledger"
-          eyebrow="AUDIT TRAIL"
-          actionLabel="Open Full Ledger"
-          onAction={() => navigate("/inventory")}
-          columns={["Date", "Movement", "Product", "Qty", "Reference", "By"]}
-          rows={recentMovements.map((movement) => [
-            new Date(movement.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-            pill(movement.movement_type),
-            movement.product_name || movement.serial_number || "Stock item",
-            fmt(movement.quantity),
-            movement.reference_type || "Manual",
-            movement.created_by_email || "System",
-          ])}
-          empty="No stock movement ledger records yet."
-        />
+      <section
+        className="inventory-mini-grid"
+        style={{
+          marginTop: 14,
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(150px, 1fr))",
+          gap: 12,
+        }}
+      >
+        <MiniMetric label={`${periodLabel} Stock In`} value={fmt(stockInQty)} />
+        <MiniMetric label={`${periodLabel} Stock Out`} value={fmt(stockOutQty)} />
+        <MiniMetric label="Available Serials" value={fmt(summary?.available_serials || 0)} />
+        <MiniMetric label="Installed Serials" value={fmt(summary?.installed_serials || 0)} />
       </section>
 
-      <section style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-        <FlowCard
-          title="Stock-In Flow"
-          icon={ArrowDownToLine}
-          steps={["Create purchase order", "Receive vendor stock", "Record serials / quantity", "Make stock available"]}
-          button="Start Purchasing"
-          onClick={() => navigate("/inventory")}
+      <section
+        className="inventory-dashboard-tables"
+        style={{
+          marginTop: 14,
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 14,
+          alignItems: "start",
+        }}
+      >
+        <DashboardTable
+          title="Incoming Orders"
+          actionLabel={state === "loading" ? "Refreshing..." : "Refresh"}
+          onAction={loadDashboard}
+          columns={["Order No", "Client", "Status", "Action"]}
+          rows={incomingOrders.map((order) => [
+            order.order_number || order.quotation_number || "-",
+            order.customer_name || "-",
+            pill(order.order_status || order.status || "PENDING_REVIEW"),
+            <button
+              onClick={() => navigate("/inventory/queue")}
+              style={tableButtonStyle}
+            >
+              Open
+            </button>,
+          ])}
+          empty="No incoming orders from CRM."
         />
-        <FlowCard
-          title="Stock-Out Flow"
-          icon={ArrowUpFromLine}
-          steps={["Open CSR approved job", "Assign serial / stock", "Create installer handoff", "Track installed and returned items"]}
-          button="Open CSR Queue"
-          onClick={() => navigate("/inventory")}
-        />
-        <FlowCard
-          title="Billing Handoff"
-          icon={FileText}
-          steps={["Open billing from job", "Auto-fill invoice rows", "Edit missing/manual items", "Save draft and generate summary"]}
-          button="Open Invoice Builder"
-          onClick={() => navigate("/invoice-builder")}
-        />
-      </section>
 
-      <section style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <DashboardTable
-          title="Purchase Orders"
-          eyebrow="STOCK-IN"
-          actionLabel="Create PO"
-          onAction={() => navigate("/inventory")}
-          columns={["PO", "Vendor", "Status", "Amount"]}
-          rows={recentOrders.map((order) => [
-            order.po_number,
-            order.vendor_name || "-",
-            pill(order.status),
-            currency(order.total_amount),
-          ])}
-          empty="No purchase orders yet."
-        />
-        <DashboardTable
-          title="Vendor Receipts / Invoices"
-          eyebrow="GRN"
-          actionLabel="Open Receipts"
-          onAction={() => navigate("/inventory")}
-          columns={["Invoice", "Party", "Status", "Amount"]}
-          rows={recentReceipts.map((invoice) => [
-            invoice.invoice_number,
-            invoice.customer_name || "Vendor / Supplier",
-            pill(invoice.status),
-            currency(invoice.total_amount),
-          ])}
-          empty="No receipts yet."
+          title="Low Stock Alerts"
+          columns={["Product", "Stock", "Min", "Short"]}
+          rows={lowStockAlerts.map((product) => {
+            const stock = Number(product.quantity || 0);
+            const min = Number(product.min_stock_level || 0);
+            return [
+              product.product_name,
+              fmt(stock),
+              fmt(min),
+              <span style={{ color: "#b91c1c", fontWeight: 950 }}>{fmt(Math.max(0, min - stock))}</span>,
+            ];
+          })}
+          empty="No low stock alerts."
         />
       </section>
     </div>
   );
 }
 
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div
+      className="inventory-mini-metric"
+      style={{
+        background: "rgba(255,255,255,.82)",
+        border: "1px solid #dbe5f2",
+        borderRadius: 12,
+        padding: "12px 14px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+      }}
+    >
+      <span style={{ color: "#64748b", fontSize: 12, fontWeight: 900 }}>{label}</span>
+      <strong style={{ color: "#0f172a", fontSize: 18 }}>{value}</strong>
+    </div>
+  );
+}
+
+const tableButtonStyle: React.CSSProperties = {
+  border: 0,
+  borderRadius: 9,
+  padding: "7px 10px",
+  background: "#2563eb",
+  color: "#fff",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
 function DashboardTable({
   title,
-  eyebrow,
   actionLabel,
   onAction,
   columns,
@@ -548,33 +404,59 @@ function DashboardTable({
   empty,
 }: {
   title: string;
-  eyebrow: string;
-  actionLabel: string;
-  onAction: () => void;
+  actionLabel?: string;
+  onAction?: () => void;
   columns: string[];
   rows: React.ReactNode[][];
   empty: string;
 }) {
   return (
-    <div style={{ background: "white", border: "1px solid #dbe5f2", borderRadius: 16, overflow: "hidden", boxShadow: "0 14px 30px rgba(15,23,42,.06)" }}>
-      <div style={{ padding: 18, display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center" }}>
-        <div>
-          <div style={{ color: "#2563eb", fontSize: 11, fontWeight: 900, letterSpacing: ".1em" }}>{eyebrow}</div>
-          <h3 style={{ margin: "5px 0 0", fontSize: 18 }}>{title}</h3>
-        </div>
-        <button
-          onClick={onAction}
-          style={{ border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1d4ed8", padding: "9px 12px", borderRadius: 10, fontWeight: 900, cursor: "pointer" }}
-        >
-          {actionLabel}
-        </button>
+    <div
+      className="inventory-dashboard-table"
+      style={{
+        background: "white",
+        border: "1px solid #dbe5f2",
+        borderRadius: 14,
+        overflow: "hidden",
+        boxShadow: "0 10px 24px rgba(15,23,42,.06)",
+      }}
+    >
+      <div style={{ padding: "14px 16px", display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center" }}>
+        <h3 style={{ margin: 0, fontSize: 18, color: "#0f172a" }}>{title}</h3>
+        {actionLabel && onAction ? (
+          <button
+            onClick={onAction}
+            style={{
+              border: "1px solid #bfdbfe",
+              background: "#eff6ff",
+              color: "#1d4ed8",
+              padding: "8px 11px",
+              borderRadius: 10,
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            <RefreshCw size={14} style={{ marginRight: 6, verticalAlign: "-2px" }} />
+            {actionLabel}
+          </button>
+        ) : null}
       </div>
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
-            <tr style={{ background: "linear-gradient(90deg, #e0f2fe, #ede9fe)" }}>
+            <tr style={{ background: "#eef4fb" }}>
               {columns.map((column) => (
-                <th key={column} style={{ textAlign: "left", padding: "12px 14px", fontSize: 11, color: "#334155", letterSpacing: ".09em" }}>
+                <th
+                  key={column}
+                  style={{
+                    textAlign: "left",
+                    padding: "11px 14px",
+                    fontSize: 11,
+                    color: "#334155",
+                    letterSpacing: ".08em",
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   {column.toUpperCase()}
                 </th>
               ))}
@@ -583,7 +465,7 @@ function DashboardTable({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} style={{ padding: 20, color: "#64748b" }}>
+                <td colSpan={columns.length} style={{ padding: 18, color: "#64748b" }}>
                   {empty}
                 </td>
               </tr>
@@ -591,7 +473,16 @@ function DashboardTable({
               rows.map((row, rowIndex) => (
                 <tr key={rowIndex}>
                   {row.map((cell, cellIndex) => (
-                    <td key={cellIndex} style={{ padding: "12px 14px", borderTop: "1px solid #edf2f7", color: "#0f172a", fontSize: 13, fontWeight: cellIndex === 0 ? 800 : 600 }}>
+                    <td
+                      key={`${rowIndex}-${cellIndex}`}
+                      style={{
+                        padding: "12px 14px",
+                        borderTop: "1px solid #e2e8f0",
+                        color: "#0f172a",
+                        fontWeight: cellIndex === 0 ? 900 : 700,
+                        fontSize: 13,
+                      }}
+                    >
                       {cell}
                     </td>
                   ))}
@@ -601,47 +492,6 @@ function DashboardTable({
           </tbody>
         </table>
       </div>
-    </div>
-  );
-}
-
-function FlowCard({
-  title,
-  icon: Icon,
-  steps,
-  button,
-  onClick,
-}: {
-  title: string;
-  icon: React.ComponentType<any>;
-  steps: string[];
-  button: string;
-  onClick: () => void;
-}) {
-  return (
-    <div style={{ background: "white", border: "1px solid #dbe5f2", borderRadius: 16, padding: 18, boxShadow: "0 14px 30px rgba(15,23,42,.06)" }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <div style={{ width: 40, height: 40, borderRadius: 12, display: "grid", placeItems: "center", background: "#eff6ff", color: "#2563eb" }}>
-          <Icon size={20} />
-        </div>
-        <h3 style={{ margin: 0, fontSize: 18 }}>{title}</h3>
-      </div>
-      <div style={{ marginTop: 16, display: "grid", gap: 9 }}>
-        {steps.map((step, index) => (
-          <div key={step} style={{ display: "grid", gridTemplateColumns: "28px 1fr", alignItems: "center", gap: 10 }}>
-            <span style={{ width: 24, height: 24, borderRadius: 999, display: "grid", placeItems: "center", background: index === steps.length - 1 ? "#dcfce7" : "#eef2ff", color: index === steps.length - 1 ? "#047857" : "#2563eb", fontSize: 12, fontWeight: 950 }}>
-              {index + 1}
-            </span>
-            <span style={{ color: "#334155", fontWeight: 700, fontSize: 13 }}>{step}</span>
-          </div>
-        ))}
-      </div>
-      <button
-        onClick={onClick}
-        style={{ marginTop: 18, width: "100%", border: 0, background: "#0f172a", color: "white", borderRadius: 11, padding: "11px 14px", fontWeight: 900, cursor: "pointer" }}
-      >
-        {button}
-      </button>
     </div>
   );
 }

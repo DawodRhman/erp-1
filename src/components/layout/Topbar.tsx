@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { Search, LogOut, ShieldCheck as ShieldIcon, LayoutDashboard, Users, CalendarCheck, CalendarDays, DollarSign, TrendingUp, ScrollText, Settings, ClipboardList, Clock, CalendarRange, Bell, Zap, Wallet } from "lucide-react";
+import { Search, LogOut, ShieldCheck as ShieldIcon, LayoutDashboard, Users, CalendarCheck, CalendarDays, DollarSign, TrendingUp, ScrollText, Settings, ClipboardList, Clock, CalendarRange, Bell, Zap, Wallet, Menu } from "lucide-react";
 import { useEmployees } from "../../hooks/useEmployees";
 import { useLeaves } from "../../hooks/useLeaves";
 
@@ -31,21 +31,44 @@ const routeNames: Record<string, string> = {
   "/crm": "CSR / CRM",
   "/crm/leads": "Sales Leads",
   "/crm/clients": "Clients",
+  "/crm/clients/new": "Add Client",
   "/crm/quotations": "Quotations",
   "/crm/quotations/new": "Create Quotation",
+  "/crm/orders": "Orders Tracker",
+  "/crm/complaints": "Complaints",
+  "/crm/invoices": "CRM Invoices",
   "/inventory-dashboard": "Inventory Dashboard",
   "/inventory": "Inventory Flow Dashboard",
-  "/inventory/queue": "Approved Job Queue",
+  "/inventory/queue": "Incoming Orders",
+  "/inventory/incoming-orders": "Incoming Orders",
+  "/inventory/tokens": "Token Management",
   "/inventory/products": "Product Catalog",
   "/inventory/serials": "Serial / Barcode Scan",
   "/inventory/purchasing": "Purchase Orders",
   "/inventory/dispatches": "Installer Dispatch",
   "/inventory/returns": "Installer Returns",
-  "/inventory/billing-approval": "Billing Approval",
   "/inventory/movements": "Stock Movement Ledger",
   "/inventory/master-setup": "Inventory Master Setup",
   "/finance-dashboard": "Finance Dashboard",
-  "/client-invoicing": "Client Billing",
+  "/finance/billing-approvals": "Billing Approvals",
+  "/finance/invoices": "Finance Invoices",
+  "/finance/invoices/operational_expenses": "Finance Invoices",
+  "/finance/invoices/capital_expenses": "Finance Invoices",
+  "/finance/invoices/complex_expenses": "Finance Invoices",
+  "/finance/invoices/rental_expenses": "Finance Invoices",
+  "/finance/invoices/footage_expenses": "Finance Invoices",
+  "/finance/summaries": "Finance Summaries",
+  "/finance/accounts": "Finance Accounts",
+  "/admin": "Admin Dashboard",
+  "/admin/users": "User Management",
+  "/admin/crm": "CRM Overview",
+  "/admin/inventory": "Inventory Overview",
+  "/admin/finance": "Finance Overview",
+  "/admin/orders": "All Orders Tracker",
+  "/admin/logs": "System Logs",
+  "/admin/settings": "Settings",
+  "/client-invoicing": "Finance Invoices",
+  "/finance/billing-approval": "Billing Approvals",
   "/invoice-builder": "Invoice Builder",
   "/matrix-operations": "Matrix Operations",
   "/accounts": "User Accounts",
@@ -58,9 +81,23 @@ const routeNames: Record<string, string> = {
   "/my-profile": "My Profile",
 };
 
-export default function Topbar() {
-  const auth = useAuth(); // Poora object le rahe hain error se bachne ke liye
-  const { data: leaveRequests = [] } = useLeaves({ status: "pending" });
+export default function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
+  const auth = useAuth();
+  const activeRole = (auth as any)?.activeRole || auth?.user?.role || "";
+  const hrRoles = new Set([
+    "super_admin",
+    "hr",
+    "hr_executive",
+    "hr_manager",
+    "head_hr",
+    "branch_hr",
+    "department_hr",
+    "department_head",
+  ]);
+  const canUseHrData = hrRoles.has(activeRole);
+  const { data: leaveRequests = [] } = useLeaves(
+    canUseHrData ? { status: "pending" } : { status: undefined },
+  );
   const location = useLocation();
   const navigate = useNavigate();
   const [time, setTime] = useState(new Date());
@@ -71,6 +108,7 @@ export default function Topbar() {
   const normalizedSearch = searchQuery.trim();
   const { data: searchResults = [], isLoading: isSearching } = useEmployees(
     normalizedSearch ? { search: normalizedSearch, page: 1, limit: 8 } : undefined,
+    { enabled: canUseHrData && Boolean(normalizedSearch) },
   );
 
   useEffect(() => {
@@ -159,21 +197,39 @@ export default function Topbar() {
     '/crm': Users,
     '/crm/leads': ClipboardList,
     '/crm/clients': Users,
+    '/crm/clients/new': Users,
     '/crm/quotations': ScrollText,
     '/crm/quotations/new': ScrollText,
+    '/crm/orders': ClipboardList,
+    '/crm/complaints': ClipboardList,
+    '/crm/invoices': DollarSign,
     '/inventory-dashboard': LayoutDashboard,
     '/inventory': ShieldIcon,
     '/inventory/queue': ClipboardList,
+    '/inventory/incoming-orders': ClipboardList,
+    '/inventory/tokens': ScrollText,
     '/inventory/products': ShieldIcon,
     '/inventory/serials': ClipboardList,
     '/inventory/purchasing': DollarSign,
     '/inventory/dispatches': Settings,
     '/inventory/returns': CalendarRange,
-    '/inventory/billing-approval': DollarSign,
     '/inventory/movements': ScrollText,
     '/inventory/master-setup': ShieldIcon,
     '/finance-dashboard': LayoutDashboard,
+    '/finance/billing-approvals': DollarSign,
+    '/finance/invoices': ScrollText,
+    '/finance/summaries': CalendarRange,
+    '/finance/accounts': ShieldIcon,
+    '/admin': LayoutDashboard,
+    '/admin/users': Users,
+    '/admin/crm': Users,
+    '/admin/inventory': ShieldIcon,
+    '/admin/finance': DollarSign,
+    '/admin/orders': ClipboardList,
+    '/admin/logs': ScrollText,
+    '/admin/settings': Settings,
     '/client-invoicing': DollarSign,
+    '/finance/billing-approval': DollarSign,
     '/matrix-operations': ShieldIcon,
     '/accounts': ShieldIcon,
     '/audit-log': ScrollText,
@@ -198,8 +254,11 @@ export default function Topbar() {
 
   return (
     <div className="topbar">
+      <button className="mobile-menu-btn" type="button" onClick={onMenuClick} aria-label="Open navigation">
+        <Menu size={20} />
+      </button>
       <div className="bc">
-        <span className="bc-home">EMS</span>
+        <span className="bc-home">TRACK360</span>
         <span className="bc-sep">·</span>
         {PageIcon && <PageIcon size={14} className="bc-icon" />}
         <span className="bc-cur">{pageName}</span>
@@ -231,7 +290,7 @@ export default function Topbar() {
         />
         <kbd>⌘K</kbd>
         {showSearch && (
-          <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 360, background: '#fff', border: '1px solid var(--br)', borderRadius: 10, boxShadow: 'var(--sh2)', zIndex: 1200, overflow: 'hidden' }}>
+          <div className="topbar-search-results" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 360, background: '#fff', border: '1px solid var(--br)', borderRadius: 10, boxShadow: 'var(--sh2)', zIndex: 1200, overflow: 'hidden' }}>
             {isSearching ? (
               <div style={{ padding: 12, fontSize: 12, color: 'var(--t3)' }}>Searching employees...</div>
             ) : searchResults.length > 0 ? searchResults.map(r => (
@@ -266,14 +325,14 @@ export default function Topbar() {
 
         <span className="tdate">{dateStr}</span>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="topbar-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ position: "relative" }}>
             <button className="ico-btn" onClick={() => setShowNotifications((prev) => !prev)}>
               <Bell size={14} />
               {notifications.length > 0 && <span className="n-pip" />}
             </button>
             {showNotifications && (
-              <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 300, background: "#fff", border: "1px solid var(--br)", borderRadius: 12, boxShadow: "var(--sh2)", zIndex: 99 }}>
+              <div className="topbar-notifications" style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 300, background: "#fff", border: "1px solid var(--br)", borderRadius: 12, boxShadow: "var(--sh2)", zIndex: 99 }}>
                 <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--br2)", fontSize: 12, fontWeight: 700 }}>
                   Pending Notifications
                 </div>
@@ -300,6 +359,7 @@ export default function Topbar() {
           </div>
           <button 
             onClick={handleLogout}
+            aria-label="Sign out"
             style={{ 
               background: '#fee2e2', 
               color: '#ef4444', 

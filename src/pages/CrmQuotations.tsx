@@ -1,1 +1,1 @@
-export { CrmQuotationsPage as default } from "./FlowPages";
+export { default } from "./crm/QuotationsList";

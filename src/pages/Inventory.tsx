@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Package,
   Layers,
@@ -45,6 +45,7 @@ import { toast } from 'sonner';
 
 export default function Inventory() {
   const { activeRole } = useAuth();
+  const mountedRef = useRef(true);
   const canOpenBilling =
     activeRole === 'super_admin' ||
     activeRole === 'finance_officer' ||
@@ -140,6 +141,7 @@ export default function Inventory() {
   };
 
   const loadData = async () => {
+    if (!mountedRef.current) return;
     setLoading(true);
     try {
       const [sumRes, queueRes, catRes, prodRes, itemRes, movementRes, venRes, custRes, poRes, invRes, instRes, compRes] =
@@ -158,6 +160,7 @@ export default function Inventory() {
           loadWithRetry(() => inventoryApi.getComplaints(), complaints),
         ]);
 
+      if (!mountedRef.current) return;
       setSummary(sumRes);
       setWorkQueue(queueRes);
       setCategories(catRes);
@@ -171,14 +174,17 @@ export default function Inventory() {
       setInstallations(instRes);
       setComplaints(compRes);
     } catch (err: any) {
-      toast.error('Failed to load inventory data');
+      if (mountedRef.current) toast.error('Failed to load inventory data');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadData();
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   // Filtered Products
@@ -654,13 +660,13 @@ export default function Inventory() {
           style={{ backgroundColor: '#ffffff', borderRadius: '14px', padding: '20px', border: '1px solid #bfdbfe', boxShadow: '0 2px 8px rgba(37,99,235,0.08)', textAlign: 'left', cursor: 'pointer' }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>CSR Approved Jobs</span>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Orders Ready For Inventory</span>
             <div style={{ padding: '8px', backgroundColor: '#dbeafe', color: '#1d4ed8', borderRadius: '10px' }}><FileText size={20} /></div>
           </div>
           <div style={{ marginTop: '14px' }}>
             <span style={{ fontSize: '26px', fontWeight: '800', color: '#1d4ed8' }}>{summary?.approved_csr_jobs || workQueue.length || 0}</span>
             <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
-              Ready for stock, serials and installer handoff
+              Converted by CRM and ready for stock, serials and installer handoff
             </div>
           </div>
         </button>
@@ -716,7 +722,7 @@ export default function Inventory() {
                   <div style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#2563eb', marginBottom: '4px' }}>
                     CSR to Inventory Queue
                   </div>
-                  <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', margin: 0 }}>Approved Jobs Waiting For Stock Action</h2>
+                  <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', margin: 0 }}>Converted Orders Waiting For Stock Action</h2>
                 </div>
                 <span style={{ fontSize: '12px', fontWeight: 800, padding: '6px 10px', backgroundColor: '#dbeafe', color: '#1d4ed8', borderRadius: '999px' }}>
                   {workQueue.length} active jobs
@@ -726,7 +732,7 @@ export default function Inventory() {
               {workQueue.length === 0 ? (
                 <div style={{ padding: '32px', textAlign: 'center', color: '#64748b', backgroundColor: '#f8fafc', borderRadius: '14px', border: '1px dashed #cbd5e1' }}>
                   <CheckCircle size={40} style={{ color: '#10b981', margin: '0 auto 8px' }} />
-                  No approved CSR jobs are waiting right now. When CSR approves a quotation, it will appear here.
+                  No converted orders are waiting right now. After CRM converts an approved quotation to an order, it will appear here.
                 </div>
               ) : (
                 <div style={{ display: 'grid', gap: '12px', maxHeight: '560px', overflowY: 'auto', paddingRight: '4px' }}>
@@ -735,8 +741,9 @@ export default function Inventory() {
                       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '14px', alignItems: 'center' }}>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                            <span style={{ fontWeight: 900, color: '#0f172a' }}>{job.quotation_number}</span>
-                            <span style={{ padding: '3px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: 800, backgroundColor: '#d1fae5', color: '#047857' }}>{job.status}</span>
+                            <span style={{ fontWeight: 900, color: '#0f172a' }}>{job.order_number || job.quotation_number}</span>
+                            <span style={{ padding: '3px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: 800, backgroundColor: '#d1fae5', color: '#047857' }}>{job.order_status || job.status}</span>
+                            {job.token_number ? <span style={{ fontSize: '12px', color: '#2563eb', fontWeight: 900 }}>{job.token_number}</span> : null}
                             <span style={{ fontSize: '12px', color: '#64748b' }}>{job.template_style || 'HBL Sales Tax Invoice'}</span>
                           </div>
                           <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.45 }}>
@@ -1084,7 +1091,13 @@ export default function Inventory() {
                             {prod.quantity}
                           </span>
                         </td>
-                        <td style={{ ...tdStyle, fontWeight: 800 }}>{formatCurrency(prod.unit_price)}</td>
+                        <td style={{ ...tdStyle, fontWeight: 800 }}>
+                          {Number(prod.unit_price || 0) > 0 ? (
+                            formatCurrency(prod.unit_price)
+                          ) : (
+                            <span style={{ color: '#b45309' }}>Price not set</span>
+                          )}
+                        </td>
                         <td style={tdStyle}>
                           <button
                             onClick={async () => {

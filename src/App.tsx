@@ -47,23 +47,43 @@ const AnnouncementsFeed = lazy(() => import("./pages/AnnouncementsFeed"));
 const Directory = lazy(() => import("./pages/Directory"));
 const InventoryDashboard = lazy(() => import("./pages/InventoryDashboard"));
 const InventoryFlowDashboard = lazy(() => import("./pages/InventoryFlowDashboard"));
-const Inventory = lazy(() => import("./pages/Inventory"));
 const CrmDashboard = lazy(() => import("./pages/CrmDashboard"));
 const CrmLeads = lazy(() => import("./pages/CrmLeads"));
 const CrmClients = lazy(() => import("./pages/CrmClients"));
+const CrmClientForm = lazy(() => import("./pages/CrmClientForm"));
+const CrmClientDetail = lazy(() => import("./pages/CrmClientDetail"));
 const CrmQuotations = lazy(() => import("./pages/CrmQuotations"));
 const CrmCreateQuotation = lazy(() => import("./pages/CrmCreateQuotation"));
+const CrmQuotationDetail = lazy(() => import("./pages/CrmQuotationDetail"));
+const CrmOrders = lazy(() => import("./pages/CrmOrders"));
+const CrmComplaints = lazy(() => import("./pages/CrmComplaints"));
+const CrmInvoices = lazy(() => import("./pages/CrmInvoices"));
 const ClientQuotationApproval = lazy(() => import("./pages/ClientQuotationApproval"));
 const InventoryQueue = lazy(() => import("./pages/InventoryQueue"));
+const InventoryTokens = lazy(() => import("./pages/InventoryTokens"));
 const InventoryProducts = lazy(() => import("./pages/InventoryProducts"));
 const InventorySerials = lazy(() => import("./pages/InventorySerials"));
 const InventoryPurchasing = lazy(() => import("./pages/InventoryPurchasing"));
 const InventoryDispatches = lazy(() => import("./pages/InventoryDispatches"));
 const InstallerReturns = lazy(() => import("./pages/InstallerReturns"));
-const InventoryBillingApproval = lazy(() => import("./pages/InventoryBillingApproval"));
 const InventoryMovements = lazy(() => import("./pages/InventoryMovements"));
+const InventoryMasterSetup = lazy(() => import("./pages/InventoryMasterSetup"));
 const ClientInvoicing = lazy(() => import("./pages/ClientInvoicing"));
 const InvoiceBuilder = lazy(() => import("./pages/InvoiceBuilder"));
+const FinanceDashboard = lazy(() => import("./pages/finance/FinancePages").then((module) => ({ default: module.FinanceDashboard })));
+const BillingApprovals = lazy(() => import("./pages/finance/FinancePages").then((module) => ({ default: module.BillingApprovals })));
+const BillingApprovalDetail = lazy(() => import("./pages/finance/FinancePages").then((module) => ({ default: module.BillingApprovalDetail })));
+const FinanceInvoices = lazy(() => import("./pages/finance/FinancePages").then((module) => ({ default: module.FinanceInvoices })));
+const FinanceSummaries = lazy(() => import("./pages/finance/FinancePages").then((module) => ({ default: module.FinanceSummaries })));
+const FinanceAccounts = lazy(() => import("./pages/finance/FinancePages").then((module) => ({ default: module.FinanceAccounts })));
+const AdminDashboard = lazy(() => import("./pages/admin/AdminPages").then((module) => ({ default: module.AdminDashboard })));
+const AdminUsers = lazy(() => import("./pages/admin/AdminPages").then((module) => ({ default: module.AdminUsers })));
+const AdminCrmOverview = lazy(() => import("./pages/admin/AdminPages").then((module) => ({ default: module.AdminCrmOverview })));
+const AdminInventoryOverview = lazy(() => import("./pages/admin/AdminPages").then((module) => ({ default: module.AdminInventoryOverview })));
+const AdminFinanceOverview = lazy(() => import("./pages/admin/AdminPages").then((module) => ({ default: module.AdminFinanceOverview })));
+const AdminOrdersTracker = lazy(() => import("./pages/admin/AdminPages").then((module) => ({ default: module.AdminOrdersTracker })));
+const AdminSystemLogs = lazy(() => import("./pages/admin/AdminPages").then((module) => ({ default: module.AdminSystemLogs })));
+const AdminSettings = lazy(() => import("./pages/admin/AdminPages").then((module) => ({ default: module.AdminSettings })));
 const MatrixOperations = lazy(() => import("./pages/MatrixOperations"));
 const EmployeeWidgets = lazy(() => import("./pages/EmployeeWidgets"));
 const Calendar = lazy(() => import("./pages/Calendar"));
@@ -140,6 +160,7 @@ function getDefaultRouteForRole(activeRole: string) {
   if (activeRole === "inventory_officer") return "/inventory-dashboard";
   if (activeRole === "finance_officer") return "/finance-dashboard";
   if (activeRole === "inv_fin_admin") return "/inventory-dashboard";
+  if (activeRole === "super_admin") return "/admin";
   if (
     activeRole === "department_hr" ||
     activeRole === "department_head" ||
@@ -236,6 +257,7 @@ const App = () => (
             <Route path="/unauthorized" element={<Unauthorized />} />
             <Route path="/client/quotations/:token" element={<ClientQuotationApproval />} />
             <Route path="/" element={<RootRedirect />} />
+            <Route path="/installer/*" element={<Navigate to="/inventory/dispatches" replace />} />
 
             {/* --- ADMIN & HR ROUTES (MainLayout) --- */}
             <Route
@@ -263,6 +285,14 @@ const App = () => (
                 <Route
                   element={<ProtectedRoute allowedRoles={["super_admin"]} />}
                 >
+                  <Route path="/admin" element={<AdminDashboard />} />
+                  <Route path="/admin/users" element={<AdminUsers />} />
+                  <Route path="/admin/crm" element={<AdminCrmOverview />} />
+                  <Route path="/admin/inventory" element={<AdminInventoryOverview />} />
+                  <Route path="/admin/finance" element={<AdminFinanceOverview />} />
+                  <Route path="/admin/orders" element={<AdminOrdersTracker />} />
+                  <Route path="/admin/logs" element={<AdminSystemLogs />} />
+                  <Route path="/admin/settings" element={<AdminSettings />} />
                   <Route path="/launchpad" element={<Launchpad />} />
                 </Route>
                 <Route element={<ProtectedRoute allowedRoles={HR_WORKSPACE_ROLES} />}>
@@ -283,8 +313,16 @@ const App = () => (
                   <Route path="/crm" element={<CrmDashboard />} />
                   <Route path="/crm/leads" element={<CrmLeads />} />
                   <Route path="/crm/clients" element={<CrmClients />} />
+                  <Route path="/crm/clients/new" element={<CrmClientForm />} />
+                  <Route path="/crm/clients/:id" element={<CrmClientDetail />} />
+                  <Route path="/crm/clients/:id/edit" element={<CrmClientForm />} />
                   <Route path="/crm/quotations" element={<CrmQuotations />} />
                   <Route path="/crm/quotations/new" element={<CrmCreateQuotation />} />
+                  <Route path="/crm/quotations/:id" element={<CrmQuotationDetail />} />
+                  <Route path="/crm/quotations/:id/edit" element={<CrmCreateQuotation />} />
+                  <Route path="/crm/orders" element={<CrmOrders />} />
+                  <Route path="/crm/complaints" element={<CrmComplaints />} />
+                  <Route path="/crm/invoices" element={<CrmInvoices />} />
                 </Route>
                 <Route
                   element={<ProtectedRoute allowedRoles={["super_admin", "inventory_officer", "inv_fin_admin"]} />}
@@ -292,20 +330,28 @@ const App = () => (
                   <Route path="/inventory-dashboard" element={<InventoryDashboard />} />
                   <Route path="/inventory" element={<InventoryFlowDashboard />} />
                   <Route path="/inventory/queue" element={<InventoryQueue />} />
+                  <Route path="/inventory/incoming-orders" element={<InventoryQueue />} />
+                  <Route path="/inventory/tokens" element={<InventoryTokens />} />
                   <Route path="/inventory/products" element={<InventoryProducts />} />
                   <Route path="/inventory/serials" element={<InventorySerials />} />
                   <Route path="/inventory/purchasing" element={<InventoryPurchasing />} />
                   <Route path="/inventory/dispatches" element={<InventoryDispatches />} />
                   <Route path="/inventory/returns" element={<InstallerReturns />} />
-                  <Route path="/inventory/billing-approval" element={<InventoryBillingApproval />} />
                   <Route path="/inventory/movements" element={<InventoryMovements />} />
-                  <Route path="/inventory/master-setup" element={<Inventory />} />
+                  <Route path="/inventory/master-setup" element={<InventoryMasterSetup />} />
                 </Route>
                 <Route
                   element={<ProtectedRoute allowedRoles={["super_admin", "finance_officer", "inv_fin_admin"]} />}
                 >
-                  <Route path="/finance-dashboard" element={<ClientInvoicing />} />
-                  <Route path="/client-invoicing" element={<ClientInvoicing />} />
+                  <Route path="/finance-dashboard" element={<FinanceDashboard />} />
+                  <Route path="/finance/billing-approvals" element={<BillingApprovals />} />
+                  <Route path="/finance/billing-approvals/:id" element={<BillingApprovalDetail />} />
+                  <Route path="/finance/billing-approval" element={<Navigate to="/finance/billing-approvals" replace />} />
+                  <Route path="/finance/invoices" element={<FinanceInvoices />} />
+                  <Route path="/finance/invoices/:expenseType" element={<FinanceInvoices />} />
+                  <Route path="/finance/summaries" element={<FinanceSummaries />} />
+                  <Route path="/finance/accounts" element={<FinanceAccounts />} />
+                  <Route path="/client-invoicing" element={<Navigate to="/finance/invoices" replace />} />
                   <Route path="/invoice-builder" element={<InvoiceBuilder />} />
                 </Route>
                 <Route

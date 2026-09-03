@@ -2,16 +2,25 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
-import { componentTagger } from "lovable-tagger";
 
 const defaultApiTarget = "http://localhost:3001";
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(async ({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const apiTarget = env.VITE_DEV_API_PROXY || defaultApiTarget;
+  const plugins = [react()];
+
+  if (mode === "development") {
+    try {
+      const { componentTagger } = await import("lovable-tagger");
+      plugins.push(componentTagger());
+    } catch {
+      // The tagger is optional and should not block local or production builds.
+    }
+  }
 
   return {
-  base: './',   // ✅ 🔥 YE LINE ADD KARO
+  base: "./",
 
   server: {
     host: "::",
@@ -27,7 +36,7 @@ export default defineConfig(({ mode }) => {
     },
   },
 
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  plugins,
 
   resolve: {
     alias: {

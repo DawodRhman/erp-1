@@ -9,6 +9,7 @@ import {
   useUpdateAccountStatus,
   useUpdateCredentialTemplate,
 } from "../hooks/useAccounts";
+import { getRolePortalMeta } from "../utils/rolePortalMeta";
 
 const CSS = `
   .acc-page{font-family:'Segoe UI',system-ui,sans-serif;padding:24px 30px;background:#f0f2f8;min-height:100vh;}
@@ -30,6 +31,10 @@ const CSS = `
   .acc-pill-inactive{background:#fee2e2;color:#991b1b;}
   .acc-pill-role{background:#ede9fe;color:#3730a3;}
   .acc-pill-super{background:#fef3c7;color:#92400e;border:1px solid #fde68a;}
+  .acc-pill-portal{background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;}
+  .acc-pill-inventory{background:#ccfbf1;color:#0f766e;border:1px solid #99f6e4;}
+  .acc-role-stack{display:grid;gap:4px;align-items:start;}
+  .acc-role-note{font-size:10px;color:#64748b;line-height:1.35;max-width:180px;}
   .acc-btn{height:30px;border:none;border-radius:8px;padding:0 11px;font-size:11px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-family:inherit;}
   .acc-btn:disabled{opacity:.45;cursor:not-allowed;}
   .acc-btn-act{background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;}
@@ -57,10 +62,6 @@ function initials(value: string) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
-}
-
-function formatRole(value: string) {
-  return String(value || "Not provided").replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function formatDate(value: any) {
@@ -105,7 +106,11 @@ export default function Accounts() {
   }, [templateData?.template]);
 
   const departmentList = useMemo(() => departments.map((department: any) => ({ id: String(department.id), name: unwrapDepartmentName(department) })), [departments]);
-  const roleList = useMemo(() => roles.map((role: any) => ({ id: String(role.id), name: unwrapRoleName(role) })), [roles]);
+  const roleList = useMemo(() => roles.map((role: any) => {
+    const roleName = unwrapRoleName(role);
+    const meta = getRolePortalMeta(role.role_name || role.name || roleName);
+    return { id: String(role.id), name: meta.label, portalGroup: meta.portalGroup };
+  }), [roles]);
 
   const stats = useMemo(() => {
     const total = accounts.length;
@@ -182,7 +187,7 @@ export default function Accounts() {
                 <option value="">All roles</option>
                 {roleList.map((role) => (
                   <option key={role.id} value={role.id}>
-                    {role.name}
+                    {role.name} - {role.portalGroup}
                   </option>
                 ))}
               </select>
@@ -236,6 +241,7 @@ export default function Accounts() {
                 <tr>
                   <th>User</th>
                   <th>Role</th>
+                  <th>Portal Group</th>
                   <th>Department</th>
                   <th>Linked Employee</th>
                   <th>Status</th>
@@ -245,13 +251,15 @@ export default function Accounts() {
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr><td colSpan={7} style={{ textAlign: "center", padding: 40 }}>Loading accounts...</td></tr>
+                  <tr><td colSpan={8} style={{ textAlign: "center", padding: 40 }}>Loading accounts...</td></tr>
                 ) : isError ? (
-                  <tr><td colSpan={7} style={{ textAlign: "center", padding: 40, color: "#991b1b" }}>Unable to load accounts.</td></tr>
+                  <tr><td colSpan={8} style={{ textAlign: "center", padding: 40, color: "#991b1b" }}>Unable to load accounts.</td></tr>
                 ) : accounts.length === 0 ? (
-                  <tr><td colSpan={7} style={{ textAlign: "center", padding: 40 }}>No accounts found.</td></tr>
+                  <tr><td colSpan={8} style={{ textAlign: "center", padding: 40 }}>No accounts found.</td></tr>
                 ) : accounts.map((account: any) => {
                   const isSuper = account.role_name === "super_admin";
+                  const roleMeta = getRolePortalMeta(account.role_name);
+                  const portalClass = roleMeta.portalGroup.includes("Inventory") ? "acc-pill-inventory" : "acc-pill-portal";
                   return (
                     <tr key={account.id}>
                       <td>
@@ -265,7 +273,17 @@ export default function Accounts() {
                           </div>
                         </div>
                       </td>
-                      <td><span className={`acc-pill ${isSuper ? "acc-pill-super" : "acc-pill-role"}`}>{formatRole(account.role_name)}</span></td>
+                      <td>
+                        <div className="acc-role-stack">
+                          <span className={`acc-pill ${isSuper ? "acc-pill-super" : "acc-pill-role"}`}>{roleMeta.label}</span>
+                          <span className="acc-role-note">{account.portal_access_level || roleMeta.accessLevel}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="acc-role-stack">
+                          <span className={`acc-pill ${portalClass}`}>{account.portal_group || roleMeta.portalGroup}</span>
+                        </div>
+                      </td>
                       <td>{account.department_name || "All departments"}</td>
                       <td>{account.linked_employee || (account.employee_id ? `${account.employee_id}` : "Account only")}</td>
                       <td>

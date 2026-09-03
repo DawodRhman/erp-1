@@ -11,6 +11,7 @@ vi.mock('../services/inventoryService', () => ({
     getCategories: vi.fn(),
     getProducts: vi.fn(),
     getItems: vi.fn(),
+    getMovements: vi.fn(),
     getVendors: vi.fn(),
     getCustomers: vi.fn(),
     getPurchaseOrders: vi.fn(),
@@ -83,6 +84,7 @@ describe('Inventory Page', () => {
       },
     ]);
     vi.mocked(inventoryApi.getItems).mockResolvedValue([]);
+    vi.mocked(inventoryApi.getMovements).mockResolvedValue([]);
     vi.mocked(inventoryApi.getVendors).mockResolvedValue([]);
     vi.mocked(inventoryApi.getCustomers).mockResolvedValue([]);
     vi.mocked(inventoryApi.getPurchaseOrders).mockResolvedValue([]);

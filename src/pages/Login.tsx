@@ -1,21 +1,44 @@
-import React, { useState } from "react";
-import { useNavigate, Navigate } from "react-router-dom";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 import logo from "../images/logo.png";
 
 export default function Login() {
-  const { user, login } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+  const fieldNonce = useMemo(
+    () =>
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`,
+    [],
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
+  const [fieldsUnlocked, setFieldsUnlocked] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  if (user) {
-    return <Navigate to="/" />;
-  }
+  useEffect(() => {
+    const clearAutofill = () => {
+      setEmail("");
+      setPassword("");
+      if (emailInputRef.current) emailInputRef.current.value = "";
+      if (passwordInputRef.current) passwordInputRef.current.value = "";
+    };
+
+    clearAutofill();
+    const timers = [
+      window.setTimeout(clearAutofill, 50),
+      window.setTimeout(clearAutofill, 250),
+    ];
+
+    return () => timers.forEach(window.clearTimeout);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,41 +66,65 @@ export default function Login() {
 
   return (
     <div className="login-page">
-      <div className="login-card">
+      <main className="login-shell">
+        <div className="login-card">
         <div className="login-brand">
           <img
             src={logo}
             alt="ESSPL Logo"
             className="login-logo"
-            style={{
-              width: 170,
-              height: "auto",
-              display: "block",
-              margin: "0 auto 8px",
-            }}
           />
         </div>
-        <div className="login-title">Employee Management System</div>
-        <div className="login-sub">Sign in to your account</div>
-        <form onSubmit={handleSubmit}>
+        <div className="login-title">ESSPL Enterprise Operations Portal</div>
+        <div className="login-sub">Secure access to your assigned business workspace</div>
+        <div className="login-secure-label"><ShieldCheck size={14} /> Secure role-based access</div>
+        <form onSubmit={handleSubmit} autoComplete="off">
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: -9999,
+              width: 1,
+              height: 1,
+              overflow: "hidden",
+            }}
+          >
+            <input type="text" name="username" autoComplete="username" tabIndex={-1} />
+            <input type="password" name="password" autoComplete="current-password" tabIndex={-1} />
+          </div>
           <div className="form-group">
-            <label className="form-label">Email</label>
+            <label className="form-label" htmlFor={`ems-email-${fieldNonce}`}>Email</label>
             <input
+              ref={emailInputRef}
+              id={`ems-email-${fieldNonce}`}
+              name={`ems_email_${fieldNonce}`}
               className="input"
               type="email"
-              autoComplete="username"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              readOnly={!fieldsUnlocked}
               value={email}
+              onFocus={() => setFieldsUnlocked(true)}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@company.com"
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Password</label>
+            <label className="form-label" htmlFor={`ems-password-${fieldNonce}`}>Password</label>
             <div style={{ position: "relative" }}>
               <input
+                ref={passwordInputRef}
+                id={`ems-password-${fieldNonce}`}
+                name={`ems_password_${fieldNonce}`}
                 className="input"
                 type={showPass ? "text" : "password"}
+                autoComplete="new-password"
+                autoCorrect="off"
+                spellCheck={false}
+                readOnly={!fieldsUnlocked}
                 value={password}
+                onFocus={() => setFieldsUnlocked(true)}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter password"
               />
@@ -119,7 +166,12 @@ export default function Login() {
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
-      </div>
+          <div className="login-portal-note">
+            CRM <span /> Inventory <span /> Finance <span /> Administration
+          </div>
+          <div className="login-footer">Electronic Safety &amp; Security (Pvt.) Ltd.</div>
+        </div>
+      </main>
     </div>
   );
 }

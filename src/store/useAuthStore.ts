@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import {
   canPerformAction,
   normalizeRole,
@@ -32,6 +32,8 @@ interface AuthState {
   isRole: (role: string) => boolean;
   setActiveRole: (role: string) => void;
 }
+
+const tabAuthStorage = createJSONStorage(() => sessionStorage);
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -104,13 +106,14 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "auth-storage", // unique name
+      storage: tabAuthStorage,
       partialize: (state) => ({
         user: state.user,
         token: state.token,
         isAuthenticated: state.isAuthenticated,
         permissions: state.permissions,
         activeRole: state.activeRole,
-      }), // Save these fields to localStorage
+      }), // Save these fields per browser tab, so parallel portal tabs do not overwrite each other.
     },
   ),
 );

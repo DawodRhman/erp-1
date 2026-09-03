@@ -582,6 +582,11 @@ async function seedViaPool(client) {
     'Biometric Devices',
     'Intercom Systems',
     'Software Licenses',
+    'Service & Maintenance',
+    'Rental Services',
+    'Cybersecurity Services',
+    'Training & Consulting',
+    'Electrical & Facility Services',
     'Tools & Hardware',
     'Consumables',
   ];
@@ -608,7 +613,7 @@ async function seedViaPool(client) {
     ['CAT6 Cable (per meter)', 'Cables & Accessories', 'CONSUMABLE', 'NONE'],
     ['HDMI Cable 10m', 'Cables & Accessories', 'CONSUMABLE', 'NONE'],
     ['Power Cable 3-pin', 'Cables & Accessories', 'CONSUMABLE', 'NONE'],
-    ['CCTV Annual Maintenance Contract', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['CCTV Annual Maintenance Contract', 'Service & Maintenance', 'SERVICE', 'NONE'],
     ['Access Control Software License', 'Software Licenses', 'SERVICE', 'NONE'],
     ['Cable Ties (pack of 100)', 'Tools & Hardware', 'CONSUMABLE', 'NONE'],
     ['RJ45 Connectors (pack of 50)', 'Tools & Hardware', 'CONSUMABLE', 'NONE'],
@@ -641,10 +646,10 @@ async function seedViaPool(client) {
     ['Solar Panel 150W', 'Power Supplies & UPS', 'ASSET', 'SERIAL'],
     ['Tower Camera Mast 6m', 'Tools & Hardware', 'ASSET', 'SERIAL'],
     ['Microwave Link 1Gbps', 'Network Equipment', 'ASSET', 'SERIAL'],
-    ['Fiber OTDR Rental Day', 'Software Licenses', 'SERVICE', 'NONE'],
-    ['Site Survey Consulting Day', 'Software Licenses', 'SERVICE', 'NONE'],
-    ['Commissioning Day Rate', 'Software Licenses', 'SERVICE', 'NONE'],
-    ['Training Essentials Seat', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['Fiber OTDR Rental Day', 'Rental Services', 'SERVICE', 'NONE'],
+    ['Site Survey Consulting Day', 'Training & Consulting', 'SERVICE', 'NONE'],
+    ['Commissioning Day Rate', 'Service & Maintenance', 'SERVICE', 'NONE'],
+    ['Training Essentials Seat', 'Training & Consulting', 'SERVICE', 'NONE'],
     ['Integration API Pack', 'Software Licenses', 'SERVICE', 'NONE'],
     ['Keyboard for DVR', 'DVR/NVR Systems', 'CONSUMABLE', 'NONE'],
     ['Mounting Bracket Universal', 'Tools & Hardware', 'CONSUMABLE', 'NONE'],
@@ -657,38 +662,133 @@ async function seedViaPool(client) {
     ['Hard Hat ANSI', 'Consumables', 'CONSUMABLE', 'NONE'],
     ['Crimping Tool Kit', 'Tools & Hardware', 'CONSUMABLE', 'NONE'],
     ['Drill Bit Set Metal', 'Tools & Hardware', 'CONSUMABLE', 'NONE'],
-    ['Forklift Reach Truck Rent Day', 'Software Licenses', 'SERVICE', 'NONE'],
-    ['Generator Diesel 50kVA Rent', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['Forklift Reach Truck Rent Day', 'Rental Services', 'SERVICE', 'NONE'],
+    ['Generator Diesel 50kVA Rent', 'Rental Services', 'SERVICE', 'NONE'],
     ['Smart Analytics Channel', 'Software Licenses', 'SERVICE', 'NONE'],
-    ['Health Check Quarterly', 'Software Licenses', 'SERVICE', 'NONE'],
-    ['Extended Warranty 3yr', 'Software Licenses', 'SERVICE', 'NONE'],
-    ['Penetration Test Bundle', 'Software Licenses', 'SERVICE', 'NONE'],
-    ['Vulnerability Scan Quarterly', 'Software Licenses', 'SERVICE', 'NONE'],
-    ['Firewall Rule Review Sprint', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['Health Check Quarterly', 'Service & Maintenance', 'SERVICE', 'NONE'],
+    ['Extended Warranty 3yr', 'Service & Maintenance', 'SERVICE', 'NONE'],
+    ['Penetration Test Bundle', 'Cybersecurity Services', 'SERVICE', 'NONE'],
+    ['Vulnerability Scan Quarterly', 'Cybersecurity Services', 'SERVICE', 'NONE'],
+    ['Firewall Rule Review Sprint', 'Cybersecurity Services', 'SERVICE', 'NONE'],
     ['Guest Wi-Fi Portal Premium', 'Software Licenses', 'SERVICE', 'NONE'],
     ['SIEM Correlation Rule Pack', 'Software Licenses', 'SERVICE', 'NONE'],
-    ['Container policy gate starter', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['Container policy gate starter', 'Cybersecurity Services', 'SERVICE', 'NONE'],
     ['Immutable backup connector Wasabi', 'Software Licenses', 'SERVICE', 'NONE'],
-    ['Drone perimeter patrol lease monthly', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['Drone perimeter patrol lease monthly', 'Rental Services', 'SERVICE', 'NONE'],
     ['Satellite failover modem BGAN', 'Network Equipment', 'ASSET', 'SERIAL'],
     ['Mass SMS gateway redundancy pack', 'Software Licenses', 'SERVICE', 'NONE'],
-    ['Incident tabletop cyber drill', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['Incident tabletop cyber drill', 'Cybersecurity Services', 'SERVICE', 'NONE'],
     ['Forklift inspection checklist digital', 'Software Licenses', 'SERVICE', 'NONE'],
-    ['Cooling tower fill replacement job', 'Software Licenses', 'SERVICE', 'NONE'],
-    ['Arc flash study lite', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['Cooling tower fill replacement job', 'Electrical & Facility Services', 'SERVICE', 'NONE'],
+    ['Arc flash study lite', 'Electrical & Facility Services', 'SERVICE', 'NONE'],
     ['Battery recycling drum pickup batch', 'Consumables', 'CONSUMABLE', 'NONE'],
-    ['Certificate of destruction digital vault', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['Certificate of destruction digital vault', 'Cybersecurity Services', 'SERVICE', 'NONE'],
   ];
+
+  function estimateProductPrice(productName, productType) {
+    const name = productName.toLowerCase();
+    let unit = 10000;
+
+    if (name.includes('thermal')) unit = 475000;
+    else if (name.includes('satellite')) unit = 420000;
+    else if (name.includes('microwave')) unit = 350000;
+    else if (name.includes('penetration')) unit = 350000;
+    else if (name.includes('drone')) unit = 280000;
+    else if (name.includes('explosion')) unit = 265000;
+    else if (name.includes('vesda')) unit = 240000;
+    else if (name.includes('cooling tower')) unit = 220000;
+    else if (name.includes('anpr')) unit = 210000;
+    else if (name.includes('elevator')) unit = 185000;
+    else if (name.includes('ups 3kva')) unit = 185000;
+    else if (name.includes('arc flash')) unit = 185000;
+    else if (name.includes('siem')) unit = 175000;
+    else if (name.includes('incident tabletop')) unit = 165000;
+    else if (name.includes('integration api')) unit = 150000;
+    else if (name.includes('nvr')) unit = 145000;
+    else if (name.includes('barrier')) unit = 145000;
+    else if (name.includes('backup connector')) unit = 145000;
+    else if (name.includes('server rack')) unit = 135000;
+    else if (name.includes('turnstile')) unit = 125000;
+    else if (name.includes('vulnerability')) unit = 125000;
+    else if (name.includes('annual maintenance')) unit = 120000;
+    else if (name.includes('container policy')) unit = 110000;
+    else if (name.includes('cisco')) unit = 98000;
+    else if (name.includes('firewall')) unit = 95000;
+    else if (name.includes('ptz')) unit = 95000;
+    else if (name.includes('mass sms')) unit = 95000;
+    else if (name.includes('access control software')) unit = 85000;
+    else if (name.includes('wi-fi')) unit = 85000;
+    else if (name.includes('tower camera mast')) unit = 82000;
+    else if (name.includes('health check')) unit = 75000;
+    else if (name.includes('face recognition')) unit = 75000;
+    else if (name.includes('ground resistance')) unit = 68000;
+    else if (name.includes('access panel')) unit = 65000;
+    else if (name.includes('certificate of destruction')) unit = 65000;
+    else if (name.includes('extended warranty')) unit = 60000;
+    else if (name.includes('dvr')) unit = 55000;
+    else if (name.includes('biometric')) unit = 52000;
+    else if (name.includes('surveillance hdd')) unit = 47000;
+    else if (name.includes('industrial switch')) unit = 45000;
+    else if (name.includes('intercom')) unit = 45000;
+    else if (name.includes('fiber scope')) unit = 45000;
+    else if (name.includes('generator diesel')) unit = 45000;
+    else if (name.includes('forklift inspection')) unit = 45000;
+    else if (name.includes('unifi')) unit = 42000;
+    else if (name.includes('pdu monitored')) unit = 42000;
+    else if (name.includes('alarm panel')) unit = 36000;
+    else if (name.includes('lte')) unit = 36000;
+    else if (name.includes('battery recycling')) unit = 35000;
+    else if (name.includes('label printer')) unit = 32000;
+    else if (name.includes('forklift reach')) unit = 30000;
+    else if (name.includes('mobile dvr enclosure')) unit = 28500;
+    else if (name.includes('mikrotik')) unit = 28000;
+    else if (name.includes('solar panel')) unit = 26000;
+    else if (name.includes('commissioning')) unit = 25000;
+    else if (name.includes('door controller')) unit = 22000;
+    else if (name.includes('4mp')) unit = 22000;
+    else if (name.includes('site survey')) unit = 15000;
+    else if (name.includes('training')) unit = 12000;
+    else if (name.includes('2mp')) unit = 17700;
+    else if (name.includes('smart analytics')) unit = 18000;
+    else if (name.includes('gas suppression')) unit = 18000;
+    else if (name.includes('otdr rental')) unit = 18000;
+    else if (name.includes('psu')) unit = 10000;
+    else if (name.includes('smoke detector')) unit = 8500;
+    else if (name.includes('strike lock')) unit = 8500;
+    else if (name.includes('surge')) unit = 8500;
+    else if (name.includes('poe injector')) unit = 5500;
+    else if (name.includes('crimping')) unit = 5500;
+    else if (name.includes('battery 12v')) unit = 4500;
+    else if (name.includes('keyboard')) unit = 3500;
+    else if (name.includes('drill bit')) unit = 2800;
+    else if (name.includes('hdmi')) unit = 2500;
+    else if (name.includes('mounting bracket')) unit = 1500;
+    else if (name.includes('hard hat')) unit = 1200;
+    else if (name.includes('junction box')) unit = 1200;
+    else if (name.includes('rj45')) unit = 1200;
+    else if (name.includes('safety vest')) unit = 950;
+    else if (name.includes('fiber patch')) unit = 900;
+    else if (name.includes('cable ties')) unit = 650;
+    else if (name.includes('power cable')) unit = 450;
+    else if (name.includes('pvc conduit')) unit = 250;
+    else if (name.includes('cat6 cable')) unit = 120;
+    else if (productType === 'SERVICE') unit = 25000;
+    else if (productType === 'CONSUMABLE') unit = 1200;
+
+    const margin = productType === 'SERVICE' ? 0.72 : productType === 'CONSUMABLE' ? 0.68 : 0.82;
+    return [unit, Math.round(unit * margin)];
+  }
 
   const PROD = {};
   for (const [pname, cat, ptype, track] of products) {
+    const [unitPrice, costPrice] = estimateProductPrice(pname, ptype);
     const r = await client.query(
       `
-      INSERT INTO products (product_name, category_id, product_type, tracking_type, quantity)
-      VALUES ($1, $2, $3::text, $4::text, 0)
+      INSERT INTO products (product_name, category_id, product_type, tracking_type, quantity, unit_price, cost_price)
+      VALUES ($1, $2, $3::text, $4::text, 0, $5, $6)
       RETURNING id
     `,
-      [pname, CAT[cat], ptype, track]
+      [pname, CAT[cat], ptype, track, unitPrice, costPrice]
     );
     PROD[pname] = r.rows[0].id;
   }

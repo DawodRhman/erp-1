@@ -55,7 +55,7 @@ type SidebarSection = {
   links: SidebarLink[];
 };
 
-export default function Sidebar() {
+export default function Sidebar({ open = false }: { open?: boolean }) {
   const { user, activeRole, logout } = useAuth();
   const { allAttendanceToday, leaveRequests } = useData();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -200,11 +200,16 @@ export default function Sidebar() {
     { to: "/directory", icon: MapPin, label: "Directory" },
   ];
 
-  const financeOfficerLinks: SidebarLink[] = [
+  const financeServiceLinks: SidebarLink[] = [
     { to: "/finance-dashboard", icon: LayoutDashboard, label: "Finance Dashboard" },
-    { to: "/invoice-builder", icon: FileSpreadsheet, label: "Invoice Builder" },
-    { to: "/client-invoicing", icon: DollarSign, label: "Client Billing" },
-    { to: "/matrix-operations", icon: GitBranch, label: "Matrix Settlement" },
+    { to: "/finance/billing-approvals", icon: ReceiptText, label: "Billing Approvals" },
+    { to: "/finance/invoices", icon: FileSpreadsheet, label: "Invoices" },
+    { to: "/finance/summaries", icon: DollarSign, label: "Summaries" },
+    { to: "/finance/accounts", icon: ShieldCheck, label: "Accounts" },
+  ];
+
+  const financeOfficerLinks: SidebarLink[] = [
+    ...financeServiceLinks,
     { to: "/directory", icon: MapPin, label: "Directory" },
   ];
 
@@ -215,11 +220,9 @@ export default function Sidebar() {
   ];
 
   const invFinAdminLinks: SidebarLink[] = [
-    { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { to: "/inventory-dashboard", icon: LayoutDashboard, label: "Inventory Dashboard" },
     { to: "/inventory", icon: Package, label: "Inventory Control" },
-    { to: "/client-invoicing", icon: DollarSign, label: "Client Billing" },
-    { to: "/invoice-builder", icon: FileSpreadsheet, label: "Invoice Builder" },
+    ...financeServiceLinks,
     { to: "/matrix-operations", icon: GitBranch, label: "Matrix Operations" },
     { to: "/directory", icon: MapPin, label: "Directory" },
   ];
@@ -256,10 +259,21 @@ export default function Sidebar() {
     if (activeRole === "super_admin") {
       return [
         {
-          label: "Core Modules",
+          label: "Super Admin Portal",
           links: [
-            { to: "/launchpad", icon: Zap, label: "Launchpad" },
-            { to: "/dashboard", icon: LayoutDashboard, label: "ERP Dashboard" },
+            { to: "/admin", icon: LayoutDashboard, label: "Admin Dashboard" },
+            { to: "/admin/users", icon: Users, label: "User Management" },
+            { to: "/admin/orders", icon: ClipboardList, label: "All Orders Tracker" },
+            { to: "/admin/logs", icon: ScrollText, label: "System Logs" },
+            { to: "/admin/settings", icon: Settings, label: "Settings" },
+          ],
+        },
+        {
+          label: "Portal Overviews",
+          links: [
+            { to: "/admin/crm", icon: Building2, label: "CRM Overview" },
+            { to: "/admin/inventory", icon: Package, label: "Inventory Overview" },
+            { to: "/admin/finance", icon: DollarSign, label: "Finance Overview" },
           ],
         },
         {
@@ -268,21 +282,26 @@ export default function Sidebar() {
             { to: "/crm", icon: Users, label: "CSR / CRM" },
             { to: "/crm/leads", icon: ClipboardList, label: "Sales Leads" },
             { to: "/crm/clients", icon: Building2, label: "Clients" },
+            { to: "/crm/clients/new", icon: Building2, label: "Add Client" },
             { to: "/crm/quotations", icon: FileSpreadsheet, label: "Quotations" },
             { to: "/crm/quotations/new", icon: FileSpreadsheet, label: "Create Quotation" },
+            { to: "/crm/orders", icon: ClipboardList, label: "Orders Tracker" },
+            { to: "/crm/complaints", icon: AlertTriangle, label: "Complaints" },
+            { to: "/crm/invoices", icon: ReceiptText, label: "Invoices View" },
           ],
         },
         {
-          label: "Inventory / Logistics",
+          label: "Inventory Service",
           links: [
-            { to: "/inventory", icon: LayoutDashboard, label: "Inventory Flow Dashboard" },
-            { to: "/inventory/queue", icon: ClipboardList, label: "Approved Job Queue" },
+            { to: "/inventory-dashboard", icon: LayoutDashboard, label: "Inventory Dashboard" },
+            { to: "/inventory", icon: LayoutDashboard, label: "Flow Dashboard" },
+            { to: "/inventory/queue", icon: ClipboardList, label: "Incoming Orders" },
+            { to: "/inventory/tokens", icon: ReceiptText, label: "Token Management" },
             { to: "/inventory/products", icon: Package, label: "Product Catalog" },
             { to: "/inventory/serials", icon: Barcode, label: "Serial / Barcode Scan" },
             { to: "/inventory/purchasing", icon: ShoppingCart, label: "Purchase Orders" },
             { to: "/inventory/dispatches", icon: Wrench, label: "Installer Dispatch" },
             { to: "/inventory/returns", icon: Undo2, label: "Installer Returns" },
-            { to: "/inventory/billing-approval", icon: ReceiptText, label: "Billing Approval" },
             { to: "/inventory/movements", icon: GitBranch, label: "Stock Movement Ledger" },
             { to: "/inventory/master-setup", icon: Package, label: "Master Setup" },
           ],
@@ -290,35 +309,31 @@ export default function Sidebar() {
         {
           label: "Finance Service",
           links: [
+            { to: "/finance-dashboard", icon: LayoutDashboard, label: "Finance Dashboard" },
+            { to: "/finance/billing-approvals", icon: ReceiptText, label: "Billing Approvals" },
+            { to: "/finance/invoices", icon: FileSpreadsheet, label: "Invoices" },
             { to: "/invoice-builder", icon: FileSpreadsheet, label: "Invoice Builder" },
-            { to: "/client-invoicing", icon: DollarSign, label: "Client Billing & Summaries" },
-            { to: "/accounts", icon: ShieldCheck, label: "User Accounts" },
-            { to: "/matrix-operations", icon: GitBranch, label: "Matrix Operations" },
+            { to: "/finance/summaries", icon: DollarSign, label: "Summaries" },
+            { to: "/finance/accounts", icon: ShieldCheck, label: "Accounts" },
           ],
         },
         {
           label: "EMS Workspace",
           links: [
+            { to: "/launchpad", icon: Zap, label: "Launchpad" },
+            { to: "/dashboard", icon: LayoutDashboard, label: "EMS Dashboard" },
             { to: "/employees", icon: Users, label: "Employees" },
             { to: "/attendance", icon: CalendarCheck, label: "Attendance" },
             { to: "/leave", icon: CalendarDays, label: "Leave" },
-            { to: "/payroll", icon: DollarSign, label: "Payroll", disabled: true },
+            { to: "/payroll", icon: DollarSign, label: "Payroll" },
             { to: "/leave-wallet", icon: Wallet, label: "Leave Wallet" },
             { to: "/penalty", icon: ClipboardList, label: "Penalty" },
             { to: "/penalty-workflow", icon: CheckCircle2, label: "Penalty Submissions" },
-            { to: "/announcements", icon: Zap, label: "Announcements" },
+            { to: "/announcements", icon: Bell, label: "Announcements" },
             { to: "/calendar", icon: CalendarRange, label: "Calendar Events" },
             { to: "/directory", icon: MapPin, label: "Directory" },
-          ],
-        },
-        {
-          label: "HR Review",
-          links: [
-            { to: "/hr/branch-dashboard", icon: Building2, label: "Branch HR Dashboard", disabled: true },
-            { to: "/overview", icon: Monitor, label: "Overview", disabled: true },
-            { to: "/saved-reports", icon: ScrollText, label: "Saved Reports", disabled: true },
-            { to: "/attendance-head-review", icon: ShieldCheck, label: "Head HR Review", disabled: true },
-            { to: "/attendance-report", icon: ClipboardList, label: "Final Attendance Report", disabled: true },
+            { to: "/accounts", icon: ShieldCheck, label: "HR Accounts" },
+            { to: "/audit-log", icon: ScrollText, label: "Audit Log" },
           ],
         },
       ];
@@ -331,13 +346,13 @@ export default function Sidebar() {
           links: [
             { to: "/inventory-dashboard", icon: LayoutDashboard, label: "Inventory Dashboard" },
             { to: "/inventory", icon: LayoutDashboard, label: "Flow Dashboard" },
-            { to: "/inventory/queue", icon: ClipboardList, label: "Approved Job Queue" },
+            { to: "/inventory/queue", icon: ClipboardList, label: "Incoming Orders" },
+            { to: "/inventory/tokens", icon: ReceiptText, label: "Token Management" },
             { to: "/inventory/products", icon: Package, label: "Product Catalog" },
             { to: "/inventory/serials", icon: Barcode, label: "Serial / Barcode Scan" },
             { to: "/inventory/purchasing", icon: ShoppingCart, label: "Purchase Orders" },
             { to: "/inventory/dispatches", icon: Wrench, label: "Installer Dispatch" },
             { to: "/inventory/returns", icon: Undo2, label: "Installer Returns" },
-            { to: "/inventory/billing-approval", icon: ReceiptText, label: "Billing Approval" },
             { to: "/inventory/movements", icon: GitBranch, label: "Stock Movement Ledger" },
             { to: "/inventory/master-setup", icon: Package, label: "Master Setup" },
             { to: "/matrix-operations", icon: GitBranch, label: "Operations Matrix" },
@@ -351,12 +366,7 @@ export default function Sidebar() {
       return [
         {
           label: "Finance Service",
-          links: [
-            { to: "/finance-dashboard", icon: LayoutDashboard, label: "Finance Dashboard" },
-            { to: "/invoice-builder", icon: FileSpreadsheet, label: "Invoice Builder" },
-            { to: "/client-invoicing", icon: DollarSign, label: "Client Billing" },
-            { to: "/matrix-operations", icon: GitBranch, label: "Matrix Settlement" },
-          ],
+          links: financeServiceLinks,
         },
         { label: "Reference", links: [{ to: "/directory", icon: MapPin, label: "Directory" }] },
       ];
@@ -367,17 +377,16 @@ export default function Sidebar() {
         {
           label: "Inventory & Finance Service",
           links: [
-            { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+            { to: "/inventory-dashboard", icon: LayoutDashboard, label: "Inventory Dashboard" },
             { to: "/inventory", icon: LayoutDashboard, label: "Inventory Flow Dashboard" },
-            { to: "/inventory/queue", icon: ClipboardList, label: "Approved Job Queue" },
+            { to: "/inventory/queue", icon: ClipboardList, label: "Incoming Orders" },
+            { to: "/inventory/tokens", icon: ReceiptText, label: "Token Management" },
             { to: "/inventory/products", icon: Package, label: "Product Catalog" },
             { to: "/inventory/serials", icon: Barcode, label: "Serial / Barcode Scan" },
             { to: "/inventory/purchasing", icon: ShoppingCart, label: "Purchase Orders" },
             { to: "/inventory/dispatches", icon: Wrench, label: "Installer Dispatch" },
             { to: "/inventory/returns", icon: Undo2, label: "Installer Returns" },
-            { to: "/client-invoicing", icon: DollarSign, label: "Client Billing" },
-            { to: "/invoice-builder", icon: FileSpreadsheet, label: "Invoice Builder" },
-            { to: "/matrix-operations", icon: GitBranch, label: "Matrix Operations" },
+            ...financeServiceLinks,
           ],
         },
         { label: "Reference", links: [{ to: "/directory", icon: MapPin, label: "Directory" }] },
@@ -392,12 +401,14 @@ export default function Sidebar() {
             { to: "/crm", icon: Users, label: "CSR / CRM" },
             { to: "/crm/leads", icon: ClipboardList, label: "Sales Leads" },
             { to: "/crm/clients", icon: Building2, label: "Clients" },
+            { to: "/crm/clients/new", icon: Building2, label: "Add Client" },
             { to: "/crm/quotations", icon: FileSpreadsheet, label: "Quotations" },
             { to: "/crm/quotations/new", icon: FileSpreadsheet, label: "Create Quotation" },
-            { to: "/matrix-operations", icon: GitBranch, label: "Sales Matrix" },
+            { to: "/crm/orders", icon: ClipboardList, label: "Orders Tracker" },
+            { to: "/crm/complaints", icon: AlertTriangle, label: "Complaints" },
+            { to: "/crm/invoices", icon: ReceiptText, label: "Invoices View" },
           ],
         },
-        { label: "Reference", links: [{ to: "/directory", icon: MapPin, label: "Directory" }] },
       ];
     }
 
@@ -441,18 +452,18 @@ export default function Sidebar() {
   const isMyWorkspaceDisabled = serviceOnlyRoles.has(activeRole || "");
 
   return (
-    <div className="sidebar">
+    <div className={`sidebar ${open ? "is-open" : ""}`}>
       <div className="sb-logo">
         <div className="sb-logo-row">
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <img src={logo} alt="Company Logo" className="sb-logo-img" />
             <div>
-              <div className="sb-title">EMS</div>
-              <div className="sb-subtitle">Employee Management</div>
+              <div className="sb-title">TRACK360 ERP</div>
+              <div className="sb-subtitle">Enterprise Operations</div>
             </div>
           </div>
         </div>
-        {/* Prototype wala pura section yahan se remove kar diya gaya hai */}
+        {/* Prototype navigation is intentionally hidden from the production sidebar. */}
       </div>
 
       {sidebarSections.map((section, sectionIndex) => (
@@ -491,7 +502,7 @@ export default function Sidebar() {
                 <NavLink
                   key={link.to}
                   to={link.to}
-                  end={link.to === "/announcements"}
+                  end
                   className={({ isActive }) => `nav-a ${isActive ? "active" : ""}`}
                 >
                   <link.icon size={14} className="nav-ico" />
@@ -600,7 +611,7 @@ export default function Sidebar() {
         </>
       )}
 
-      {activeRole === "super_admin" && (
+      {false && activeRole === "super_admin" && (
         <>
           <div className="sb-div" />
           <div className="sb-sec">

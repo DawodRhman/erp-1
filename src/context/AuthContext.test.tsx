@@ -43,9 +43,10 @@ function AuthProbe() {
   );
 }
 
-describe("AuthProvider session restore", () => {
+describe("AuthProvider login-first session policy", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     clearServerSessionSilentlyMock.mockResolvedValue(undefined);
     useAuthStore.setState({
       user: {
@@ -62,19 +63,24 @@ describe("AuthProvider session restore", () => {
     });
   });
 
-  it("keeps a new employee session when session endpoint requires password change", async () => {
-    apiGetMock.mockRejectedValue({
-      response: {
-        status: 403,
-        data: {
-          success: false,
-          error: {
-            code: "MUST_CHANGE_PASSWORD",
-            message: "Password must be changed before continuing.",
-          },
-        },
-      },
+  it("starts every fresh app load from a logged-out login-first state", async () => {
+    render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("user-email").textContent).toBe("no-user");
     });
+    expect(screen.getByTestId("user-role").textContent).toBe("no-role");
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(clearServerSessionSilentlyMock).not.toHaveBeenCalled();
+    expect(apiGetMock).not.toHaveBeenCalledWith("/auth/session");
+  });
+
+  it("preserves the logged-in user during an F5 refresh in the same browser tab", async () => {
+    sessionStorage.setItem("ems_tab_session_active", "true");
 
     render(
       <AuthProvider>
@@ -87,39 +93,7 @@ describe("AuthProvider session restore", () => {
         "new.employee@example.com",
       );
     });
-    expect(screen.getByTestId("must-change").textContent).toBe("yes");
-  });
-
-  it("creates a password-change session when only the cookie-backed session remains", async () => {
-    useAuthStore.setState({
-      user: null,
-      token: null,
-      permissions: [],
-      isAuthenticated: false,
-      activeRole: "employee",
-    });
-    apiGetMock.mockRejectedValue({
-      response: {
-        status: 403,
-        data: {
-          success: false,
-          error: {
-            code: "MUST_CHANGE_PASSWORD",
-            message: "Password must be changed before continuing.",
-          },
-        },
-      },
-    });
-
-    render(
-      <AuthProvider>
-        <AuthProbe />
-      </AuthProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("must-change").textContent).toBe("yes");
-    });
+    expect(screen.getByTestId("user-role").textContent).toBe("employee");
     expect(useAuthStore.getState().isAuthenticated).toBe(true);
   });
 
@@ -163,53 +137,7 @@ describe("AuthProvider session restore", () => {
     await waitFor(() => {
       expect(useAuthStore.getState().user?.must_change_password).toBe(true);
     });
-  });
-
-  it("prefers backend role_name over stale persisted role for the UI user", async () => {
-    useAuthStore.setState({
-      user: {
-        email: "hr.manager@example.com",
-        role: "employee",
-        role_name: "hr_manager",
-        employee_id: "EMP004",
-        must_change_password: false,
-      },
-      token: "hr-manager-token",
-      permissions: [],
-      isAuthenticated: true,
-      activeRole: "hr_manager",
-    });
-    apiGetMock
-      .mockResolvedValueOnce({
-        data: {
-          success: true,
-          data: {
-            email: "hr.manager@example.com",
-            employee_id: "EMP004",
-            must_change_password: false,
-          },
-        },
-      })
-      .mockResolvedValueOnce({
-        data: {
-          success: true,
-          data: {
-            role_name: "hr_manager",
-            permissions: ["view_dashboard"],
-          },
-        },
-      });
-
-    render(
-      <AuthProvider>
-        <AuthProbe />
-      </AuthProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("user-role").textContent).toBe("hr_manager");
-    });
-    expect(screen.getByTestId("active-role").textContent).toBe("hr_manager");
+    expect(sessionStorage.getItem("ems_tab_session_active")).toBe("true");
   });
 
   it("clears any stale browser session before posting new login credentials", async () => {
@@ -256,48 +184,7 @@ describe("AuthProvider session restore", () => {
     expect(clearServerSessionSilentlyMock.mock.invocationCallOrder[0]).toBeLessThan(
       apiPostMock.mock.invocationCallOrder[0],
     );
-  });
-
-  it("restores employee id from nested session employee data", async () => {
-    useAuthStore.setState({
-      user: null,
-      token: "employee-token",
-      permissions: [],
-      isAuthenticated: true,
-      activeRole: "employee",
-    });
-    apiGetMock
-      .mockResolvedValueOnce({
-        data: {
-          success: true,
-          data: {
-            email: "employee@example.com",
-            employee: {
-              employee_id: "EMP777",
-            },
-            must_change_password: false,
-          },
-        },
-      })
-      .mockResolvedValueOnce({
-        data: {
-          success: true,
-          data: {
-            role_name: "employee",
-            permissions: ["view_own_profile"],
-          },
-        },
-      });
-
-    render(
-      <AuthProvider>
-        <AuthProbe />
-      </AuthProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("employee-id").textContent).toBe("EMP777");
-    });
+    expect(sessionStorage.getItem("ems_tab_session_active")).toBe("true");
   });
 });
 

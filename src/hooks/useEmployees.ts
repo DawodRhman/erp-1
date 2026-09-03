@@ -59,7 +59,7 @@ function normalizeEmployee(raw: any) {
   };
 }
 
-export function useEmployees(params?: any) {
+export function useEmployees(params?: any, options?: { enabled?: boolean }) {
   const queryClient = useQueryClient();
 
   const query = useQuery({
@@ -80,6 +80,7 @@ export function useEmployees(params?: any) {
       // The instructions say "Implement pagination and search/filter parameters" so we can assume it takes query params.
       return data;
     },
+    enabled: options?.enabled ?? true,
   });
 
   const payload = query.data;

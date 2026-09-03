@@ -5,7 +5,6 @@ import {
   clearServerSessionSilently,
   isMustChangePasswordError,
 } from "../services/apiClient";
-import { getAuthTokenFromFallback } from "../utils/authCookie";
 
 export interface User {
   username: string;
@@ -71,9 +70,34 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 const AUTH_DEBUG = import.meta.env.DEV;
+const TAB_SESSION_KEY = "ems_tab_session_active";
 
 function authLog(...args: unknown[]) {
   if (AUTH_DEBUG) console.log("[EMS Auth]", ...args);
+}
+
+function hasActiveTabSession() {
+  try {
+    return sessionStorage.getItem(TAB_SESSION_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function markActiveTabSession() {
+  try {
+    sessionStorage.setItem(TAB_SESSION_KEY, "true");
+  } catch {
+    // Storage may be unavailable in strict browser modes; auth still works in memory.
+  }
+}
+
+function clearActiveTabSession() {
+  try {
+    sessionStorage.removeItem(TAB_SESSION_KEY);
+  } catch {
+    // Ignore storage cleanup failures.
+  }
 }
 
 // Ensure the user role maps correctly to the expected types
@@ -131,72 +155,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = React.useState(true);
 
   useEffect(() => {
-    // Attempt to restore session
-    const initSession = async () => {
-      try {
-        // Fetch session
-        const sessionRes = await apiClient.get("/auth/session");
-        if (sessionRes.data?.success) {
-          const udata = sessionRes.data.data;
-          const existingEmail = zUser?.email || "";
-          const existingEmployeeId = zUser?.employee_id;
-          let roleName = zUser?.role_name || zUser?.role || "employee";
-
-          // Fetch permissions (authoritative role_name)
-          const permsRes = await apiClient.get("/auth/permissions");
-          if (permsRes.data?.success) {
-            const permData = permsRes.data.data || {};
-            roleName = permData.role_name || roleName;
-            setPermissions(permData.permissions || []);
-          }
-
-          // Refresh user data in store
-          setAuth({
-            email: udata.email || existingEmail,
-            role: roleName || udata.role || "employee",
-            role_name: roleName || udata.role,
-            employee_id: resolveEmployeeId(udata, existingEmployeeId),
-            must_change_password: !!udata.must_change_password,
-          });
-          setMustChangePassword(!!udata.must_change_password);
-        } else {
-          zLogout();
-        }
-      } catch (err) {
-        if (isMustChangePasswordError(err)) {
-          const authState = useAuthStore.getState();
-          if (authState.user) {
-            setMustChangePassword(true);
-          } else {
-            setAuth(
-              {
-                email: "employee-session",
-                role: "employee",
-                role_name: "employee",
-                must_change_password: true,
-              },
-              authState.token || undefined,
-            );
-          }
-          return;
-        }
-        authLog("Session restore failed", err);
-        zLogout();
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    // Restore Bearer fallback from cookie/localStorage when persisted store has no token
-    const fallbackToken = getAuthTokenFromFallback();
-    if (fallbackToken && !useAuthStore.getState().token) {
-      useAuthStore.setState({ token: fallbackToken });
+    // Keep F5/browser refresh stable inside the same tab, but do not restore a
+    // stale shared browser login when the app is opened in a fresh tab/session.
+    if (!hasActiveTabSession()) {
+      zLogout();
     }
-
-    initSession();
-
-    const heartbeat = setInterval(initSession, 5 * 60 * 1000);
-    return () => clearInterval(heartbeat);
+    setLoading(false);
   }, []);
 
   const login = async (
@@ -219,6 +183,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const udata = loginData.user || {};
         let roleName = udata.role_name || udata.role || "employee";
         const mustChangePassword = !!udata.must_change_password;
+
+        setAuth(
+          {
+            email: udata.email || email.trim(),
+            role: roleName,
+            role_name: roleName,
+            employee_id: resolveEmployeeId(udata),
+            must_change_password: mustChangePassword,
+          },
+          token,
+        );
 
         // A first-login employee may be blocked from all endpoints except
         // change-password until the temporary password is replaced.
@@ -247,6 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
 
         setMustChangePassword(mustChangePassword);
+        markActiveTabSession();
 
         return { ok: true, mustChangePassword };
       } else {
@@ -261,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           must_change_password: true,
         });
         setMustChangePassword(true);
+        markActiveTabSession();
         return { ok: true, mustChangePassword: true };
       }
       authLog("login exception", e);
@@ -273,6 +250,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    clearActiveTabSession();
     zLogout();
     clearServerSessionSilently();
   };

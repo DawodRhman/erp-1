@@ -2,6 +2,8 @@ import { apiClient as api } from './apiClient';
 
 export interface InventorySummary {
   total_products: number;
+  total_stock_qty?: number;
+  available_stock_qty?: number;
   low_stock_count: number;
   total_inventory_value: number;
   total_serials: number;
@@ -14,22 +16,83 @@ export interface InventorySummary {
   pending_installations: number;
   active_complaints: number;
   approved_csr_jobs?: number;
+  pending_incoming_orders?: number;
+  active_tokens?: number;
+  active_dispatches?: number;
+  pending_returns?: number;
+  pending_bills?: number;
   sent_csr_quotes?: number;
+  period_stock_in_qty?: number;
+  period_stock_out_qty?: number;
+  period_return_qty?: number;
+  period_movement_count?: number;
+  summary_period?: string;
+  period_start?: string;
+  period_end?: string;
+}
+
+export interface InventoryWorkQueueItem {
+  id?: string;
+  product_id?: string;
+  vendor_id?: string;
+  supplier_id?: string;
+  vendor_name?: string;
+  supplier_name?: string;
+  product_name: string;
+  description?: string;
+  required_qty: number;
+  unit_price: number;
+  available_stock: number;
+  serial_tracking?: boolean;
+  stock_ok: boolean;
 }
 
 export interface InventoryWorkQueueJob {
   id: string;
+  order_id?: string;
+  order_number?: string;
+  token_number?: string;
   quotation_number: string;
   customer_id?: string;
   customer_name?: string;
   price_tier?: string;
   template_style?: string;
-  status: 'APPROVED' | 'IN_PROGRESS';
+  status: string;
+  order_status?: string;
+  stock_status?: string;
+  quotation_status?: string;
   total_amount: number;
   item_count: number;
   total_requested_qty: number;
   created_at: string;
   updated_at?: string;
+  items?: InventoryWorkQueueItem[];
+}
+
+export interface InventoryToken {
+  id: string;
+  order_number: string;
+  token_number: string;
+  quotation_number?: string;
+  customer_name?: string;
+  item_count: number;
+  total_amount: number;
+  status: string;
+  order_status?: string;
+  created_at: string;
+  updated_at?: string;
+  already_generated?: boolean;
+}
+
+export interface InventoryInstallerUser {
+  id: string;
+  email: string;
+  employee_id?: string;
+  display_name?: string;
+  role_name?: string;
+  designation_title?: string;
+  is_active?: boolean;
+  phone?: string;
 }
 
 export interface ItemCategory {
@@ -44,6 +107,10 @@ export interface Product {
   product_name: string;
   category_id?: string;
   category_name?: string;
+  vendor_id?: string;
+  supplier_id?: string;
+  vendor_name?: string;
+  supplier_name?: string;
   product_type: 'ASSET' | 'CONSUMABLE' | 'SERVICE';
   tracking_type: 'SERIAL' | 'IMEI' | 'NONE';
   quantity: number;
@@ -122,12 +189,34 @@ export interface PurchaseOrder {
   po_number: string;
   vendor_id?: string;
   vendor_name?: string;
+  crm_order_id?: string;
+  quotation_id?: string;
+  order_number?: string;
+  quotation_number?: string;
+  customer_name?: string;
   status: string;
+  subtotal_amount?: number;
+  tax_rate?: number;
+  tax_amount?: number;
   total_amount: number;
   order_date: string;
+  created_at?: string;
   expected_delivery_date?: string;
   notes?: string;
   item_count?: number;
+  items?: PurchaseOrderItem[];
+}
+
+export interface PurchaseOrderItem {
+  id: string;
+  product_id?: string;
+  quotation_item_id?: string;
+  product_name?: string;
+  quantity: number;
+  received_quantity?: number;
+  unit_price: number;
+  total_price?: number;
+  remarks?: string;
 }
 
 export interface Invoice {
@@ -172,9 +261,12 @@ export interface FieldDispatch {
   dispatch_number: string;
   quotation_id?: string;
   quotation_number?: string;
+  order_number?: string;
+  token_number?: string;
   customer_id?: string;
   customer_name?: string;
   installer_id?: string;
+  installer_name?: string;
   installer_email?: string;
   site_address?: string;
   status: string;
@@ -182,6 +274,7 @@ export interface FieldDispatch {
   dispatched_at?: string;
   completed_at?: string;
   created_at?: string;
+  item_count?: number;
   items?: FieldDispatchItem[];
   on_the_go_purchases?: FieldPurchase[];
 }
@@ -211,14 +304,92 @@ export interface FieldPurchase {
   notes?: string;
 }
 
+export interface ReturnRequestItem extends FieldDispatchItem {
+  condition?: 'GOOD' | 'DAMAGED' | 'CONSUMABLE_USED';
+  confirm?: boolean;
+  confirmed?: boolean;
+  line_issued_amount?: number;
+  line_return_amount?: number;
+}
+
+export interface ReturnBillAdjustment {
+  original_installed_amount: number;
+  returned_deduction_amount: number;
+  extra_added_amount: number;
+  final_adjusted_total: number;
+}
+
+export interface ReturnRequest {
+  id: string;
+  return_request_no: string;
+  dispatch_number: string;
+  order_number?: string;
+  token_number?: string;
+  quotation_id?: string;
+  quotation_number?: string;
+  customer_id?: string;
+  customer_name?: string;
+  installer_id?: string;
+  installer_name?: string;
+  installer_email?: string;
+  items_to_return_count?: number;
+  dispatch_status?: string;
+  status: 'PENDING' | 'CONFIRMED' | 'STOCK_UPDATED' | string;
+  submitted_date?: string;
+  created_at?: string;
+  updated_at?: string;
+  items?: ReturnRequestItem[];
+  on_the_go_purchases?: FieldPurchase[];
+  bill_adjustment?: ReturnBillAdjustment;
+  invoice?: any;
+  no_charge?: boolean;
+  finance_handoff_status?: 'NOT_REQUIRED' | string;
+  message?: string;
+}
+
 export const inventoryApi = {
-  getSummary: async (): Promise<InventorySummary> => {
-    const res = await api.get('/inventory/summary');
+  getSummary: async (params?: { period?: 'daily' | 'weekly' | 'monthly' }): Promise<InventorySummary> => {
+    const res = await api.get('/inventory/summary', { params });
     return res.data.data;
   },
 
-  getWorkQueue: async (): Promise<InventoryWorkQueueJob[]> => {
-    const res = await api.get('/inventory/work-queue');
+  getWorkQueue: async (params?: Record<string, any>): Promise<InventoryWorkQueueJob[]> => {
+    const res = await api.get('/inventory/work-queue', { params });
+    return res.data.data;
+  },
+
+  getTokens: async (): Promise<InventoryToken[]> => {
+    const res = await api.get('/inventory/tokens');
+    return res.data.data;
+  },
+
+  getInstallers: async (params?: { includeInactive?: boolean }): Promise<InventoryInstallerUser[]> => {
+    const res = await api.get('/inventory/installers', { params });
+    return res.data.data;
+  },
+
+  updateInstallerStatus: async (id: string, is_active: boolean): Promise<InventoryInstallerUser> => {
+    const res = await api.patch(`/inventory/installers/${id}/status`, { is_active });
+    return res.data.data;
+  },
+
+  getMasterSettings: async (): Promise<InventoryMasterSettings> => {
+    const res = await api.get('/inventory/master-settings');
+    return res.data.data;
+  },
+
+  updateCompanySettings: async (data: InventoryCompanySettings): Promise<InventoryCompanySettings> => {
+    const res = await api.put('/inventory/master-settings/company', data);
+    return res.data.data;
+  },
+
+  updateInventorySettings: async (data: InventoryPreferenceSettings): Promise<InventoryPreferenceSettings> => {
+    const res = await api.put('/inventory/master-settings/inventory', data);
+    return res.data.data;
+  },
+
+  generateOrderToken: async (orderId: string): Promise<InventoryToken> => {
+    const res = await api.post(`/inventory/orders/${orderId}/token`);
     return res.data.data;
   },
 
@@ -229,6 +400,11 @@ export const inventoryApi = {
 
   createCategory: async (data: Partial<ItemCategory>): Promise<ItemCategory> => {
     const res = await api.post('/inventory/categories', data);
+    return res.data.data;
+  },
+
+  updateCategory: async (id: string, data: Partial<ItemCategory>): Promise<ItemCategory> => {
+    const res = await api.patch(`/inventory/categories/${id}`, data);
     return res.data.data;
   },
 
@@ -275,6 +451,11 @@ export const inventoryApi = {
     return res.data.data;
   },
 
+  confirmReturnedItemGoodCondition: async (id: string): Promise<InventoryItem> => {
+    const res = await api.post(`/inventory/items/${id}/confirm-return`);
+    return res.data.data;
+  },
+
   getVendors: async (): Promise<Vendor[]> => {
     const res = await api.get('/inventory/vendors');
     return res.data.data;
@@ -283,6 +464,15 @@ export const inventoryApi = {
   createVendor: async (data: Partial<Vendor>): Promise<Vendor> => {
     const res = await api.post('/inventory/vendors', data);
     return res.data.data;
+  },
+
+  updateVendor: async (id: string, data: Partial<Vendor>): Promise<Vendor> => {
+    const res = await api.patch(`/inventory/vendors/${id}`, data);
+    return res.data.data;
+  },
+
+  deleteVendor: async (id: string): Promise<void> => {
+    await api.delete(`/inventory/vendors/${id}`);
   },
 
   getCustomers: async (): Promise<Customer[]> => {
@@ -312,6 +502,11 @@ export const inventoryApi = {
 
   createPurchaseOrder: async (data: any): Promise<PurchaseOrder> => {
     const res = await api.post('/inventory/purchase-orders', data);
+    return res.data.data;
+  },
+
+  receivePurchaseOrder: async (id: string, data: { items: Array<{ id: string; received_qty: number }> }): Promise<PurchaseOrder> => {
+    const res = await api.post(`/inventory/purchase-orders/${id}/receive`, data);
     return res.data.data;
   },
 
@@ -370,6 +565,26 @@ export const inventoryApi = {
     return res.data.data;
   },
 
+  getReturnRequests: async (params?: Record<string, any>): Promise<ReturnRequest[]> => {
+    const res = await api.get('/inventory/returns', { params });
+    return res.data.data;
+  },
+
+  getReturnRequest: async (id: string): Promise<ReturnRequest> => {
+    const res = await api.get(`/inventory/returns/${id}`);
+    return res.data.data;
+  },
+
+  confirmReturnRequest: async (id: string, data: any): Promise<ReturnRequest> => {
+    const res = await api.post(`/inventory/returns/${id}/confirm`, data);
+    return res.data.data;
+  },
+
+  sendAdjustedBillToFinance: async (id: string): Promise<ReturnRequest> => {
+    const res = await api.post(`/inventory/returns/${id}/send-bill`);
+    return res.data.data;
+  },
+
   getCustomerInvoiceDraft: async (customer_id: string): Promise<CustomerInvoiceDraft> => {
     const res = await api.get(`/inventory/customers/${customer_id}/invoice-draft`);
     return res.data.data;
@@ -400,5 +615,24 @@ export interface CustomerInvoiceDraft {
     quantity: number;
     unit_price: number;
   }>;
+}
+
+export interface InventoryCompanySettings {
+  company_name: string;
+  ntn_number: string;
+  gst_number: string;
+  address: string;
+  phone: string;
+  bank_account_number: string;
+}
+
+export interface InventoryPreferenceSettings {
+  default_min_stock_threshold: number;
+  low_stock_alert_email: string;
+}
+
+export interface InventoryMasterSettings {
+  company: InventoryCompanySettings;
+  inventory: InventoryPreferenceSettings;
 }
 

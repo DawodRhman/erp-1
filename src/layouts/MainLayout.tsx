@@ -10,6 +10,7 @@ export default function MainLayout() {
   const { user, activeRole } = useAuth();
   const { globalDays } = useData();
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
 
   // workflow banner removed per UI preference
@@ -17,6 +18,10 @@ export default function MainLayout() {
   useEffect(() => {
     if (sessionStorage.getItem('ems_banner_dismissed') === 'true') setBannerDismissed(true);
   }, []);
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
 
   if (!user) return <Navigate to="/login" />;
   if (activeRole === 'employee') return <Navigate to="/my-dashboard" />;
@@ -31,9 +36,15 @@ export default function MainLayout() {
 
   return (
     <div className="app-layout">
-      <Sidebar />
+      <button
+        className={`sidebar-backdrop ${sidebarOpen ? 'is-visible' : ''}`}
+        type="button"
+        aria-label="Close navigation"
+        onClick={() => setSidebarOpen(false)}
+      />
+      <Sidebar open={sidebarOpen} />
       <div className="main-area">
-        <Topbar />
+        <Topbar onMenuClick={() => setSidebarOpen((open) => !open)} />
         {activeBanner && (
           <div style={{ background: 'var(--amberl)', border: '1px solid var(--amber)', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: 'var(--amber)' }}>
             <AlertTriangle size={14} />

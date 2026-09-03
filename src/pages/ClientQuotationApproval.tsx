@@ -1,3 +1,1 @@
-import { ClientQuotationApprovalPage } from "./FlowPages";
-
-export default ClientQuotationApprovalPage;
+export { default } from "./crm/ClientQuotationApproval";

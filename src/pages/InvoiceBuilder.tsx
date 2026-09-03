@@ -16,6 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useToastContext } from "../context/ToastContext";
+import TaxRateControl from "../components/common/TaxRateControl";
 import { apiClient } from "../services/apiClient";
 import { inventoryApi, Customer, FieldDispatch, Product } from "../services/inventoryService";
 import {
@@ -24,6 +25,7 @@ import {
   ClientInvoiceTemplate,
   invoicingApi,
 } from "../services/invoicingService";
+import { printElementById } from "../utils/printElement";
 
 type BuilderColumn = {
   key: string;
@@ -249,6 +251,7 @@ export default function InvoiceBuilder() {
   const routeParams = new URLSearchParams(window.location.search);
   const billingQuotationId = routeParams.get("quotationId") || "";
   const billingDispatchId = routeParams.get("dispatchId") || "";
+  const draftInvoicePlaceholder = `INV-${new Date().getFullYear()}-0000`;
 
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -257,7 +260,7 @@ export default function InvoiceBuilder() {
   const [loadedBillingDispatchId, setLoadedBillingDispatchId] = useState("");
   const [billingQuotation, setBillingQuotation] = useState<BillingQuotation | null>(null);
   const [billingDispatch, setBillingDispatch] = useState<FieldDispatch | null>(null);
-  const [invoiceName, setInvoiceName] = useState(`INV-DRAFT-${new Date().getFullYear()}`);
+  const [invoiceName, setInvoiceName] = useState(draftInvoicePlaceholder);
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [purchaseOrderNo, setPurchaseOrderNo] = useState("");
   const [branchName, setBranchName] = useState("");
@@ -367,7 +370,7 @@ export default function InvoiceBuilder() {
       setLoadedBillingQuotationId(quotationId);
       setSelectedTemplateId("");
       setSelectedCustomerId(quote.customer_id || "");
-      setInvoiceName(`INV-DRAFT-${quote.quotation_number || new Date().getFullYear()}`);
+      setInvoiceName(draftInvoicePlaceholder);
       setPurchaseOrderNo(quote.quotation_number || "");
       setHeaderTitle(quote.template_style || "Sales Tax Invoice");
       setColumns(defaultColumns);
@@ -417,7 +420,7 @@ export default function InvoiceBuilder() {
       setLoadedBillingQuotationId("");
       setSelectedTemplateId("");
       setSelectedCustomerId(dispatch.customer_id || "");
-      setInvoiceName(`INV-DRAFT-${dispatch.dispatch_number || new Date().getFullYear()}`);
+      setInvoiceName(draftInvoicePlaceholder);
       setPurchaseOrderNo(dispatch.quotation_number || dispatch.dispatch_number || "");
       setBranchName(dispatch.site_address || "");
       setHeaderTitle("Sales Tax Invoice");
@@ -503,7 +506,7 @@ export default function InvoiceBuilder() {
           setBillingDispatch(fallbackDispatch);
           setLoadedBillingDispatchId(dispatchId);
           setSelectedCustomerId(fallbackDispatch.customer_id || "");
-          setInvoiceName(`INV-DRAFT-${fallbackDispatch.dispatch_number || new Date().getFullYear()}`);
+          setInvoiceName(draftInvoicePlaceholder);
           setPurchaseOrderNo(fallbackDispatch.quotation_number || fallbackDispatch.dispatch_number || "");
           setBranchName(fallbackDispatch.site_address || "");
           setHeaderTitle("Sales Tax Invoice");
@@ -653,16 +656,16 @@ export default function InvoiceBuilder() {
     showToast("Client invoice template saved", "success");
   };
 
-  const saveInvoice = async () => {
-    if (savingInvoiceRef.current) return;
+  const saveInvoice = async (status: "DRAFT" | "ISSUED" = "DRAFT"): Promise<ClientInvoice | null> => {
+    if (savingInvoiceRef.current) return null;
     if (!selectedCustomerId) {
       showToast("Select a client before saving invoice", "error");
-      return;
+      return null;
     }
     const billableRows = rows.filter(isBillableRow);
     if (!billableRows.length) {
       showToast("Invoice cannot be saved without quotation/product rows", "error");
-      return;
+      return null;
     }
 
     savingInvoiceRef.current = true;
@@ -677,7 +680,7 @@ export default function InvoiceBuilder() {
         tax_type: "GST",
         tax_rate: 18,
         number_of_copies: 1,
-        status: "DRAFT",
+        status,
         notes: JSON.stringify({
           invoice_name: invoiceName,
           invoice_date: invoiceDate,
@@ -716,11 +719,40 @@ export default function InvoiceBuilder() {
       setInvoices((current) => current.some((item) => item.id === invoice.id) ? current : [invoice, ...current]);
       setSelectedInvoiceIds([invoice.id]);
       invoiceIdempotencyKeyRef.current = makeIdempotencyKey("invoice");
-      showToast(`Invoice saved once as ${invoice.invoice_number}. It is not emailed yet.`, "success");
+      showToast(
+        status === "ISSUED"
+          ? `Invoice ${invoice.invoice_number} issued. CRM will show it as ISSUED.`
+          : `Invoice saved once as ${invoice.invoice_number}. It is not emailed yet.`,
+        "success",
+      );
+      return invoice;
+    } catch (err: any) {
+      showToast(err?.response?.data?.error?.message || "Invoice could not be saved.", "error");
+      return null;
     } finally {
       savingInvoiceRef.current = false;
       setSavingInvoice(false);
     }
+  };
+
+  const issueInvoice = async () => {
+    if (savingInvoiceRef.current) return;
+    if (selectedInvoiceIds.length === 1) {
+      savingInvoiceRef.current = true;
+      setSavingInvoice(true);
+      try {
+        const issued = await invoicingApi.updateInvoiceStatus(selectedInvoiceIds[0], "ISSUED");
+        setInvoices((current) => current.map((invoice) => (invoice.id === issued.id ? { ...invoice, status: issued.status } : invoice)));
+        showToast(`Invoice ${issued.invoice_number} issued. CRM will show ISSUED.`, "success");
+      } catch (err: any) {
+        showToast(err?.response?.data?.error?.message || "Invoice could not be issued.", "error");
+      } finally {
+        savingInvoiceRef.current = false;
+        setSavingInvoice(false);
+      }
+      return;
+    }
+    await saveInvoice("ISSUED");
   };
 
   const createSummary = async () => {
@@ -836,8 +868,11 @@ export default function InvoiceBuilder() {
             <button className="btn" onClick={() => setActiveStep("preview")}>
               <Eye size={16} /> Preview
             </button>
-            <button className="btn btn-primary" onClick={saveInvoice} disabled={savingInvoice}>
+            <button className="btn btn-primary" onClick={() => saveInvoice("DRAFT")} disabled={savingInvoice}>
               <CheckCircle2 size={16} /> {savingInvoice ? "Saving..." : "Save Draft Invoice"}
+            </button>
+            <button className="btn btn-success" onClick={issueInvoice} disabled={savingInvoice}>
+              <CheckCircle2 size={16} /> Issue Invoice
             </button>
           </div>
         </div>
@@ -915,13 +950,13 @@ export default function InvoiceBuilder() {
       )}
 
       {activeStep === "builder" && (
-        <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: 18 }}>
-          <div style={{ ...cardStyle, padding: 18 }}>
+        <div className="invoice-builder-layout">
+          <div className="invoice-builder-setup" style={{ ...cardStyle, padding: 18 }}>
             <h3 style={{ margin: "0 0 14px", fontSize: 16, fontWeight: 900, display: "flex", alignItems: "center", gap: 8 }}>
               <Building2 size={18} /> Client & Template
             </h3>
 
-            <div style={{ display: "grid", gap: 12 }}>
+            <div className="invoice-builder-fields">
               <label>
                 <span style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Client</span>
                 <select value={selectedCustomerId} onChange={(event) => setSelectedCustomerId(event.target.value)} style={inputStyle}>
@@ -1034,7 +1069,7 @@ export default function InvoiceBuilder() {
             <h3 style={{ margin: "0 0 14px", fontSize: 16, fontWeight: 900, display: "flex", alignItems: "center", gap: 8 }}>
               <Signature size={18} /> Footer & Signature
             </h3>
-            <div style={{ display: "grid", gap: 12 }}>
+            <div className="invoice-footer-fields">
               <label style={{ display: "grid", gap: 6 }}>
                 <span style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Invoice Title</span>
                 <input value={headerTitle} onChange={(event) => setHeaderTitle(event.target.value)} style={inputStyle} placeholder="Sales Tax Invoice" />
@@ -1116,7 +1151,7 @@ export default function InvoiceBuilder() {
             </div>
           </div>
 
-          <div style={{ display: "grid", gap: 18 }}>
+          <div className="invoice-builder-workspace">
             <div style={{ ...cardStyle, padding: 18 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900, display: "flex", alignItems: "center", gap: 8 }}>
@@ -1222,7 +1257,7 @@ export default function InvoiceBuilder() {
                             <input type="number" value={row.unit_price} onChange={(event) => updateRow(index, "unit_price", Number(event.target.value))} style={inputStyle} />
                           </td>
                           <td style={{ padding: 8 }}>
-                            <input type="number" value={row.gst_rate} onChange={(event) => updateRow(index, "gst_rate", Number(event.target.value))} style={inputStyle} />
+                            <TaxRateControl compact value={row.gst_rate} onChange={(gst_rate) => updateRow(index, "gst_rate", gst_rate)} label={`GST rate for row ${index + 1}`} />
                           </td>
                           <td style={{ padding: 8, fontWeight: 800, textAlign: "right", color: "#334155" }}>{money(evaluatedRows[index]?.value_excl || 0)}</td>
                           <td style={{ padding: 8, fontWeight: 800, textAlign: "right", color: "#0369a1" }}>{money(evaluatedRows[index]?.gst_amount || 0)}</td>
@@ -1251,11 +1286,14 @@ export default function InvoiceBuilder() {
               <p style={{ margin: "4px 0 0", color: "#64748b" }}>Review first, then save draft. Email sending will be connected later.</p>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn" onClick={() => window.print()}>
+              <button className="btn" onClick={() => printElementById("invoiceBuilderPrintArea", invoiceName || "Client Invoice")}>
                 <Download size={15} /> Print / Save PDF
               </button>
-              <button className="btn btn-primary" onClick={saveInvoice} disabled={savingInvoice}>
+              <button className="btn btn-primary" onClick={() => saveInvoice("DRAFT")} disabled={savingInvoice}>
                 <Save size={15} /> {savingInvoice ? "Saving..." : "Save Draft"}
+              </button>
+              <button className="btn btn-success" onClick={issueInvoice} disabled={savingInvoice}>
+                <CheckCircle2 size={15} /> Issue Invoice
               </button>
               <button className="btn" onClick={() => showToast("Email will be connected in the email phase. Draft remains saved.", "success")}>
                 <Mail size={15} /> Email Later
@@ -1263,7 +1301,7 @@ export default function InvoiceBuilder() {
             </div>
           </div>
 
-          <div style={{ border: "2px solid #111827", color: "#111827", background: "#ffffff" }}>
+          <div id="invoiceBuilderPrintArea" style={{ border: "2px solid #111827", color: "#111827", background: "#ffffff" }}>
             <div style={{ textAlign: "center", borderBottom: "2px solid #111827", padding: 8, fontSize: 20, fontWeight: 900 }}>
               {headerTitle}
             </div>

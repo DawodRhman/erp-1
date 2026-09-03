@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { useToastContext } from '../context/ToastContext';
 import { invoicingApi, ClientInvoiceTemplate } from '../services/invoicingService';
+import { printElementById } from '../utils/printElement';
 
 interface InvoiceItem {
   product_name?: string;
@@ -255,7 +256,7 @@ export default function ClientInvoicing() {
     template_name: template.template_name || 'HBL Sales Tax Invoice',
     header_title: template.custom_header || 'Sales Tax Invoice',
     tax_type: template.tax_type || 'GST',
-    tax_rate: Number(template.default_tax_rate || 18),
+    tax_rate: Number(template.default_tax_rate ?? 18),
     number_of_copies: Number(template.number_of_copies || 1),
     currency: template.template_config?.currency || 'PKR',
     bank_account: template.custom_footer || 'Account #: 24438000016603',
@@ -545,7 +546,7 @@ export default function ClientInvoicing() {
   };
 
   const recalculateInvoice = (invoice: CustomerInvoice): CustomerInvoice => {
-    const taxRate = Number(invoice.tax_rate || selectedTemplate.tax_rate || 0);
+    const taxRate = Number(invoice.tax_rate ?? selectedTemplate.tax_rate ?? 0);
     const items = (invoice.items?.length ? invoice.items : getInvoiceItems(invoice)).map((item) => {
       const quantity = Number(item.quantity || 0);
       const unitPrice = Number(item.unit_price || 0);
@@ -1270,7 +1271,7 @@ export default function ClientInvoicing() {
 
                   <div style={{ marginTop: '24px', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                     <button
-                      onClick={() => window.print()}
+                      onClick={() => printElementById('reactHblInvoicePrint', selectedInvoice.invoice_number || 'Client Invoice')}
                       style={{ backgroundColor: '#0f172a', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: '700' }}
                     >
                       <Printer size={16} /> Print / Save PDF
