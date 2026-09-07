@@ -3,6 +3,7 @@ import { FilePlus2, PackageSearch, Plus, Save, Send, Trash2, X } from "lucide-re
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useToastContext } from "../../context/ToastContext";
 import TaxRateControl from "../../components/common/TaxRateControl";
+import SearchableSelect from "../../components/common/SearchableSelect";
 import {
   CrmButton,
   ErrorState,
@@ -75,7 +76,6 @@ export default function QuotationsCreate() {
   const idempotencyKeyRef = useRef(makeIdempotencyKey("quotation"));
   const [customers, setCustomers] = useState<CrmCustomer[]>([]);
   const [products, setProducts] = useState<CrmProduct[]>([]);
-  const [clientSearch, setClientSearch] = useState("");
   const [productSearch, setProductSearch] = useState("");
   const [showProductModal, setShowProductModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -132,15 +132,31 @@ export default function QuotationsCreate() {
     };
   }, [editingId]);
 
-  const selectedCustomer = customers.find((customer) => customer.id === form.customer_id);
+  useEffect(() => {
+    let active = true;
+    const refreshCustomers = async () => {
+      try {
+        const nextCustomers = await crmApi.listCustomers();
+        if (active) setCustomers(nextCustomers);
+      } catch {
+        // Keep the current list during a background refresh; initial load shows errors.
+      }
+    };
+    const handleFocus = () => refreshCustomers();
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") refreshCustomers();
+    };
 
-  const filteredCustomers = useMemo(() => {
-    const q = clientSearch.trim().toLowerCase();
-    if (!q) return customers;
-    return customers.filter((customer) =>
-      [customer.customer_name, customer.email, customer.phone, customer.contact_person].join(" ").toLowerCase().includes(q),
-    );
-  }, [customers, clientSearch]);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, []);
+
+  const selectedCustomer = customers.find((customer) => customer.id === form.customer_id);
 
   const filteredProducts = useMemo(() => {
     const q = productSearch.trim().toLowerCase();
@@ -265,20 +281,24 @@ export default function QuotationsCreate() {
         <section className="crm-setup-panel" style={{ ...card, padding: 18, alignSelf: "start" }}>
           <div className="crm-section-title">
             <span>01</span>
-            <div><h2>Client & Setup</h2><p>Client, pricing and tax configuration</p></div>
+            <div><h2>Client & Commercial Details</h2><p>Select the client, pricing tier, tax rate and document template.</p></div>
           </div>
           <div className="crm-setup-fields">
-            <label style={label}>Search Client
-              <input style={input} value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} placeholder="Type client name, email or phone" />
-            </label>
-            <label style={label}>Select Client *
-              <select style={input} value={form.customer_id} onChange={(e) => setForm((prev) => ({ ...prev, customer_id: e.target.value }))}>
-                <option value="">Choose registered client</option>
-                {filteredCustomers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>{customer.customer_name}</option>
-                ))}
-              </select>
-            </label>
+            <div style={label}>
+              <span>Select Client *</span>
+              <SearchableSelect
+                inputStyle={input}
+                value={form.customer_id}
+                onChange={(customer_id) => setForm((prev) => ({ ...prev, customer_id }))}
+                placeholder="Search or select registered client"
+                emptyText="No matching client found. Add the client first, then return here."
+                options={customers.map((customer) => ({
+                  value: customer.id,
+                  label: `${customer.customer_name}${customer.email ? ` - ${customer.email}` : customer.phone ? ` - ${customer.phone}` : ""}`,
+                  searchText: [customer.customer_name, customer.email, customer.phone, customer.contact_person].filter(Boolean).join(" "),
+                }))}
+              />
+            </div>
             <label style={label}>Price Tier
               <select style={input} value={form.price_tier} onChange={(e) => changePriceTier(e.target.value)}>
                 {priceTiers.map((tier) => <option key={tier.value} value={tier.value}>{tier.label}</option>)}

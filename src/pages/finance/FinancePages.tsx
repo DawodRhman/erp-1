@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useToastContext } from "../../context/ToastContext";
 import TaxRateControl from "../../components/common/TaxRateControl";
+import SearchableSelect from "../../components/common/SearchableSelect";
 import { dashboardPeriodLabel, dashboardPeriodOptions, type DashboardPeriod } from "../../utils/dashboardPeriod";
 import {
   financeService,
@@ -901,7 +902,6 @@ function NewInvoiceWizard({
   const { showToast } = useToastContext();
   const [step, setStep] = useState(1);
   const [customers, setCustomers] = useState<FinanceCustomer[]>([]);
-  const [customerSearch, setCustomerSearch] = useState("");
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generated, setGenerated] = useState<FinanceInvoice | null>(null);
@@ -924,9 +924,8 @@ function NewInvoiceWizard({
   const loadCustomers = async () => {
     setLoadingCustomers(true);
     try {
-      const data = await financeService.getCustomers({ search: customerSearch });
+      const data = await financeService.getCustomers();
       setCustomers(data);
-      if (!form.customer_id && data[0]) setForm((current) => ({ ...current, customer_id: data[0].id }));
     } catch {
       showToast("Client list could not be loaded.", "error");
     } finally {
@@ -1077,14 +1076,16 @@ function NewInvoiceWizard({
           <h3>Step 2 - Invoice Details</h3>
           <div className="finance-form-grid">
             <label>Client / Bank
-              <div className="finance-inline-search">
-                <input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Search client" />
-                <button className="finance-small-btn" onClick={loadCustomers} disabled={loadingCustomers}>Find</button>
-              </div>
-              <select value={form.customer_id} onChange={(event) => updateForm({ customer_id: event.target.value })}>
-                <option value="">Select client / bank</option>
-                {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.customer_name}</option>)}
-              </select>
+              <SearchableSelect
+                disabled={loadingCustomers}
+                value={form.customer_id}
+                onChange={(customer_id) => updateForm({ customer_id })}
+                placeholder={loadingCustomers ? "Loading clients..." : "Search or select client / bank"}
+                options={customers.map((customer) => ({
+                  value: customer.id,
+                  label: `${customer.customer_name}${customer.email ? ` - ${customer.email}` : ""}`,
+                }))}
+              />
             </label>
             <label>Branch Name<input value={form.branch_name} onChange={(event) => updateForm({ branch_name: event.target.value })} /></label>
             <label>Branch Code<input value={form.branch_code} onChange={(event) => updateForm({ branch_code: event.target.value })} /></label>
@@ -1234,7 +1235,6 @@ function EditInvoiceModal({
   const { showToast } = useToastContext();
   const notes = getInvoiceNotes(invoice);
   const [customers, setCustomers] = useState<FinanceCustomer[]>([]);
-  const [customerSearch, setCustomerSearch] = useState(invoice.customer_name || "");
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(invoice.status || "ISSUED");
@@ -1256,9 +1256,8 @@ function EditInvoiceModal({
   const loadCustomers = async () => {
     setLoadingCustomers(true);
     try {
-      const data = await financeService.getCustomers({ search: customerSearch });
+      const data = await financeService.getCustomers();
       setCustomers(data);
-      if (!form.customer_id && data[0]) setForm((current) => ({ ...current, customer_id: data[0].id }));
     } catch {
       showToast("Client list could not be loaded.", "error");
     } finally {
@@ -1370,14 +1369,16 @@ function EditInvoiceModal({
           <h3>Invoice Details</h3>
           <div className="finance-form-grid">
             <label>Client / Bank
-              <div className="finance-inline-search">
-                <input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Search client" />
-                <button className="finance-small-btn" onClick={loadCustomers} disabled={loadingCustomers}>Find</button>
-              </div>
-              <select value={form.customer_id} onChange={(event) => updateForm({ customer_id: event.target.value })}>
-                <option value={form.customer_id}>{invoice.customer_name || "Current client"}</option>
-                {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.customer_name}</option>)}
-              </select>
+              <SearchableSelect
+                disabled={loadingCustomers}
+                value={form.customer_id}
+                onChange={(customer_id) => updateForm({ customer_id })}
+                placeholder={loadingCustomers ? "Loading clients..." : "Search or select client / bank"}
+                options={customers.map((customer) => ({
+                  value: customer.id,
+                  label: `${customer.customer_name}${customer.email ? ` - ${customer.email}` : ""}`,
+                }))}
+              />
             </label>
             <label>Status
               <select value={status} onChange={(event) => setStatus(event.target.value)}>

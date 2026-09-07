@@ -128,6 +128,9 @@ export default function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
     const p = location.pathname.split(/[?#]/)[0];
     return p.replace(/\/+$/, '') || '/';
   })();
+  const isServiceWorkspace = ["/crm", "/inventory", "/finance", "/admin"].some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+  ) || path === "/inventory-dashboard" || path === "/finance-dashboard";
 
   const pageName = (() => {
     if (path === "/employees" && (auth as any)?.activeRole === "department_head") {
@@ -264,47 +267,49 @@ export default function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         <span className="bc-cur">{pageName}</span>
       </div>
 
-      <div className="topbar-search" style={{ marginLeft: "auto", marginRight: 8, position: 'relative' }}>
-        <Search size={13} style={{ color: "var(--t3)" }} />
-        <input
-          ref={searchRef}
-          value={searchQuery}
-          onChange={(e) => {
-            const q = e.target.value;
-            setSearchQuery(q);
-            setShowSearch(Boolean(q.trim()));
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              if (searchResults.length === 1) {
-                navigate(`/employees/${searchResults[0].id}`);
-                setSearchQuery(''); setShowSearch(false);
+      {!isServiceWorkspace ? (
+        <div className="topbar-search" style={{ marginLeft: "auto", marginRight: 8, position: 'relative' }}>
+          <Search size={13} style={{ color: "var(--t3)" }} />
+          <input
+            ref={searchRef}
+            value={searchQuery}
+            onChange={(e) => {
+              const q = e.target.value;
+              setSearchQuery(q);
+              setShowSearch(Boolean(q.trim()));
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                if (searchResults.length === 1) {
+                  navigate(`/employees/${searchResults[0].id}`);
+                  setSearchQuery(''); setShowSearch(false);
+                }
+              } else if (e.key === 'Escape') {
+                setShowSearch(false);
               }
-            } else if (e.key === 'Escape') {
-              setShowSearch(false);
-            }
-          }}
-          placeholder="Search employees, records, reports..."
-          style={{ background: 'transparent', border: 'none', outline: 'none', marginLeft: 8, color: 'var(--t3)', width: 260 }}
-          onFocus={() => { if (searchQuery.trim()) setShowSearch(true); }}
-        />
-        <kbd>⌘K</kbd>
-        {showSearch && (
-          <div className="topbar-search-results" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 360, background: '#fff', border: '1px solid var(--br)', borderRadius: 10, boxShadow: 'var(--sh2)', zIndex: 1200, overflow: 'hidden' }}>
-            {isSearching ? (
-              <div style={{ padding: 12, fontSize: 12, color: 'var(--t3)' }}>Searching employees...</div>
-            ) : searchResults.length > 0 ? searchResults.map(r => (
-              <div key={r.id} onClick={() => { navigate(`/employees/${r.id}`); setSearchQuery(''); setShowSearch(false); }} style={{ padding: 10, cursor: 'pointer', borderBottom: '1px solid var(--br2)' }}>
-                <div style={{ fontWeight: 700 }}>{r.name} <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, marginLeft: 8, color: 'var(--t3)' }}>{r.id}</span></div>
-                <div style={{ fontSize: 12, color: 'var(--t3)' }}>{r.designation} · {r.department}</div>
-              </div>
-            )) : (
-              <div style={{ padding: 12, fontSize: 12, color: 'var(--t3)' }}>No employees found.</div>
-            )}
-            {searchResults.length === 1 && <div style={{ padding: 8, fontSize: 12, color: 'var(--t3)' }}>Press <strong>Enter</strong> to open this employee</div>}
-          </div>
-        )}
-      </div>
+            }}
+            placeholder="Search employees, records, reports..."
+            style={{ background: 'transparent', border: 'none', outline: 'none', marginLeft: 8, color: 'var(--t3)', width: 260 }}
+            onFocus={() => { if (searchQuery.trim()) setShowSearch(true); }}
+          />
+          <kbd>⌘K</kbd>
+          {showSearch && (
+            <div className="topbar-search-results" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 360, background: '#fff', border: '1px solid var(--br)', borderRadius: 10, boxShadow: 'var(--sh2)', zIndex: 1200, overflow: 'hidden' }}>
+              {isSearching ? (
+                <div style={{ padding: 12, fontSize: 12, color: 'var(--t3)' }}>Searching employees...</div>
+              ) : searchResults.length > 0 ? searchResults.map(r => (
+                <div key={r.id} onClick={() => { navigate(`/employees/${r.id}`); setSearchQuery(''); setShowSearch(false); }} style={{ padding: 10, cursor: 'pointer', borderBottom: '1px solid var(--br2)' }}>
+                  <div style={{ fontWeight: 700 }}>{r.name} <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, marginLeft: 8, color: 'var(--t3)' }}>{r.id}</span></div>
+                  <div style={{ fontSize: 12, color: 'var(--t3)' }}>{r.designation} · {r.department}</div>
+                </div>
+              )) : (
+                <div style={{ padding: 12, fontSize: 12, color: 'var(--t3)' }}>No employees found.</div>
+              )}
+              {searchResults.length === 1 && <div style={{ padding: 8, fontSize: 12, color: 'var(--t3)' }}>Press <strong>Enter</strong> to open this employee</div>}
+            </div>
+          )}
+        </div>
+      ) : null}
 
       <div className="topbar-right">
         {/* Module Label - No more switcher */}

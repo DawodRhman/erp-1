@@ -35,14 +35,14 @@ vi.mock("../../hooks/useLeaves", () => ({
   useLeaves: () => ({ data: [] }),
 }));
 
-function renderTopbar() {
+function renderTopbar(path = "/dashboard") {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/dashboard"]}>
+      <MemoryRouter initialEntries={[path]}>
         <Topbar />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -94,5 +94,11 @@ describe("Topbar", () => {
     fireEvent.click(screen.getByText("Adeel Rahman"));
 
     expect(navigateMock).toHaveBeenCalledWith("/employees/EMP001");
+  });
+
+  it("hides the employee search inside service portals", () => {
+    renderTopbar("/crm/quotations");
+
+    expect(screen.queryByPlaceholderText(/Search employees/i)).toBeNull();
   });
 });
