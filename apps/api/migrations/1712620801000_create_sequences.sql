@@ -1,0 +1,74 @@
+-- Up Migration
+CREATE SEQUENCE public.customer_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+CREATE SEQUENCE public.do_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+CREATE SEQUENCE public.grn_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+CREATE SEQUENCE public.invoice_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+CREATE SEQUENCE public.pay_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+CREATE SEQUENCE public.po_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+CREATE SEQUENCE public.pr_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+CREATE SEQUENCE public.quotation_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+CREATE SEQUENCE public.vendor_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+-- Down Migration
+DROP SEQUENCE IF EXISTS public.customer_seq;
+DROP SEQUENCE IF EXISTS public.do_seq;
+DROP SEQUENCE IF EXISTS public.grn_seq;
+DROP SEQUENCE IF EXISTS public.invoice_seq;
+DROP SEQUENCE IF EXISTS public.pay_seq;
+DROP SEQUENCE IF EXISTS public.po_seq;
+DROP SEQUENCE IF EXISTS public.pr_seq;
+DROP SEQUENCE IF EXISTS public.quotation_seq;
+DROP SEQUENCE IF EXISTS public.vendor_seq;

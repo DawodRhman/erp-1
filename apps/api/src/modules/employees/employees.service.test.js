@@ -1,0 +1,645 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const query = vi.hoisted(() => vi.fn());
+const clientQuery = vi.hoisted(() => vi.fn());
+const release = vi.hoisted(() => vi.fn());
+const initializeBalances = vi.hoisted(() => vi.fn());
+const recordActivityLog = vi.hoisted(() => vi.fn());
+
+vi.mock('../../config/db.js', () => ({
+  default: {
+    query,
+    connect: vi.fn(() => Promise.resolve({ query: clientQuery, release })),
+  },
+}));
+
+vi.mock('../auth/auth.service.js', () => ({
+  generateTempPassword: () => 'TempPass123!',
+  hashPassword: vi.fn(() => Promise.resolve('hashed-password')),
+}));
+
+vi.mock('../leave/leave.service.js', () => ({
+  initializeBalances,
+}));
+
+vi.mock('../audit/audit.service.js', () => ({
+  recordActivityLog,
+}));
+
+async function loadService() {
+  vi.resetModules();
+  return import('./employees.service.js');
+}
+
+function employeePayload(employeeId = 'EMP764') {
+  return {
+    employee_id: employeeId,
+    personalInfo: {
+      name: 'Frontend Employee',
+      father_name: 'Parent Name',
+      cnic: '42101-9999999-1',
+      date_of_birth: '1995-01-15',
+    },
+    jobInfo: {
+      department_id: '11111111-1111-4111-8111-111111111111',
+      designation_id: '22222222-2222-4222-8222-222222222222',
+      employment_type_id: '33333333-3333-4333-8333-333333333333',
+      job_status_id: '44444444-4444-4444-8444-444444444444',
+      work_mode_id: '55555555-5555-4555-8555-555555555555',
+      work_location_id: '66666666-6666-4666-8666-666666666666',
+      shift_id: '77777777-7777-4777-8777-777777777777',
+      date_of_joining: '2026-05-22',
+    },
+    accountInfo: {
+      email: 'frontend.employee@example.com',
+      phone: '03000000000',
+      role_id: null,
+    },
+    employeeContact: {
+      primary_phone: '03000000000',
+      alternate_phone: '03111111111',
+      same_as_permanent: false,
+      permanent_address: {
+        country: 'Pakistan',
+        province: 'Punjab',
+        district: 'Lahore',
+        city: 'Lahore',
+        town: 'Gulberg',
+        street: 'House 12, Main Boulevard',
+        postal_code: '54000',
+      },
+      postal_address: {
+        country: 'Pakistan',
+        province: 'Punjab',
+        district: 'Lahore',
+        city: 'Lahore',
+        town: 'Model Town',
+        street: 'Office 4',
+        postal_code: '54700',
+      },
+    },
+    emergencyContacts: {
+      e_contact_1_relation: 'father',
+      e_contact_1_full_name: 'Emergency Person',
+      e_contact_1_phone: '03222222222',
+      e_contact_1_phone_country_code: '+92',
+      primary_contact: 1,
+    },
+  };
+}
+
+describe('createEmployee', () => {
+  beforeEach(() => {
+    query.mockReset();
+    clientQuery.mockReset();
+    release.mockReset();
+    initializeBalances.mockReset();
+    initializeBalances.mockResolvedValue([]);
+  });
+
+  it('uses the frontend-provided employee_id instead of generating the next id', async () => {
+    query
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] });
+
+    clientQuery
+      .mockResolvedValueOnce({}) // BEGIN
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            employee_id: 'EMP764',
+            name: 'Frontend Employee',
+            father_name: 'Parent Name',
+            cnic: '42101-9999999-1',
+            date_of_birth: '1995-01-15',
+          },
+        ],
+      })
+      .mockResolvedValue({});
+
+    const { createEmployee } = await loadService();
+    const result = await createEmployee(employeePayload('EMP764'), 'creator-user-id');
+
+    const employeeInsertCall = clientQuery.mock.calls.find(([sql]) =>
+      sql.includes('INSERT INTO public.employee_info')
+    );
+
+    expect(employeeInsertCall[1][0]).toBe('EMP764');
+    expect(result.employee.employee_id).toBe('EMP764');
+    expect(clientQuery.mock.calls.some(([sql]) => sql.includes('MAX(employee_id)'))).toBe(false);
+  });
+
+  it('initializes joining-year leave balances inside employee creation', async () => {
+    query
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] });
+
+    clientQuery
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        rows: [{ employee_id: 'EMP764', name: 'Frontend Employee' }],
+      })
+      .mockResolvedValue({});
+
+    const { createEmployee } = await loadService();
+    await createEmployee(employeePayload('EMP764'), 'creator-user-id');
+
+    expect(initializeBalances).toHaveBeenCalledWith('EMP764', 2026, { db: expect.any(Object) });
+  });
+
+  it('stores employee contact in employee_contacts and keeps emergency_contacts emergency-only', async () => {
+    query
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] });
+
+    clientQuery
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        rows: [{ employee_id: 'EMP764', name: 'Frontend Employee' }],
+      })
+      .mockResolvedValue({});
+
+    const { createEmployee } = await loadService();
+    await createEmployee(employeePayload('EMP764'), 'creator-user-id');
+
+    const employeeContactCall = clientQuery.mock.calls.find(([sql]) =>
+      sql.includes('INSERT INTO public.employee_contacts')
+    );
+    const emergencyContactCall = clientQuery.mock.calls.find(([sql]) =>
+      sql.includes('INSERT INTO public.emergency_contacts')
+    );
+
+    expect(employeeContactCall).toBeTruthy();
+    expect(employeeContactCall[1]).toEqual(
+      expect.arrayContaining(['EMP764', '03000000000', '03111111111', 'Pakistan', 'Punjab', 'Lahore'])
+    );
+    expect(emergencyContactCall[0]).not.toMatch(/\bcontact_1\b/);
+    expect(emergencyContactCall[0]).not.toMatch(/\bcontact_2\b/);
+    expect(emergencyContactCall[0]).not.toContain('perment_address');
+  });
+
+  it('initializes current-year balances when an existing employee is entered with a historical joining date', async () => {
+    query
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] });
+
+    clientQuery
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        rows: [{ employee_id: 'EMP474', name: 'Existing Employee' }],
+      })
+      .mockResolvedValue({});
+
+    const payload = employeePayload('EMP474');
+    payload.jobInfo.date_of_joining = '1985-09-16';
+
+    const { createEmployee } = await loadService();
+    await createEmployee(payload, 'creator-user-id');
+
+    expect(initializeBalances).toHaveBeenCalledWith(
+      'EMP474',
+      new Date().getUTCFullYear(),
+      { db: expect.any(Object) }
+    );
+  });
+
+  it('returns frontend-mappable duplicate employee id details', async () => {
+    query.mockResolvedValueOnce({ rowCount: 1, rows: [{ employee_id: 'EMP764' }] });
+
+    const { createEmployee } = await loadService();
+
+    await expect(createEmployee(employeePayload('EMP764'), 'creator-user-id')).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'DUPLICATE_EMPLOYEE_ID',
+      details: [
+        {
+          field: 'employee_id',
+          path: ['employee_id'],
+          message: 'Employee ID already exists.',
+        },
+      ],
+    });
+  });
+
+  it('returns frontend-mappable duplicate cnic details', async () => {
+    query
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnic: '42101-9999999-1' }] });
+
+    const { createEmployee } = await loadService();
+
+    await expect(createEmployee(employeePayload('EMP764'), 'creator-user-id')).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'DUPLICATE_CNIC',
+      details: [
+        {
+          field: 'cnic',
+          path: ['personalInfo', 'cnic'],
+          message: 'CNIC number already exists.',
+        },
+      ],
+    });
+  });
+
+  it('returns frontend-mappable duplicate email details', async () => {
+    query
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ email: 'frontend.employee@example.com' }] });
+
+    const { createEmployee } = await loadService();
+
+    await expect(createEmployee(employeePayload('EMP764'), 'creator-user-id')).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'DUPLICATE_EMAIL',
+      details: [
+        {
+          field: 'email',
+          path: ['accountInfo', 'email'],
+          message: 'An account with this email already exists.',
+        },
+      ],
+    });
+  });
+});
+
+describe('employee profile photo fields', () => {
+  beforeEach(() => {
+    query.mockReset();
+    clientQuery.mockReset();
+    release.mockReset();
+    recordActivityLog.mockReset();
+    recordActivityLog.mockResolvedValue(null);
+  });
+
+  it('selects the latest profile photo url in the employee list', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ total: 0 }], rowCount: 1 });
+
+    const { getEmployees } = await loadService();
+    await getEmployees({ page: 1, limit: 20 });
+
+    expect(query.mock.calls[0][0]).toContain('profile_photo_url');
+    expect(query.mock.calls[0][0]).toContain('public.employee_attachments');
+    expect(query.mock.calls[0][0]).toContain("kind = 'profile_photo'");
+  });
+
+  it('filters employee lists by Department Head department and location scope', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ total: 0 }], rowCount: 1 });
+
+    const { getEmployees } = await loadService();
+    await getEmployees({
+      page: 1,
+      limit: 20,
+      scope: {
+        department_id: 'dept-engineering',
+        work_location_id: 'location-lahore',
+      },
+    });
+
+    expect(query.mock.calls[0][0]).toContain('ji.department_id = $1');
+    expect(query.mock.calls[0][0]).toContain('ji.work_location_id = $2');
+    expect(query.mock.calls[0][1]).toEqual([
+      'dept-engineering',
+      'location-lahore',
+      20,
+      0,
+    ]);
+  });
+
+  it('filters employee detail by Department Head scope without truncating profile data', async () => {
+    query
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{
+          employee_id: 'EMP0010',
+          name: 'Scoped Employee',
+          department_id: 'dept-engineering',
+          work_location_id: 'location-lahore',
+          account_email: 'private@example.com',
+          account_user_id: 'user-10',
+          account_role_id: 'role-head',
+          account_is_active: true,
+          account_must_change_password: false,
+          bank_name: 'Private Bank',
+          blood_group: 'O+',
+          primary_phone: '03001234567',
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+    const { getEmployeeById } = await loadService();
+    const employee = await getEmployeeById('EMP0010', {
+      scope: {
+        department_id: 'dept-engineering',
+        work_location_id: 'location-lahore',
+      },
+    });
+
+    expect(query.mock.calls[0][0]).toContain('ji.department_id = $2');
+    expect(query.mock.calls[0][0]).toContain('ji.work_location_id = $3');
+    expect(employee.accountInfo.email).toBe('private@example.com');
+    expect(employee.employeeContact.primary_phone).toBe('03001234567');
+    expect(employee.bankInfo.bank_name).toBe('Private Bank');
+    expect(employee.medicalInfo.blood_group).toBe('O+');
+  });
+
+  it('selects the latest profile photo url in employee detail', async () => {
+    query
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            employee_id: 'EMP0001',
+            name: 'Super Admin',
+            profile_photo_url: '/uploads/employees/EMP0001/profile/photo.png',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+    const { getEmployeeById } = await loadService();
+    const employee = await getEmployeeById('EMP0001');
+
+    expect(query.mock.calls[0][0]).toContain('profile_photo_url');
+    expect(query.mock.calls[0][0]).toContain('public.employee_attachments');
+    expect(employee.profile_photo_url).toBe('/uploads/employees/EMP0001/profile/photo.png');
+  });
+
+  it('returns account email in employee detail for profile display', async () => {
+    query
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            employee_id: 'EMP0113',
+            name: 'Bulk Test Employee 0111',
+            account_email: 'bulk0113@example.com',
+            account_user_id: 'user-113',
+            account_role_id: 'role-employee',
+            account_must_change_password: true,
+            primary_phone: '03007000111',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+    const { getEmployeeById } = await loadService();
+    const employee = await getEmployeeById('EMP0113');
+
+    expect(query.mock.calls[0][0]).toContain('u.email AS account_email');
+    expect(query.mock.calls[0][0]).toContain('LEFT JOIN public.users u ON u.employee_id = ei.employee_id');
+    expect(employee.accountInfo.email).toBe('bulk0113@example.com');
+    expect(employee.email).toBe('bulk0113@example.com');
+  });
+});
+
+describe('createEmployeeAccount', () => {
+  beforeEach(() => {
+    query.mockReset();
+    clientQuery.mockReset();
+    release.mockReset();
+    recordActivityLog.mockReset();
+    recordActivityLog.mockResolvedValue(null);
+  });
+
+  it('creates a login account for an existing employee without a user', async () => {
+    query
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ employee_id: 'EMP0201', primary_phone: '03001234567' }],
+      })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'role-1' }] })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ id: 'user-1', email: 'emp0201@example.com', employee_id: 'EMP0201' }],
+      });
+
+    const { createEmployeeAccount } = await loadService();
+    const result = await createEmployeeAccount('EMP0201', {
+      email: 'emp0201@example.com',
+      role_id: 'role-1',
+    }, 'creator-user-id');
+
+    expect(query.mock.calls[4][0]).toContain('INSERT INTO public.users');
+    expect(query.mock.calls[4][1]).toEqual([
+      'EMP0201',
+      'emp0201@example.com',
+      'hashed-password',
+      'role-1',
+    ]);
+    expect(result.tempPassword).toBe('TempPass123!');
+    expect(result.whatsappPhone).toBe('03001234567');
+    expect(result.email).toBe('emp0201@example.com');
+    expect(result.employeeId).toBe('EMP0201');
+    expect(result.user.email).toBe('emp0201@example.com');
+    expect(recordActivityLog).toHaveBeenCalledWith({
+      userId: 'creator-user-id',
+      action: 'EMPLOYEE_ACCOUNT_CREATED',
+      entityType: 'employee',
+      entityId: 'EMP0201',
+      meta: {
+        employee_id: 'EMP0201',
+        account_user_id: 'user-1',
+        email: 'emp0201@example.com',
+        role_id: 'role-1',
+      },
+      requestContext: {},
+      bestEffort: true,
+    });
+  });
+
+  it('rejects account creation when the employee already has a user', async () => {
+    query
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ employee_id: 'EMP0201' }] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'existing-user' }] });
+
+    const { createEmployeeAccount } = await loadService();
+
+    await expect(createEmployeeAccount('EMP0201', {
+      email: 'emp0201@example.com',
+      role_id: 'role-1',
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'ACCOUNT_EXISTS',
+    });
+  });
+
+  it('returns email and phone when resending credentials', async () => {
+    query
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ id: 'user-1', email: 'emp0201@example.com', employee_id: 'EMP0201', primary_phone: '03001234567' }],
+      })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] });
+
+    const { resendCredentials } = await loadService();
+    const result = await resendCredentials('EMP0201');
+
+    expect(query.mock.calls[0][0]).toContain('SELECT u.id');
+    expect(query.mock.calls[0][0]).toContain('u.email');
+    expect(result.tempPassword).toBe('TempPass123!');
+    expect(result.whatsappPhone).toBe('03001234567');
+    expect(result.email).toBe('emp0201@example.com');
+    expect(result.employeeId).toBe('EMP0201');
+  });
+});
+
+describe('updateAllowances', () => {
+  beforeEach(() => {
+    query.mockReset();
+    clientQuery.mockReset();
+    release.mockReset();
+  });
+
+  it('persists active and inactive allowance states while creating history rows', async () => {
+    clientQuery
+      .mockResolvedValueOnce({}) // BEGIN
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }) // archive current
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'allowance-history-1',
+            employee_id: 'EMP0201',
+            allowance_type_id: '11111111-1111-4111-8111-111111111111',
+            amount: '2500',
+            is_percentage: true,
+            is_current: true,
+            is_active: false,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({}); // COMMIT
+
+    const { updateAllowances } = await loadService();
+    const result = await updateAllowances(
+      'EMP0201',
+      [
+        {
+          allowance_type_id: '11111111-1111-4111-8111-111111111111',
+          amount: 2500,
+          is_percentage: true,
+          is_active: false,
+        },
+      ],
+      'creator-user-id'
+    );
+
+    const insertCall = clientQuery.mock.calls.find(([sql]) =>
+      sql.includes('INSERT INTO public.employee_allowances')
+    );
+
+    expect(insertCall[0]).toContain('is_active');
+    expect(insertCall[1]).toEqual([
+      'EMP0201',
+      '11111111-1111-4111-8111-111111111111',
+      2500,
+      true,
+      false,
+      'creator-user-id',
+    ]);
+    expect(result[0]).toMatchObject({ is_active: false, is_current: true });
+  });
+});
+
+describe('addCareerMovement', () => {
+  beforeEach(() => {
+    query.mockReset();
+    clientQuery.mockReset();
+    release.mockReset();
+  });
+
+  it('records a career movement and atomically updates job info and salary when provided', async () => {
+    clientQuery
+      .mockResolvedValueOnce({}) // BEGIN
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            employee_id: 'EMP0201',
+            department_id: 'dept-old',
+            designation_id: 'des-old',
+            employment_type_id: 'type-1',
+            job_status_id: 'status-1',
+            work_mode_id: 'mode-1',
+            work_location_id: 'loc-1',
+            shift_id: 'shift-1',
+            manager_emp_id: 'EMP0001',
+            date_of_joining: '2020-01-01',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ id: 'movement-1', employee_id: 'EMP0201', movement_type: 'Promotion' }],
+      })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'history-1' }] })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            employee_id: 'EMP0201',
+            department_id: 'dept-new',
+            designation_id: 'des-new',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ id: 'salary-1', basic_salary: 125000, revision_type: 'Promotion' }],
+      })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'notification-1' }] })
+      .mockResolvedValueOnce({}); // COMMIT
+
+    const { addCareerMovement } = await loadService();
+    const result = await addCareerMovement(
+      'EMP0201',
+      {
+        movement_type: 'Promotion',
+        effective_date: '2026-06-16',
+        department_id: 'dept-new',
+        designation_id: 'des-new',
+        reason: 'Promoted to senior role',
+        salaryInfo: {
+          base_salary: 125000,
+          currency: 'PKR',
+          revision_type: 'Promotion',
+          revision_percent: 20,
+          revision_reason: 'Promotion adjustment',
+        },
+      },
+      'user-1',
+    );
+
+    expect(clientQuery.mock.calls[1][0]).toContain('FROM public.job_info');
+    expect(clientQuery.mock.calls[1][0]).toContain('FOR UPDATE');
+    expect(clientQuery.mock.calls[2][0]).toContain('INSERT INTO public.employee_career_movements');
+    expect(clientQuery.mock.calls[3][0]).toContain('INSERT INTO public.employee_job_history');
+    expect(clientQuery.mock.calls[4][0]).toContain('UPDATE public.job_info');
+    expect(clientQuery.mock.calls[5][0]).toContain('UPDATE public.employee_salary');
+    expect(clientQuery.mock.calls[6][0]).toContain('INSERT INTO public.employee_salary');
+    expect(clientQuery.mock.calls[7][0]).toContain('UPDATE public.employee_career_movements');
+    expect(clientQuery.mock.calls[8][0]).toContain('INSERT INTO public.notifications');
+    expect(clientQuery.mock.calls[8][1]).toEqual([
+      'EMP0201',
+      'Your career record was updated: Promotion.',
+      'user-1',
+    ]);
+    expect(result.movement.id).toBe('movement-1');
+    expect(result.salaryRevision.id).toBe('salary-1');
+  });
+});

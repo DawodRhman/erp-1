@@ -1,0 +1,914 @@
+/**
+ * ESSPL ERP — master_seed.js
+ *
+ * Covers FK-safe seeding for Electronic Safety & Security Pvt. Ltd (ESSPL),
+ * operational window 2020-01-01 .. 2026-05-12.
+ *
+ * Employee IDs match backend generator: EMP0001 … EMP0100 (see employees.service.js).
+ *
+ * Usage:
+ *   node seeds/master_seed.js
+ *
+ * Env:
+ *   DATABASE_URL — required (see .env.example)
+ *   PORT — default 3001 (used only when SEED_USE_API=1)
+ *   SEED_USE_API=1 — optional smoke test: POST /api/auth/login then GET /api/config/departments
+ *
+ * Primary seed path is PostgreSQL pool.
+ */
+
+import bcrypt from 'bcrypt';
+import 'dotenv/config';
+import pool from '../src/config/db.js';
+import { seedEmployeesAndHR } from './master_seed_extend.js';
+
+const END_DATE = new Date('2026-05-12T00:00:00Z');
+const PORT = process.env.PORT || 3001;
+const BASE_URL = `http://localhost:${PORT}`;
+
+/** Deduped permission keys from scripts/seed-permissions.js, routes, migrations, dev_seed-style inventory keys */
+const PERMISSION_KEYS = [
+  ['config:read', 'Read system configuration'],
+  ['config:write', 'Write system configuration (includes POST /api/config/:entity)'],
+  ['config:manage', 'Legacy alias — kept for parity with older seeds'],
+  ['employees:self_read', 'View own employee profile'],
+  ['employees:read', 'View employee records'],
+  ['employees:department_read', 'View employee records in assigned department scope'],
+  ['employees:write', 'Create / update employees'],
+  ['employee_attachments:read', 'Read employee attachments'],
+  ['employee_attachments:upload', 'Upload employee attachments'],
+  ['salary:read', 'Read salary'],
+  ['salary:write', 'Salary revisions'],
+  ['allowances:read', 'Read allowances'],
+  ['allowances:write', 'Manage allowances'],
+  ['leave:read', 'Read leave'],
+  ['leave:department_read', 'Read leave in assigned department scope'],
+  ['leave:write', 'Submit leave'],
+  ['leave:approve', 'Approve leave'],
+  ['leave:department_approve', 'Approve leave in assigned department scope'],
+  ['leave_capacity:read', 'Read leave capacity'],
+  ['leave_capacity:write', 'Manage leave capacity'],
+  ['attendance:read', 'Read attendance'],
+  ['attendance:department_read', 'Read attendance in assigned department scope'],
+  ['attendance:write', 'Write attendance'],
+  ['attendance:submit_ho', 'Submit attendance to HO'],
+  ['attendance:unlock', 'Unlock attendance'],
+  ['calendar:read', 'Read calendar'],
+  ['calendar:write', 'Write calendar'],
+  ['calendar:department_write', 'Write calendar in assigned department scope'],
+  ['notifications:read', 'Read notifications'],
+  ['notifications:write', 'Create notifications'],
+  ['alerts:read', 'Urgent alerts'],
+  ['pending_actions:read', 'Pending actions'],
+  ['dashboard:read', 'Dashboard'],
+  ['dashboard:department_read', 'Dashboard in assigned department scope'],
+  ['directory:read', 'Directory read'],
+  ['directory:write', 'Directory write'],
+  ['announcements:read', 'Announcements read'],
+  ['announcements:write', 'Announcements write'],
+  ['announcements:department_write', 'Write announcements in assigned department scope'],
+  ['inventory:read', 'Inventory read'],
+  ['inventory:write', 'Inventory write'],
+  ['purchasing:read', 'Purchasing read'],
+  ['purchasing:write', 'Purchasing write'],
+  ['purchasing:approve', 'Purchasing approve'],
+  ['hr:full_access', 'HR full access placeholder'],
+  ['payroll:read', 'Payroll read placeholder'],
+  ['payroll:write', 'Payroll write placeholder'],
+  ['penalty_rules:write', 'Penalty rules CRUD'],
+  ['penalties:propose', 'Propose penalties'],
+  ['penalties:review', 'Review penalties'],
+  ['penalties:read_own', 'Own penalties'],
+  ['penalties:read_all', 'All penalties'],
+  ['penalties:department_read', 'Read penalties in assigned department scope'],
+  ['penalties:department_propose', 'Propose penalties in assigned department scope'],
+  ['reports:read', 'Reports'],
+];
+
+async function hashPassword(pw, rounds = 12) {
+  return bcrypt.hash(pw, rounds);
+}
+
+async function truncateAll(client) {
+  await client.query(`
+    TRUNCATE TABLE
+      activity_logs,
+      audit_logs,
+      invoice_items,
+      invoices,
+      quotation_items,
+      quotations,
+      delivery_order_items,
+      delivery_orders,
+      inventory_movements,
+      inventory_items,
+      grn_items,
+      grns,
+      purchase_order_items,
+      purchase_orders,
+      purchase_request_items,
+      purchase_requests,
+      customers,
+      vendors,
+      products,
+      item_categories,
+      employee_allowances,
+      employee_salary,
+      allowance_types,
+      employee_penalties,
+      penalty_rules,
+      leave_requests,
+      leave_balances,
+      leave_policies,
+      leave_capacity_config,
+      attendance,
+      notifications,
+      calendar_events,
+      pending_actions,
+      urgent_alerts,
+      directory_entries,
+      users,
+      employee_job_history,
+      job_info,
+      employee_contacts,
+      emergency_contacts,
+      employee_bank_accounts,
+      employee_medical,
+      employee_info,
+      role_permissions,
+      roles,
+      permissions,
+      leave_types,
+      shifts,
+      work_locations,
+      work_modes,
+      job_statuses,
+      employment_types,
+      designations,
+      departments
+    RESTART IDENTITY CASCADE
+  `);
+
+  const seqs = [
+    'customer_seq',
+    'vendor_seq',
+    'pr_seq',
+    'po_seq',
+    'grn_seq',
+    'quotation_seq',
+    'invoice_seq',
+    'do_seq',
+    'pay_seq',
+  ];
+  for (const s of seqs) {
+    try {
+      await client.query(`SELECT setval('public.${s}', 1, false)`);
+    } catch {
+      /* ignore if sequence renamed */
+    }
+  }
+}
+
+async function bootstrapPermissions(client) {
+  const keys = PERMISSION_KEYS.map(([k]) => k);
+  const desc = PERMISSION_KEYS.map(([, d]) => d);
+  await client.query(
+    `
+    INSERT INTO permissions (permission_key, description)
+    SELECT k, d FROM unnest($1::text[], $2::text[]) AS t(k, d)
+    ON CONFLICT (permission_key) DO NOTHING
+  `,
+    [keys, desc]
+  );
+}
+
+async function bootstrapVerify(client) {
+  const r = await client.query(`
+    SELECT
+      (SELECT COUNT(*)::int FROM permissions) AS perm_count,
+      (SELECT COUNT(*)::int FROM roles) AS role_count,
+      (SELECT COUNT(*)::int FROM role_permissions) AS rp_count,
+      (SELECT COUNT(*)::int FROM users WHERE email = 'superadmin@esspl.com.pk') AS admin_exists
+  `);
+  const row = r.rows[0];
+  console.log(
+    `  Bootstrap check — permissions: ${row.perm_count}, roles: ${row.role_count}, role_permissions: ${row.rp_count}, admin user: ${row.admin_exists}`
+  );
+  if (row.perm_count === 0) throw new Error('BOOTSTRAP FAILED: no permissions');
+  if (row.role_count === 0) throw new Error('BOOTSTRAP FAILED: no roles');
+  if (row.rp_count === 0) throw new Error('BOOTSTRAP FAILED: no role_permissions');
+  if (row.admin_exists === 0) throw new Error('BOOTSTRAP FAILED: super_admin missing');
+}
+
+/** Optional HTTP smoke test — requires server running */
+async function seedViaAPI() {
+  if (process.env.SEED_USE_API !== '1') {
+    console.log('  (Skipping HTTP API smoke test — set SEED_USE_API=1 with server running)');
+    return;
+  }
+  const loginRes = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'superadmin@esspl.com.pk', password: 'SuperAdmin@123!' }),
+  });
+  if (!loginRes.ok) {
+    console.error('  API login failed:', await loginRes.text());
+    return;
+  }
+  const body = await loginRes.json();
+  const token = body.data?.token;
+  if (!token) {
+    console.error('  No token in login response');
+    return;
+  }
+  const hdr = { Authorization: `Bearer ${token}` };
+  const deptRes = await fetch(`${BASE_URL}/api/config/departments`, { headers: hdr });
+  console.log(`  API smoke test: GET /api/config/departments → ${deptRes.status}`);
+}
+
+async function seedViaPool(client) {
+  await client.query('ALTER TABLE roles ALTER COLUMN department_id DROP NOT NULL');
+  await bootstrapPermissions(client);
+
+  const permRes = await client.query(`SELECT id, permission_key FROM permissions`);
+  const PERM = Object.fromEntries(permRes.rows.map((r) => [r.permission_key, r.id]));
+
+  const roleIds = {};
+
+  async function wireRole(roleName, keys) {
+    const rid = roleIds[roleName];
+    if (!rid) return;
+    const ids = keys.map((k) => PERM[k]).filter(Boolean);
+    if (ids.length === 0) return;
+    await client.query(
+      `
+      INSERT INTO role_permissions (role_id, permission_id)
+      SELECT $1::uuid, x::uuid FROM unnest($2::uuid[]) AS t(x)
+      ON CONFLICT DO NOTHING
+    `,
+      [rid, ids]
+    );
+  }
+
+  // ── Departments (tree) ───────────────────────────────────────────────────
+  const insDept = async (code, name, parentId = null) => {
+    const r = await client.query(
+      `
+      INSERT INTO departments (department_code, department_name, parent_department_id, is_active)
+      VALUES ($1, $2, $3, true)
+      RETURNING id
+    `,
+      [code, name, parentId]
+    );
+    return r.rows[0].id;
+  };
+
+  const D = {};
+  D.adm = await insDept('DEPT-ADM', 'Administration');
+  D.swe = await insDept('DEPT-SWE', 'Software Engineering');
+  D.sweFe = await insDept('DEPT-SWE-FE', 'Frontend Engineering', D.swe);
+  D.sweBe = await insDept('DEPT-SWE-BE', 'Backend Engineering', D.swe);
+  D.sweMob = await insDept('DEPT-SWE-MOB', 'Mobile Engineering', D.swe);
+  D.sweQa = await insDept('DEPT-SWE-QA', 'Software QA', D.swe);
+  D.sweDevOps = await insDept('DEPT-SWE-DEVOPS', 'DevOps', D.swe);
+  D.strategic = await insDept('DEPT-STRAT', 'Strategic Function');
+  D.hr = await insDept('DEPT-HR', 'Human Resources');
+  D.fin = await insDept('DEPT-FIN', 'Finance');
+  D.ops = await insDept('DEPT-OPS', 'Operations');
+  D.opsFe = await insDept('DEPT-OPS-FE', 'Field Engineering', D.ops);
+  D.opsInst = await insDept('DEPT-OPS-INST', 'Installations', D.ops);
+  D.marketing = await insDept('DEPT-MKT', 'Marketing');
+  D.it = await insDept('DEPT-IT', 'Information Technology');
+  D.itSup = await insDept('DEPT-IT-SUP', 'IT Support', D.it);
+  D.itDev = await insDept('DEPT-IT-DEV', 'IT Development', D.it);
+  D.sales = await insDept('DEPT-SALES', 'Sales');
+  D.salesKhi = await insDept('DEPT-SALES-KHI', 'Sales Karachi', D.sales);
+  D.salesLhr = await insDept('DEPT-SALES-LHR', 'Sales Lahore', D.sales);
+  D.salesIsb = await insDept('DEPT-SALES-ISB', 'Sales Islamabad', D.sales);
+  D.cs = await insDept('DEPT-CS', 'Customer Service');
+  D.rnd = await insDept('DEPT-RND', 'Research and Development');
+  D.legal = await insDept('DEPT-LEGAL', 'Legal');
+  D.proc = await insDept('DEPT-PROC', 'Procurement');
+  D.general = await insDept('DEPT-GM', 'General Management');
+  D.logistics = await insDept('DEPT-LOG', 'Logistics Distribution');
+  D.qa = await insDept('DEPT-QA', 'QA');
+  D.qualityInspection = await insDept('DEPT-QI', 'Quality Inspector');
+  D.pr = await insDept('DEPT-PR', 'PR/Public Relations');
+  D.facility = await insDept('DEPT-FM', 'Facility Management');
+  D.dataAnalytics = await insDept('DEPT-DABI', 'Data Analytics and Business Intelligence');
+  D.businessDevelopment = await insDept('DEPT-BD', 'Business Development');
+  D.engineering = await insDept('DEPT-ENG', 'Engineering');
+  D.security = await insDept('DEPT-SEC', 'Security');
+  D.hse = await insDept('DEPT-HSE', 'Health Safety and Environment/HSE');
+  console.log('  Departments seeded');
+
+  // ── Designations ──────────────────────────────────────────────────────────
+  const DESIGNATIONS_BY_DEPT = {
+    adm: ['Administration Manager', 'Office Administrator', 'Admin Officer', 'Front Desk Officer'],
+    swe: ['Chief Technology Officer', 'Chief Product Officer', 'Software Engineering Manager', 'Tech Lead', 'Principal Engineer', 'Senior Software Engineer', 'Software Engineer', 'Junior Software Engineer', 'Associate Developer', 'UI/UX Designer'],
+    sweFe: ['Senior Frontend Developer', 'Frontend Developer'],
+    sweBe: ['Senior Backend Developer', 'Backend Developer'],
+    sweMob: ['Senior Mobile Developer', 'Mobile Developer'],
+    sweQa: ['Senior QA Engineer', 'QA Engineer', 'QA Lead'],
+    sweDevOps: ['Senior DevOps Engineer', 'DevOps Engineer'],
+    strategic: ['Chief Strategy Officer', 'Strategy Manager', 'Strategy Analyst'],
+    hr: ['Chief Human Resources Officer', 'HR Manager', 'HR Executive', 'HR Officer', 'HR Intern'],
+    fin: ['Chief Financial Officer', 'Chief Accounting Officer', 'Finance Manager', 'Finance Officer', 'Accountant'],
+    ops: ['Chief Operating Officer', 'Operations Manager', 'Operations Coordinator'],
+    opsFe: ['Field Engineer', 'Senior Field Engineer'],
+    opsInst: ['Installation Supervisor', 'Installation Technician'],
+    marketing: ['Chief Marketing Officer', 'Marketing Manager', 'Digital Marketing Specialist', 'Content Marketing Executive'],
+    it: ['Chief Information Officer', 'IT Manager', 'Network Engineer', 'System Administrator'],
+    itSup: ['IT Support Engineer', 'Helpdesk Analyst'],
+    itDev: ['Senior IT Systems Developer', 'IT Systems Developer'],
+    sales: ['Chief Revenue Officer', 'Sales Manager', 'Senior Sales Executive', 'Sales Executive', 'Sales Intern'],
+    salesKhi: ['Karachi Sales Executive'],
+    salesLhr: ['Lahore Sales Executive'],
+    salesIsb: ['Islamabad Sales Executive'],
+    cs: ['Customer Support Manager', 'Support Executive', 'Customer Success Executive'],
+    rnd: ['R&D Manager', 'Research Analyst', 'Product Research Engineer'],
+    legal: ['Chief Legal Officer', 'Chief Compliance Officer', 'Legal Manager', 'Legal Counsel', 'Compliance Officer'],
+    proc: ['Procurement Manager', 'Procurement Officer', 'Vendor Relations Officer'],
+    general: ['Chief Executive Officer', 'General Manager', 'Deputy General Manager', 'Team Lead'],
+    logistics: ['Logistics Manager', 'Distribution Coordinator', 'Warehouse Supervisor'],
+    qa: ['QA Manager', 'Quality Assurance Analyst', 'Test Coordinator'],
+    qualityInspection: ['Quality Inspector', 'Senior Quality Inspector', 'Inspection Supervisor'],
+    pr: ['PR Manager', 'Public Relations Officer', 'Corporate Communications Executive'],
+    facility: ['Facility Manager', 'Maintenance Supervisor', 'Facilities Officer'],
+    dataAnalytics: ['Chief Data Officer', 'Data Analytics Manager', 'Business Intelligence Analyst', 'Data Analyst'],
+    businessDevelopment: ['Business Development Manager', 'Partnerships Executive', 'Market Development Officer'],
+    engineering: ['Engineering Manager', 'Project Engineer', 'Site Engineer'],
+    security: ['Chief Information Security Officer', 'Security Manager', 'Security Officer', 'Security Supervisor'],
+    hse: ['HSE Manager', 'HSE Officer', 'Safety Inspector'],
+  };
+  const DES = {};
+  for (const [deptKey, titles] of Object.entries(DESIGNATIONS_BY_DEPT)) {
+    for (const t of titles) {
+      const r = await client.query(
+        `INSERT INTO designations (title, department_id, is_active)
+         VALUES ($1, $2, true)
+         ON CONFLICT (title) DO UPDATE
+         SET department_id = EXCLUDED.department_id, is_active = true
+         RETURNING id`,
+        [t, D[deptKey]]
+      );
+      DES[t] = r.rows[0].id;
+    }
+  }
+  console.log(`  Designations seeded (${Object.keys(DES).length})`);
+
+  // ── Employment types, job statuses, work modes, locations, shifts ────────
+  const empTypes = ['Full-Time', 'Part-Time', 'Contract', 'Internship', 'Probationary'];
+  const ET = {};
+  for (const n of empTypes) {
+    const r = await client.query(
+      `INSERT INTO employment_types (type_name, is_active) VALUES ($1, true) RETURNING id`,
+      [n]
+    );
+    ET[n] = r.rows[0].id;
+  }
+
+  const jobStatuses = ['Active', 'Probation', 'On Leave', 'Suspended', 'Terminated', 'Resigned'];
+  const JS = {};
+  for (const n of jobStatuses) {
+    const r = await client.query(
+      `INSERT INTO job_statuses (status_name, is_active) VALUES ($1, true) RETURNING id`,
+      [n]
+    );
+    JS[n] = r.rows[0].id;
+  }
+
+  const workModes = ['On-Site', 'Remote', 'Hybrid', 'Field'];
+  const WM = {};
+  for (const n of workModes) {
+    const r = await client.query(
+      `INSERT INTO work_modes (mode_name, is_active) VALUES ($1, true) RETURNING id`,
+      [n]
+    );
+    WM[n] = r.rows[0].id;
+  }
+
+  const workLocs = [
+    'Head Office - Karachi',
+    'Branch Office - Lahore',
+    'Branch Office - Islamabad',
+    'Warehouse - Karachi',
+    'Client Site - Karachi',
+    'Client Site - Lahore',
+  ];
+  const WL = {};
+  for (const n of workLocs) {
+    const r = await client.query(
+      `INSERT INTO work_locations (location_name, is_active) VALUES ($1, true) RETURNING id`,
+      [n]
+    );
+    WL[n] = r.rows[0].id;
+  }
+
+  const shiftsDef = [
+    { name: 'Morning Shift', start: '08:00:00', end: '17:00:00', late: 15 },
+    { name: 'Evening Shift', start: '14:00:00', end: '22:00:00', late: 15 },
+    { name: 'Night Shift', start: '22:00:00', end: '06:00:00', late: 20 },
+    { name: 'Field Shift', start: '09:00:00', end: '18:00:00', late: 30 },
+    { name: 'Flexible Shift', start: '10:00:00', end: '19:00:00', late: 30 },
+  ];
+  const SH = {};
+  for (const s of shiftsDef) {
+    const r = await client.query(
+      `
+      INSERT INTO shifts (name, start_time, end_time, late_after_minutes, is_active)
+      VALUES ($1, $2, $3, $4, true)
+      RETURNING id
+    `,
+      [s.name, s.start, s.end, s.late]
+    );
+    SH[s.name] = r.rows[0].id;
+  }
+
+  console.log('  Lookup tables (employment, job status, work modes, locations, shifts) seeded');
+
+  // ── Roles ────────────────────────────────────────────────────────────────
+  const superPass = await hashPassword('SuperAdmin@123!');
+  const hrMgrPass = await hashPassword('HrManager@123!');
+  const stdPass = await hashPassword('Esspl@2024!');
+
+  const insertRole = async (name, desc, deptId) => {
+    const r = await client.query(
+      `
+      INSERT INTO roles (department_id, role_name, description)
+      VALUES ($1, $2, $3)
+      RETURNING id
+    `,
+      [deptId, name, desc]
+    );
+    roleIds[name] = r.rows[0].id;
+    return r.rows[0].id;
+  };
+
+  await insertRole('super_admin', 'Full access', null);
+  await insertRole('hr_manager', 'HR Manager', D.hr);
+  await insertRole('hr_executive', 'HR Executive', D.hr);
+  await insertRole('department_head', 'Department Head', null);
+  await insertRole('ceo', 'Chief Executive Officer read-only access', null);
+  await insertRole('it_manager', 'IT Manager', D.it);
+  await insertRole('swe_manager', 'Software Engineering Manager', D.swe);
+  await insertRole('tech_lead', 'Technical Lead', D.swe);
+  await insertRole('sales_manager', 'Sales Manager', D.sales);
+  await insertRole('procurement_manager', 'Procurement Manager', D.proc);
+  await insertRole('finance_manager', 'Finance Manager', D.fin);
+  await insertRole('operations_manager', 'Operations Manager', D.ops);
+  await insertRole('employee', 'Standard employee', null);
+
+  const superAdminRoleId = roleIds.super_admin;
+  const hrManagerRoleId = roleIds.hr_manager;
+  const hrExecRoleId = roleIds.hr_executive;
+  const employeeRoleId = roleIds.employee;
+
+  const allPermIds = Object.values(PERM);
+  await client.query(
+    `
+    INSERT INTO role_permissions (role_id, permission_id)
+    SELECT $1::uuid, id FROM permissions
+    ON CONFLICT DO NOTHING
+  `,
+    [superAdminRoleId]
+  );
+
+  await wireRole('hr_manager', [
+    'config:read',
+    'config:write',
+    'employees:read',
+    'employees:write',
+    'employee_attachments:read',
+    'employee_attachments:upload',
+    'salary:read',
+    'salary:write',
+    'allowances:read',
+    'allowances:write',
+    'leave:read',
+    'leave:write',
+    'leave:approve',
+    'leave_capacity:read',
+    'leave_capacity:write',
+    'attendance:read',
+    'attendance:write',
+    'attendance:submit_ho',
+    'calendar:read',
+    'calendar:write',
+    'notifications:read',
+    'notifications:write',
+    'alerts:read',
+    'pending_actions:read',
+    'dashboard:read',
+    'directory:read',
+    'directory:write',
+    'announcements:read',
+    'announcements:write',
+    'penalty_rules:write',
+    'penalties:propose',
+    'penalties:review',
+    'penalties:read_all',
+    'reports:read',
+  ]);
+
+  await wireRole('hr_executive', [
+    'config:read',
+    'employees:read',
+    'employee_attachments:read',
+    'employee_attachments:upload',
+    'leave:read',
+    'attendance:read',
+    'attendance:write',
+    'calendar:read',
+    'notifications:read',
+    'notifications:write',
+    'pending_actions:read',
+    'alerts:read',
+    'dashboard:read',
+    'directory:read',
+    'announcements:read',
+    'penalties:propose',
+    'penalties:read_all',
+  ]);
+
+  await wireRole('department_head', [
+    'employees:self_read',
+    'employees:department_read',
+    'config:read',
+    'leave:department_read',
+    'leave:department_approve',
+    'attendance:department_read',
+    'calendar:read',
+    'calendar:department_write',
+    'notifications:read',
+    'dashboard:department_read',
+    'directory:read',
+    'announcements:read',
+    'announcements:department_write',
+    'penalties:department_read',
+    'penalties:department_propose',
+    'penalties:read_own',
+  ]);
+
+  await wireRole('ceo', [
+    'config:read',
+    'employees:read',
+    'employee_attachments:read',
+    'salary:read',
+    'allowances:read',
+    'leave:read',
+    'leave_capacity:read',
+    'attendance:read',
+    'calendar:read',
+    'notifications:read',
+    'alerts:read',
+    'pending_actions:read',
+    'dashboard:read',
+    'directory:read',
+    'announcements:read',
+    'penalties:read_all',
+    'reports:read',
+    'inventory:read',
+    'purchasing:read',
+  ]);
+
+  await wireRole('it_manager', ['employees:read', 'directory:read', 'calendar:read', 'notifications:read']);
+  await wireRole('swe_manager', ['employees:read', 'directory:read', 'calendar:read', 'notifications:read']);
+  await wireRole('tech_lead', ['employees:read', 'directory:read', 'calendar:read', 'notifications:read']);
+  await wireRole('sales_manager', ['employees:read', 'directory:read', 'dashboard:read']);
+  await wireRole('procurement_manager', ['purchasing:read', 'purchasing:write', 'purchasing:approve', 'inventory:read']);
+  await wireRole('finance_manager', ['salary:read', 'reports:read', 'dashboard:read']);
+  await wireRole('operations_manager', ['attendance:read', 'directory:read', 'dashboard:read']);
+
+  await wireRole('employee', [
+    'employees:self_read',
+    'leave:read',
+    'leave:write',
+    'attendance:read',
+    'notifications:read',
+    'calendar:read',
+    'directory:read',
+    'announcements:read',
+    'penalties:read_own',
+  ]);
+
+  console.log('  Roles and role_permissions seeded');
+
+  // ── Leave types ───────────────────────────────────────────────────────────
+  const ltNames = [
+    'Annual Leave',
+    'Sick Leave',
+    'Casual Leave',
+    'Maternity Leave',
+    'Paternity Leave',
+    'Unpaid Leave',
+    'Compensatory Leave',
+    'Bereavement Leave',
+  ];
+  const LT = {};
+  for (const n of ltNames) {
+    const r = await client.query(
+      `INSERT INTO leave_types (name, is_active) VALUES ($1, true) RETURNING id`,
+      [n]
+    );
+    LT[n] = r.rows[0].id;
+  }
+
+  // ── Allowance types ───────────────────────────────────────────────────────
+  const atNames = [
+    'House Rent Allowance',
+    'Medical Allowance',
+    'Transport Allowance',
+    'Fuel Allowance',
+    'Mobile Allowance',
+    'Utility Allowance',
+    'Performance Bonus',
+    'Overtime Allowance',
+  ];
+  const AT = {};
+  for (const n of atNames) {
+    const r = await client.query(
+      `INSERT INTO allowance_types (field_name, is_active) VALUES ($1, true) RETURNING id`,
+      [n]
+    );
+    AT[n] = r.rows[0].id;
+  }
+
+  // ── Item categories & products (60+) ─────────────────────────────────────
+  const categories = [
+    'CCTV Cameras',
+    'DVR/NVR Systems',
+    'Access Control',
+    'Fire Alarm Systems',
+    'Network Equipment',
+    'Cables & Accessories',
+    'Power Supplies & UPS',
+    'Biometric Devices',
+    'Intercom Systems',
+    'Software Licenses',
+    'Service & Maintenance',
+    'Rental Services',
+    'Cybersecurity Services',
+    'Training & Consulting',
+    'Electrical & Facility Services',
+    'Tools & Hardware',
+    'Consumables',
+  ];
+  const CAT = {};
+  for (const c of categories) {
+    const r = await client.query(
+      `INSERT INTO item_categories (category_name, description) VALUES ($1, $2) RETURNING id`,
+      [c, `${c} stock`]
+    );
+    CAT[c] = r.rows[0].id;
+  }
+
+  const products = [
+    ['Hikvision 2MP Bullet Camera', 'CCTV Cameras', 'ASSET', 'SERIAL'],
+    ['Dahua 4MP Dome Camera', 'CCTV Cameras', 'ASSET', 'SERIAL'],
+    ['CP Plus 5MP PTZ Camera', 'CCTV Cameras', 'ASSET', 'SERIAL'],
+    ['Hikvision 16CH DVR', 'DVR/NVR Systems', 'ASSET', 'SERIAL'],
+    ['Dahua 32CH NVR', 'DVR/NVR Systems', 'ASSET', 'SERIAL'],
+    ['Cisco 24-Port Switch', 'Network Equipment', 'ASSET', 'SERIAL'],
+    ['MikroTik RouterBoard', 'Network Equipment', 'ASSET', 'SERIAL'],
+    ['UniFi Access Point', 'Network Equipment', 'ASSET', 'SERIAL'],
+    ['ZKTeco Access Panel', 'Access Control', 'ASSET', 'SERIAL'],
+    ['Honeywell Smoke Detector', 'Fire Alarm Systems', 'ASSET', 'SERIAL'],
+    ['CAT6 Cable (per meter)', 'Cables & Accessories', 'CONSUMABLE', 'NONE'],
+    ['HDMI Cable 10m', 'Cables & Accessories', 'CONSUMABLE', 'NONE'],
+    ['Power Cable 3-pin', 'Cables & Accessories', 'CONSUMABLE', 'NONE'],
+    ['CCTV Annual Maintenance Contract', 'Service & Maintenance', 'SERVICE', 'NONE'],
+    ['Access Control Software License', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['Cable Ties (pack of 100)', 'Tools & Hardware', 'CONSUMABLE', 'NONE'],
+    ['RJ45 Connectors (pack of 50)', 'Tools & Hardware', 'CONSUMABLE', 'NONE'],
+    ['12V DC PSU', 'Power Supplies & UPS', 'ASSET', 'SERIAL'],
+    ['UPS 3KVA', 'Power Supplies & UPS', 'ASSET', 'SERIAL'],
+    ['Biometric Reader X7', 'Biometric Devices', 'ASSET', 'SERIAL'],
+    ['Video Intercom Kit', 'Intercom Systems', 'ASSET', 'SERIAL'],
+    ['Fiber Patch Cord LC-LC', 'Cables & Accessories', 'CONSUMABLE', 'NONE'],
+    ['PoE Injector 48V', 'Network Equipment', 'ASSET', 'SERIAL'],
+    ['Server Rack 42U', 'Tools & Hardware', 'ASSET', 'SERIAL'],
+    ['Thermal Camera PTZ', 'CCTV Cameras', 'ASSET', 'SERIAL'],
+    ['ANPR Camera', 'CCTV Cameras', 'ASSET', 'SERIAL'],
+    ['Electric Strike Lock', 'Access Control', 'ASSET', 'SERIAL'],
+    ['Door Controller Board', 'Access Control', 'ASSET', 'SERIAL'],
+    ['Surveillance HDD 8TB', 'DVR/NVR Systems', 'ASSET', 'SERIAL'],
+    ['Outdoor Junction Box', 'Tools & Hardware', 'CONSUMABLE', 'NONE'],
+    ['PVC Conduit 25mm', 'Cables & Accessories', 'CONSUMABLE', 'NONE'],
+    ['Battery 12V 7Ah', 'Power Supplies & UPS', 'CONSUMABLE', 'NONE'],
+    ['Face Recognition Terminal', 'Biometric Devices', 'ASSET', 'SERIAL'],
+    ['Elevator COP Integration Kit', 'Access Control', 'ASSET', 'SERIAL'],
+    ['Parking Barrier Arm', 'Access Control', 'ASSET', 'SERIAL'],
+    ['Turnstile Controller', 'Access Control', 'ASSET', 'SERIAL'],
+    ['Alarm Panel 8-Zone', 'Fire Alarm Systems', 'ASSET', 'SERIAL'],
+    ['VESDA Aspirating Detector', 'Fire Alarm Systems', 'ASSET', 'SERIAL'],
+    ['Gas Suppression Nozzle', 'Fire Alarm Systems', 'ASSET', 'SERIAL'],
+    ['Industrial Switch 8-port', 'Network Equipment', 'ASSET', 'SERIAL'],
+    ['LTE Failover Router', 'Network Equipment', 'ASSET', 'IMEI'],
+    ['Explosion-proof Camera', 'CCTV Cameras', 'ASSET', 'SERIAL'],
+    ['Mobile DVR Enclosure IP67', 'DVR/NVR Systems', 'ASSET', 'SERIAL'],
+    ['Solar Panel 150W', 'Power Supplies & UPS', 'ASSET', 'SERIAL'],
+    ['Tower Camera Mast 6m', 'Tools & Hardware', 'ASSET', 'SERIAL'],
+    ['Microwave Link 1Gbps', 'Network Equipment', 'ASSET', 'SERIAL'],
+    ['Fiber OTDR Rental Day', 'Rental Services', 'SERVICE', 'NONE'],
+    ['Site Survey Consulting Day', 'Training & Consulting', 'SERVICE', 'NONE'],
+    ['Commissioning Day Rate', 'Service & Maintenance', 'SERVICE', 'NONE'],
+    ['Training Essentials Seat', 'Training & Consulting', 'SERVICE', 'NONE'],
+    ['Integration API Pack', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['Keyboard for DVR', 'DVR/NVR Systems', 'CONSUMABLE', 'NONE'],
+    ['Mounting Bracket Universal', 'Tools & Hardware', 'CONSUMABLE', 'NONE'],
+    ['Surge Protector PDU', 'Power Supplies & UPS', 'ASSET', 'SERIAL'],
+    ['PDU Monitored 16A', 'Power Supplies & UPS', 'ASSET', 'SERIAL'],
+    ['Ground Resistance Tester', 'Tools & Hardware', 'ASSET', 'SERIAL'],
+    ['Fiber Scope 400x', 'Tools & Hardware', 'ASSET', 'SERIAL'],
+    ['Label Printer Portable', 'Tools & Hardware', 'ASSET', 'SERIAL'],
+    ['Safety Vest Reflective', 'Consumables', 'CONSUMABLE', 'NONE'],
+    ['Hard Hat ANSI', 'Consumables', 'CONSUMABLE', 'NONE'],
+    ['Crimping Tool Kit', 'Tools & Hardware', 'CONSUMABLE', 'NONE'],
+    ['Drill Bit Set Metal', 'Tools & Hardware', 'CONSUMABLE', 'NONE'],
+    ['Forklift Reach Truck Rent Day', 'Rental Services', 'SERVICE', 'NONE'],
+    ['Generator Diesel 50kVA Rent', 'Rental Services', 'SERVICE', 'NONE'],
+    ['Smart Analytics Channel', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['Health Check Quarterly', 'Service & Maintenance', 'SERVICE', 'NONE'],
+    ['Extended Warranty 3yr', 'Service & Maintenance', 'SERVICE', 'NONE'],
+    ['Penetration Test Bundle', 'Cybersecurity Services', 'SERVICE', 'NONE'],
+    ['Vulnerability Scan Quarterly', 'Cybersecurity Services', 'SERVICE', 'NONE'],
+    ['Firewall Rule Review Sprint', 'Cybersecurity Services', 'SERVICE', 'NONE'],
+    ['Guest Wi-Fi Portal Premium', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['SIEM Correlation Rule Pack', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['Container policy gate starter', 'Cybersecurity Services', 'SERVICE', 'NONE'],
+    ['Immutable backup connector Wasabi', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['Drone perimeter patrol lease monthly', 'Rental Services', 'SERVICE', 'NONE'],
+    ['Satellite failover modem BGAN', 'Network Equipment', 'ASSET', 'SERIAL'],
+    ['Mass SMS gateway redundancy pack', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['Incident tabletop cyber drill', 'Cybersecurity Services', 'SERVICE', 'NONE'],
+    ['Forklift inspection checklist digital', 'Software Licenses', 'SERVICE', 'NONE'],
+    ['Cooling tower fill replacement job', 'Electrical & Facility Services', 'SERVICE', 'NONE'],
+    ['Arc flash study lite', 'Electrical & Facility Services', 'SERVICE', 'NONE'],
+    ['Battery recycling drum pickup batch', 'Consumables', 'CONSUMABLE', 'NONE'],
+    ['Certificate of destruction digital vault', 'Cybersecurity Services', 'SERVICE', 'NONE'],
+  ];
+
+  function estimateProductPrice(productName, productType) {
+    const name = productName.toLowerCase();
+    let unit = 10000;
+
+    if (name.includes('thermal')) unit = 475000;
+    else if (name.includes('satellite')) unit = 420000;
+    else if (name.includes('microwave')) unit = 350000;
+    else if (name.includes('penetration')) unit = 350000;
+    else if (name.includes('drone')) unit = 280000;
+    else if (name.includes('explosion')) unit = 265000;
+    else if (name.includes('vesda')) unit = 240000;
+    else if (name.includes('cooling tower')) unit = 220000;
+    else if (name.includes('anpr')) unit = 210000;
+    else if (name.includes('elevator')) unit = 185000;
+    else if (name.includes('ups 3kva')) unit = 185000;
+    else if (name.includes('arc flash')) unit = 185000;
+    else if (name.includes('siem')) unit = 175000;
+    else if (name.includes('incident tabletop')) unit = 165000;
+    else if (name.includes('integration api')) unit = 150000;
+    else if (name.includes('nvr')) unit = 145000;
+    else if (name.includes('barrier')) unit = 145000;
+    else if (name.includes('backup connector')) unit = 145000;
+    else if (name.includes('server rack')) unit = 135000;
+    else if (name.includes('turnstile')) unit = 125000;
+    else if (name.includes('vulnerability')) unit = 125000;
+    else if (name.includes('annual maintenance')) unit = 120000;
+    else if (name.includes('container policy')) unit = 110000;
+    else if (name.includes('cisco')) unit = 98000;
+    else if (name.includes('firewall')) unit = 95000;
+    else if (name.includes('ptz')) unit = 95000;
+    else if (name.includes('mass sms')) unit = 95000;
+    else if (name.includes('access control software')) unit = 85000;
+    else if (name.includes('wi-fi')) unit = 85000;
+    else if (name.includes('tower camera mast')) unit = 82000;
+    else if (name.includes('health check')) unit = 75000;
+    else if (name.includes('face recognition')) unit = 75000;
+    else if (name.includes('ground resistance')) unit = 68000;
+    else if (name.includes('access panel')) unit = 65000;
+    else if (name.includes('certificate of destruction')) unit = 65000;
+    else if (name.includes('extended warranty')) unit = 60000;
+    else if (name.includes('dvr')) unit = 55000;
+    else if (name.includes('biometric')) unit = 52000;
+    else if (name.includes('surveillance hdd')) unit = 47000;
+    else if (name.includes('industrial switch')) unit = 45000;
+    else if (name.includes('intercom')) unit = 45000;
+    else if (name.includes('fiber scope')) unit = 45000;
+    else if (name.includes('generator diesel')) unit = 45000;
+    else if (name.includes('forklift inspection')) unit = 45000;
+    else if (name.includes('unifi')) unit = 42000;
+    else if (name.includes('pdu monitored')) unit = 42000;
+    else if (name.includes('alarm panel')) unit = 36000;
+    else if (name.includes('lte')) unit = 36000;
+    else if (name.includes('battery recycling')) unit = 35000;
+    else if (name.includes('label printer')) unit = 32000;
+    else if (name.includes('forklift reach')) unit = 30000;
+    else if (name.includes('mobile dvr enclosure')) unit = 28500;
+    else if (name.includes('mikrotik')) unit = 28000;
+    else if (name.includes('solar panel')) unit = 26000;
+    else if (name.includes('commissioning')) unit = 25000;
+    else if (name.includes('door controller')) unit = 22000;
+    else if (name.includes('4mp')) unit = 22000;
+    else if (name.includes('site survey')) unit = 15000;
+    else if (name.includes('training')) unit = 12000;
+    else if (name.includes('2mp')) unit = 17700;
+    else if (name.includes('smart analytics')) unit = 18000;
+    else if (name.includes('gas suppression')) unit = 18000;
+    else if (name.includes('otdr rental')) unit = 18000;
+    else if (name.includes('psu')) unit = 10000;
+    else if (name.includes('smoke detector')) unit = 8500;
+    else if (name.includes('strike lock')) unit = 8500;
+    else if (name.includes('surge')) unit = 8500;
+    else if (name.includes('poe injector')) unit = 5500;
+    else if (name.includes('crimping')) unit = 5500;
+    else if (name.includes('battery 12v')) unit = 4500;
+    else if (name.includes('keyboard')) unit = 3500;
+    else if (name.includes('drill bit')) unit = 2800;
+    else if (name.includes('hdmi')) unit = 2500;
+    else if (name.includes('mounting bracket')) unit = 1500;
+    else if (name.includes('hard hat')) unit = 1200;
+    else if (name.includes('junction box')) unit = 1200;
+    else if (name.includes('rj45')) unit = 1200;
+    else if (name.includes('safety vest')) unit = 950;
+    else if (name.includes('fiber patch')) unit = 900;
+    else if (name.includes('cable ties')) unit = 650;
+    else if (name.includes('power cable')) unit = 450;
+    else if (name.includes('pvc conduit')) unit = 250;
+    else if (name.includes('cat6 cable')) unit = 120;
+    else if (productType === 'SERVICE') unit = 25000;
+    else if (productType === 'CONSUMABLE') unit = 1200;
+
+    const margin = productType === 'SERVICE' ? 0.72 : productType === 'CONSUMABLE' ? 0.68 : 0.82;
+    return [unit, Math.round(unit * margin)];
+  }
+
+  const PROD = {};
+  for (const [pname, cat, ptype, track] of products) {
+    const [unitPrice, costPrice] = estimateProductPrice(pname, ptype);
+    const r = await client.query(
+      `
+      INSERT INTO products (product_name, category_id, product_type, tracking_type, quantity, unit_price, cost_price)
+      VALUES ($1, $2, $3::text, $4::text, 0, $5, $6)
+      RETURNING id
+    `,
+      [pname, CAT[cat], ptype, track, unitPrice, costPrice]
+    );
+    PROD[pname] = r.rows[0].id;
+  }
+  console.log(`  Products seeded (${products.length})`);
+
+  // Continue in part 2 (employees + attendance + procurement) — appended below
+  await seedEmployeesAndHR(client, {
+    D,
+    DES,
+    ET,
+    JS,
+    WM,
+    WL,
+    SH,
+    LT,
+    AT,
+    PERM,
+    roleIds,
+    hrManagerRoleId,
+    hrExecRoleId,
+    employeeRoleId,
+    superAdminRoleId,
+    stdPass,
+    hrMgrPass,
+    superPass,
+    PROD,
+  });
+}
+
+async function main() {
+  if (!process.env.DATABASE_URL) {
+    console.error('DATABASE_URL is required (.env)');
+    process.exit(1);
+  }
+  console.log('Starting ESSPL master_seed — 2020 to 2026-05-12');
+  const client = await pool.connect();
+  try {
+    await truncateAll(client);
+    console.log('Truncated all tables');
+
+    await client.query('BEGIN');
+    await seedViaPool(client);
+    await client.query('COMMIT');
+    console.log('Pool seed committed');
+
+    await bootstrapVerify(client);
+    await seedViaAPI();
+    console.log('Done.');
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Seed failed:', e);
+    process.exitCode = 1;
+  } finally {
+    client.release();
+    await pool.end();
+  }
+}
+
+main();

@@ -1,0 +1,189 @@
+import { sendSuccess } from '../../utils/respond.js';
+import * as leaveService from './leave.service.js';
+import { recordRequestActivity } from '../audit/audit.service.js';
+import { resolveDepartmentScope } from '../department-scope/department-scope.service.js';
+
+function getRequestScope(req) {
+  return resolveDepartmentScope({
+    roleId: req.user.role_id,
+    userId: req.user.user_id,
+    employeeId: req.user.employee_id,
+  });
+}
+
+export async function getLeaveRequests(req, res, next) {
+  try {
+    const roleName = await leaveService.getRoleName(req.user.role_id);
+    if (roleName === 'employee') {
+      const result = await leaveService.getMyLeaveRequests(req.user.employee_id);
+      return sendSuccess(res, result, 200);
+    }
+
+    const scope = await getRequestScope(req);
+    const result = await leaveService.getLeaveRequests({
+      status: req.query.status,
+      employee_id: req.query.employee_id,
+      department_id: req.query.department_id,
+      scope,
+    });
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getMyLeaveRequests(req, res, next) {
+  try {
+    const result = await leaveService.getMyLeaveRequests(req.user.employee_id);
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function submitLeaveRequest(req, res, next) {
+  try {
+    const result = await leaveService.submitLeaveRequest(req.user.employee_id, {
+      ...req.body,
+      created_by: req.user.user_id,
+    });
+    await recordRequestActivity(req, {
+      action: 'LEAVE_REQUEST_SUBMITTED',
+      entityType: 'leave',
+      entityId: result?.id || null,
+      meta: { employee_id: req.user.employee_id, leave_request_id: result?.id || null },
+    });
+    return sendSuccess(res, result, 201);
+  } catch (error) {
+    if (error.code === 'CAPACITY_EXCEEDED' && error.details) {
+      return res.status(409).json({ success: false, error: { code: error.code, message: error.message, ...error.details } });
+    }
+    return next(error);
+  }
+}
+
+export async function approveLeave(req, res, next) {
+  try {
+    const scope = await getRequestScope(req);
+    const result = await leaveService.approveLeave(req.params.id, req.user.user_id, scope);
+    await recordRequestActivity(req, {
+      action: 'LEAVE_REQUEST_APPROVED',
+      entityType: 'leave',
+      entityId: req.params.id,
+      meta: { leave_request_id: req.params.id },
+    });
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function rejectLeave(req, res, next) {
+  try {
+    const scope = await getRequestScope(req);
+    const result = await leaveService.rejectLeave(req.params.id, req.user.user_id, req.body.reason, scope);
+    await recordRequestActivity(req, {
+      action: 'LEAVE_REQUEST_REJECTED',
+      entityType: 'leave',
+      entityId: req.params.id,
+      meta: { leave_request_id: req.params.id, reason: req.body.reason || null },
+    });
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function earlyReturn(req, res, next) {
+  try {
+    const result = await leaveService.earlyReturn(req.params.id, req.user.user_id);
+    await recordRequestActivity(req, {
+      action: 'LEAVE_EARLY_RETURN_RECORDED',
+      entityType: 'leave',
+      entityId: req.params.id,
+      meta: { leave_request_id: req.params.id },
+    });
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getLeaveBalances(req, res, next) {
+  try {
+    const roleName = await leaveService.getRoleName(req.user.role_id);
+    if (roleName === 'employee') {
+      const result = await leaveService.getLeaveBalances(req.user.employee_id);
+      return sendSuccess(res, result, 200);
+    }
+
+    const scope = await getRequestScope(req);
+    const result = await leaveService.getLeaveBalancesAll({
+      department_id: req.query.department_id,
+      location_id: req.query.location_id,
+      shift_id: req.query.shift_id,
+      year: req.query.year ? Number(req.query.year) : undefined,
+      scope,
+    });
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getMyLeaveBalances(req, res, next) {
+  try {
+    const result = await leaveService.getLeaveBalances(req.user.employee_id);
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function initializeYearlyLeaveBalances(req, res, next) {
+  try {
+    const result = await leaveService.initializeYearlyBalances(req.body.year);
+    await recordRequestActivity(req, {
+      action: 'LEAVE_BALANCES_INITIALIZED',
+      entityType: 'leave_balances',
+      meta: { year: req.body.year, created_count: Array.isArray(result) ? result.length : undefined },
+    });
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getLeaveBalanceSummary(req, res, next) {
+  try {
+    const scope = await getRequestScope(req);
+    const result = await leaveService.getLeaveBalanceSummary({
+      department_id: req.query.department_id,
+      location_id: req.query.location_id,
+      shift_id: req.query.shift_id,
+      year: req.query.year ? Number(req.query.year) : undefined,
+      scope,
+    });
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getLeaveCalendar(req, res, next) {
+  try {
+    const roleName = await leaveService.getRoleName(req.user.role_id);
+    const scope = await getRequestScope(req);
+    const result = await leaveService.getLeaveCalendar({
+      month: Number(req.query.month || new Date().getMonth() + 1),
+      year: Number(req.query.year || new Date().getFullYear()),
+      department_id: req.query.department_id,
+      branch_id: req.query.branch_id,
+      employee_id: roleName === 'employee' ? req.user.employee_id : undefined,
+      scope,
+    });
+    return sendSuccess(res, result, 200);
+  } catch (error) {
+    return next(error);
+  }
+}

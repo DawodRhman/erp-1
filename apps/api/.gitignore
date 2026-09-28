@@ -1,0 +1,41 @@
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+
+
+.postman
+*postman*
+responsee.md
+routes.json
+# Coverage
+coverage
+*.lcov
+
+# Build output
+dist
+build
+.claude
+# Environment files
+.env
+.env*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Qwen AI local data
+.qwen/
+.vercel

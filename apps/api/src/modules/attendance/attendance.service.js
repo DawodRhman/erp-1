@@ -1,0 +1,758 @@
+import pool from '../../config/db.js';
+import { AppError } from '../../utils/errors.js';
+
+async function userHasPermissionByUserId(userId, permissionKey) {
+  const result = await pool.query(
+    `
+      SELECT 1
+      FROM public.users u
+      JOIN public.role_permissions rp ON rp.role_id = u.role_id
+      JOIN public.permissions p ON p.id = rp.permission_id
+      WHERE u.id = $1 AND p.permission_key = $2
+      LIMIT 1
+    `,
+    [userId, permissionKey]
+  );
+
+  return result.rowCount > 0;
+}
+
+async function getRoleName(roleId) {
+  const result = await pool.query(
+    `SELECT role_name FROM public.roles WHERE id = $1 LIMIT 1`,
+    [roleId]
+  );
+
+  return result.rows[0]?.role_name || null;
+}
+
+function computeLateMinutes(checkIn, shiftStart, lateAfterMinutes) {
+  if (!checkIn || !shiftStart) {
+    return 0;
+  }
+
+  const checkInDate = new Date(`1970-01-01T${checkIn}Z`);
+  const shiftStartDate = new Date(`1970-01-01T${shiftStart}Z`);
+  const lateThreshold = new Date(shiftStartDate.getTime() + Number(lateAfterMinutes || 0) * 60000);
+
+  if (checkInDate <= lateThreshold) {
+    return 0;
+  }
+
+  return Math.floor((checkInDate.getTime() - lateThreshold.getTime()) / 60000);
+}
+
+function mapAttendanceRows(rows, date) {
+  return rows.map((row) => {
+    const synthetic = !row.attendance_id;
+    const isOnLeave = Boolean(row.leave_id);
+
+    const status = isOnLeave
+      ? 'on_leave'
+      : row.status || 'absent';
+
+    const notes = isOnLeave ? 'On approved leave' : row.notes;
+
+    return {
+      attendance_id: row.attendance_id,
+      employee_id: row.employee_id,
+      name: row.name,
+      designation: row.designation,
+      shift: {
+        id: row.shift_id,
+        name: row.shift_name,
+        expected_in: row.start_time,
+        expected_out: row.end_time,
+        late_after_minutes: row.late_after_minutes,
+      },
+      date: row.date || date,
+      check_in: row.check_in,
+      check_out: row.check_out,
+      status,
+      notes,
+      ack: row.ack || false,
+      state: row.state || 'draft',
+      late_by_minutes: computeLateMinutes(row.check_in, row.start_time, row.late_after_minutes),
+      read_only_notes: isOnLeave,
+      synthetic,
+    };
+  });
+}
+
+async function getEmployeeAttendanceSheet(date, employeeId) {
+  const result = await pool.query(
+    `
+      SELECT
+        ei.employee_id,
+        ei.name,
+        d.title AS designation,
+        ji.work_location_id,
+        ji.shift_id,
+        s.name AS shift_name,
+        s.start_time,
+        s.end_time,
+        s.late_after_minutes,
+        a.id AS attendance_id,
+        a.date,
+        a.check_in,
+        a.check_out,
+        a.status,
+        a.notes,
+        a.ack,
+        a.state,
+        lr.id AS leave_id
+      FROM public.job_info ji
+      JOIN public.employee_info ei ON ei.employee_id = ji.employee_id
+      LEFT JOIN public.designations d ON d.id = ji.designation_id
+      LEFT JOIN public.shifts s ON s.id = ji.shift_id
+      LEFT JOIN public.attendance a
+        ON a.employee_id = ji.employee_id
+       AND a.date = $1
+      LEFT JOIN public.leave_requests lr
+        ON lr.employee_id = ji.employee_id
+       AND lr.status = 'approved'
+       AND $1::date BETWEEN lr.start_date AND COALESCE(lr.end_by_force, lr.end_date)
+      WHERE ji.employee_id = $2
+      LIMIT 1
+    `,
+    [date, employeeId]
+  );
+
+  if (result.rowCount === 0) {
+    throw new AppError(404, 'NOT_FOUND', 'Employee attendance context not found.');
+  }
+
+  return {
+    date,
+    location_id: result.rows[0].work_location_id,
+    rows: mapAttendanceRows(result.rows, date),
+  };
+}
+
+export async function getAttendanceSheet(date, locationId, callerEmployeeId, roleId, scope = null) {
+  const selectedDate = date || new Date().toISOString().slice(0, 10);
+  const roleName = await getRoleName(roleId);
+
+  if (roleName === 'employee') {
+    return getEmployeeAttendanceSheet(selectedDate, callerEmployeeId);
+  }
+
+  if (scope) {
+    if (scope.work_location_id && locationId !== scope.work_location_id) {
+      throw new AppError(
+        403,
+        'OUTSIDE_DEPARTMENT_SCOPE',
+        'Attendance location is outside your assigned department scope.'
+      );
+    }
+  } else if (roleName !== 'super_admin') {
+    const callerLocation = await pool.query(
+      `SELECT work_location_id FROM public.job_info WHERE employee_id = $1 LIMIT 1`,
+      [callerEmployeeId]
+    );
+
+    if (callerLocation.rowCount === 0 || callerLocation.rows[0].work_location_id !== locationId) {
+      throw new AppError(403, 'FORBIDDEN', 'Cannot access attendance for another location.');
+    }
+  }
+
+  const attendanceParams = [selectedDate, locationId];
+  const scopeFilters = [];
+  if (scope?.department_id) {
+    attendanceParams.push(scope.department_id);
+    scopeFilters.push(`ji.department_id = $${attendanceParams.length}`);
+  }
+
+  const employeesResult = await pool.query(
+    `
+      SELECT
+        ei.employee_id,
+        ei.name,
+        d.title AS designation,
+        ji.shift_id,
+        s.name AS shift_name,
+        s.start_time,
+        s.end_time,
+        s.late_after_minutes,
+        a.id AS attendance_id,
+        a.date,
+        a.check_in,
+        a.check_out,
+        a.status,
+        a.notes,
+        a.ack,
+        a.state,
+        lr.id AS leave_id
+      FROM public.job_info ji
+      JOIN public.employee_info ei ON ei.employee_id = ji.employee_id
+      LEFT JOIN public.designations d ON d.id = ji.designation_id
+      LEFT JOIN public.shifts s ON s.id = ji.shift_id
+      LEFT JOIN public.attendance a
+        ON a.employee_id = ji.employee_id
+       AND a.date = $1
+      LEFT JOIN public.leave_requests lr
+        ON lr.employee_id = ji.employee_id
+       AND lr.status = 'approved'
+       AND $1::date BETWEEN lr.start_date AND COALESCE(lr.end_by_force, lr.end_date)
+      WHERE ji.work_location_id = $2
+      ${scopeFilters.length ? `AND ${scopeFilters.join(' AND ')}` : ''}
+      ORDER BY ei.employee_id ASC
+    `,
+    attendanceParams
+  );
+
+  return {
+    date: selectedDate,
+    location_id: locationId,
+    rows: mapAttendanceRows(employeesResult.rows, selectedDate),
+  };
+}
+
+export async function saveAttendanceSheet(date, locationId, rows, markedByUserId) {
+  const lockCheck = await pool.query(
+    `
+      SELECT 1
+      FROM public.attendance a
+      JOIN public.job_info ji ON ji.employee_id = a.employee_id
+      WHERE a.date = $1
+        AND ji.work_location_id = $2
+        AND a.state IN ('submitted', 'locked')
+      LIMIT 1
+    `,
+    [date, locationId]
+  );
+
+  if (lockCheck.rowCount > 0) {
+    throw new AppError(409, 'SHEET_LOCKED', 'Attendance sheet is locked for editing.');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    for (const row of rows) {
+      const shiftResult = await client.query(
+        `SELECT shift_id FROM public.job_info WHERE employee_id = $1 AND work_location_id = $2 LIMIT 1`,
+        [row.employee_id, locationId]
+      );
+
+      if (shiftResult.rowCount === 0) {
+        throw new AppError(404, 'NOT_FOUND', `Employee ${row.employee_id} not found in location.`);
+      }
+
+      const shiftId = shiftResult.rows[0].shift_id;
+
+      await client.query(
+        `
+          INSERT INTO public.attendance (
+            employee_id,
+            shift_id,
+            date,
+            check_in,
+            check_out,
+            status,
+            notes,
+            marked_by,
+            state,
+            ack
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'saved', COALESCE($9, false))
+          ON CONFLICT (employee_id, date)
+          DO UPDATE SET
+            shift_id = EXCLUDED.shift_id,
+            check_in = EXCLUDED.check_in,
+            check_out = EXCLUDED.check_out,
+            status = EXCLUDED.status,
+            notes = EXCLUDED.notes,
+            marked_by = EXCLUDED.marked_by,
+            state = 'saved',
+            updated_at = now()
+        `,
+        [
+          row.employee_id,
+          shiftId,
+          date,
+          row.check_in || null,
+          row.check_out || null,
+          row.status,
+          row.notes || null,
+          markedByUserId,
+          row.ack,
+        ]
+      );
+
+      await client.query(
+        `
+          INSERT INTO public.notifications (user_id, role, type, message, created_by)
+          SELECT u.id, NULL, 'attendance_marked', $2, $3
+          FROM public.users u
+          WHERE u.employee_id = $1
+        `,
+        [
+          row.employee_id,
+          `Your attendance for ${date} has been recorded. Status: ${row.status}. Please acknowledge.`,
+          markedByUserId,
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    return {
+      saved_count: rows.length,
+      date,
+      state: 'saved',
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function acknowledgeAttendance(attendanceId, employeeId) {
+  const attendanceResult = await pool.query(
+    `SELECT * FROM public.attendance WHERE id = $1 LIMIT 1`,
+    [attendanceId]
+  );
+
+  if (attendanceResult.rowCount === 0) {
+    throw new AppError(404, 'NOT_FOUND', 'Attendance record not found.');
+  }
+
+  const attendance = attendanceResult.rows[0];
+
+  if (attendance.employee_id !== employeeId) {
+    throw new AppError(403, 'FORBIDDEN', 'You can acknowledge only your own attendance.');
+  }
+
+  if (attendance.state === 'submitted' || attendance.state === 'locked') {
+    throw new AppError(409, 'SHEET_LOCKED', 'Attendance sheet is locked.');
+  }
+
+  const updated = await pool.query(
+    `
+      UPDATE public.attendance
+      SET ack = true,
+          updated_at = now()
+      WHERE id = $1
+      RETURNING id, employee_id, shift_id, date, check_in, check_out, status, notes, marked_by, state, ack
+    `,
+    [attendanceId]
+  );
+
+  return updated.rows[0];
+}
+
+export async function submitAttendanceCorrectionRequest(payload, employeeId, requestedByUserId) {
+  const attendanceResult = await pool.query(
+    `
+      SELECT id, employee_id, date, check_in, check_out, status, state
+      FROM public.attendance
+      WHERE employee_id = $1
+        AND date = $2
+      LIMIT 1
+    `,
+    [employeeId, payload.date]
+  );
+
+  if (attendanceResult.rowCount === 0) {
+    throw new AppError(404, 'ATTENDANCE_NOT_FOUND', 'Attendance record not found for the selected date.');
+  }
+
+  const attendance = attendanceResult.rows[0];
+  const duplicateResult = await pool.query(
+    `
+      SELECT id
+      FROM public.attendance_correction_requests
+      WHERE attendance_id = $1
+        AND status = 'submitted'
+      LIMIT 1
+    `,
+    [attendance.id]
+  );
+
+  if (duplicateResult.rowCount > 0) {
+    throw new AppError(
+      409,
+      'ATTENDANCE_CORRECTION_PENDING',
+      'A correction request is already pending for this attendance record.'
+    );
+  }
+
+  const insertResult = await pool.query(
+    `
+      INSERT INTO public.attendance_correction_requests (
+        attendance_id,
+        employee_id,
+        date,
+        requested_check_in,
+        requested_check_out,
+        reason,
+        requested_by
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *
+    `,
+    [
+      attendance.id,
+      employeeId,
+      payload.date,
+      payload.requested_check_in || null,
+      payload.requested_check_out || null,
+      payload.reason,
+      requestedByUserId || null,
+    ]
+  );
+
+  await pool.query(
+    `
+      INSERT INTO public.notifications (user_id, role, type, message, created_by)
+      VALUES
+        (NULL, 'super_admin', 'attendance_correction_requested', $1, $2),
+        (NULL, 'hr', 'attendance_correction_requested', $1, $2)
+    `,
+    [
+      `Attendance correction requested by ${employeeId} for ${payload.date}.`,
+      requestedByUserId || null,
+    ]
+  );
+
+  return insertResult.rows[0];
+}
+
+export async function listAttendanceCorrectionRequests({ status, employee_id, date, scope = null } = {}) {
+  const params = [];
+  const where = [];
+
+  if (status) {
+    params.push(status);
+    where.push(`acr.status = $${params.length}`);
+  }
+
+  if (employee_id) {
+    params.push(employee_id);
+    where.push(`acr.employee_id = $${params.length}`);
+  }
+
+  if (date) {
+    params.push(date);
+    where.push(`acr.date = $${params.length}`);
+  }
+
+  if (scope?.department_id) {
+    params.push(scope.department_id);
+    where.push(`ji.department_id = $${params.length}`);
+  }
+
+  if (scope?.work_location_id) {
+    params.push(scope.work_location_id);
+    where.push(`ji.work_location_id = $${params.length}`);
+  }
+
+  const result = await pool.query(
+    `
+      SELECT
+        acr.*,
+        ei.name AS employee_name,
+        d.title AS designation,
+        dep.department_name,
+        reviewer_emp.name AS reviewer_name
+      FROM public.attendance_correction_requests acr
+      JOIN public.employee_info ei ON ei.employee_id = acr.employee_id
+      JOIN public.job_info ji ON ji.employee_id = acr.employee_id
+      LEFT JOIN public.designations d ON d.id = ji.designation_id
+      LEFT JOIN public.departments dep ON dep.id = ji.department_id
+      LEFT JOIN public.users reviewer_user ON reviewer_user.id = acr.reviewed_by
+      LEFT JOIN public.employee_info reviewer_emp ON reviewer_emp.employee_id = reviewer_user.employee_id
+      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+      ORDER BY acr.created_at DESC
+    `,
+    params
+  );
+
+  return result.rows;
+}
+
+export async function reviewAttendanceCorrectionRequest(correctionId, payload, reviewedByUserId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const correctionResult = await client.query(
+      `
+        SELECT *
+        FROM public.attendance_correction_requests
+        WHERE id = $1
+        FOR UPDATE
+      `,
+      [correctionId]
+    );
+
+    if (correctionResult.rowCount === 0) {
+      throw new AppError(404, 'NOT_FOUND', 'Attendance correction request not found.');
+    }
+
+    const correction = correctionResult.rows[0];
+    if (correction.status !== 'submitted') {
+      throw new AppError(409, 'ATTENDANCE_CORRECTION_CLOSED', 'Attendance correction request is already closed.');
+    }
+
+    const approved = payload.decision === 'approved';
+    if (approved) {
+      await client.query(
+        `
+          UPDATE public.attendance
+          SET check_in = COALESCE($2, check_in),
+              check_out = COALESCE($3, check_out),
+              ack = false,
+              notes = COALESCE($4, notes),
+              updated_at = now()
+          WHERE id = $1
+          RETURNING id, employee_id, check_in, check_out
+        `,
+        [
+          correction.attendance_id,
+          correction.requested_check_in || null,
+          correction.requested_check_out || null,
+          payload.review_note || correction.reason,
+        ]
+      );
+    }
+
+    const updateResult = await client.query(
+      `
+        UPDATE public.attendance_correction_requests
+        SET status = $2,
+            review_note = $3,
+            reviewed_by = $4,
+            reviewed_at = now(),
+            updated_at = now()
+        WHERE id = $1
+        RETURNING *
+      `,
+      [
+        correctionId,
+        approved ? 'approved' : 'rejected',
+        payload.review_note || null,
+        reviewedByUserId,
+      ]
+    );
+
+    await client.query(
+      `
+        INSERT INTO public.notifications (user_id, role, type, message, created_by)
+        SELECT u.id, NULL, $2, $3, $4
+        FROM public.users u
+        WHERE u.employee_id = $1
+      `,
+      [
+        correction.employee_id,
+        approved ? 'attendance_correction_approved' : 'attendance_correction_rejected',
+        `Your attendance correction request for ${correction.date} was ${approved ? 'approved' : 'rejected'}.`,
+        reviewedByUserId,
+      ]
+    );
+
+    await client.query('COMMIT');
+    return updateResult.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function submitSheetToHO(date, locationId, submittedByUserId) {
+  const hasPermission = await userHasPermissionByUserId(submittedByUserId, 'attendance:submit_ho');
+  if (!hasPermission) {
+    throw new AppError(403, 'FORBIDDEN', 'Insufficient permission to submit attendance sheet.');
+  }
+
+  const notSavedCheck = await pool.query(
+    `
+      SELECT ji.employee_id, a.state
+      FROM public.job_info ji
+      LEFT JOIN public.attendance a
+        ON a.employee_id = ji.employee_id
+       AND a.date = $1
+      WHERE ji.work_location_id = $2
+        AND COALESCE(a.state, 'draft') <> 'saved'
+      LIMIT 1
+    `,
+    [date, locationId]
+  );
+
+  if (notSavedCheck.rowCount > 0) {
+    throw new AppError(409, 'SHEET_NOT_SAVED', 'All rows must be saved before submission.');
+  }
+
+  const updateResult = await pool.query(
+    `
+      UPDATE public.attendance a
+      SET state = 'submitted',
+          submitted_by = $3,
+          submitted_at = now(),
+          updated_at = now()
+      FROM public.job_info ji
+      WHERE a.employee_id = ji.employee_id
+        AND a.date = $1
+        AND ji.work_location_id = $2
+      RETURNING a.id
+    `,
+    [date, locationId, submittedByUserId]
+  );
+
+  return {
+    submitted_count: updateResult.rowCount,
+    date,
+    state: 'submitted',
+  };
+}
+
+export async function requestUnlock(date, locationId, reason, requestedByUserId) {
+  await pool.query(
+    `
+      INSERT INTO public.notifications (user_id, role, type, message, created_by)
+      VALUES
+      (NULL, 'super_admin', 'unlock_request', $1, $2),
+      (NULL, 'hr', 'unlock_request', $1, $2)
+    `,
+    [
+      `Unlock requested for attendance sheet ${date} at location ${locationId}. Reason: ${reason}`,
+      requestedByUserId,
+    ]
+  );
+
+  return { status: 'unlock_requested' };
+}
+
+export async function approveUnlock(date, locationId, unlockedByUserId, unlockReason) {
+  const hasPermission = await userHasPermissionByUserId(unlockedByUserId, 'attendance:unlock');
+  if (!hasPermission) {
+    throw new AppError(403, 'FORBIDDEN', 'Insufficient permission to unlock attendance sheet.');
+  }
+
+  const result = await pool.query(
+    `
+      UPDATE public.attendance a
+      SET state = 'ho_unlocked',
+          unlocked_by = $3,
+          unlock_reason = $4,
+          unlocked_at = now(),
+          updated_at = now()
+      FROM public.job_info ji
+      WHERE a.employee_id = ji.employee_id
+        AND a.date = $1
+        AND ji.work_location_id = $2
+      RETURNING a.id
+    `,
+    [date, locationId, unlockedByUserId, unlockReason]
+  );
+
+  return { unlocked_count: result.rowCount };
+}
+
+export async function getMonthlyReport(
+  year,
+  month,
+  locationId,
+  filters = {},
+  callerEmployeeId = null,
+  roleId = null,
+  scope = null
+) {
+  const roleName = roleId ? await getRoleName(roleId) : null;
+  const effectiveFilters = {
+    ...filters,
+    employee_id: roleName === 'employee' ? callerEmployeeId : filters.employee_id,
+  };
+  const params = [year, month];
+  const whereExtra = [];
+
+  if (scope?.work_location_id && locationId && locationId !== scope.work_location_id) {
+    throw new AppError(
+      403,
+      'OUTSIDE_DEPARTMENT_SCOPE',
+      'Attendance location is outside your assigned department scope.'
+    );
+  }
+
+  if (locationId) {
+    params.push(locationId);
+    whereExtra.push(`ji.work_location_id = $${params.length}`);
+  }
+
+  if (effectiveFilters.employee_id) {
+    params.push(effectiveFilters.employee_id);
+    whereExtra.push(`ei.employee_id = $${params.length}`);
+  }
+
+  const effectiveDepartmentId = scope?.department_id || effectiveFilters.department_id;
+  if (effectiveDepartmentId) {
+    params.push(effectiveDepartmentId);
+    whereExtra.push(`ji.department_id = $${params.length}`);
+  }
+
+  const report = await pool.query(
+    `
+      SELECT
+        ei.employee_id,
+        ei.name,
+        d.title AS designation,
+        COUNT(*) FILTER (WHERE a.status = 'present')::int AS presents,
+        COUNT(*) FILTER (WHERE a.status = 'absent')::int AS absents,
+        COUNT(*) FILTER (WHERE a.status = 'late')::int AS lates,
+        COUNT(*) FILTER (WHERE a.status = 'half_day')::int AS half_days,
+        COUNT(*) FILTER (WHERE a.status = 'on_leave')::int AS on_leaves
+      FROM public.job_info ji
+      JOIN public.employee_info ei ON ei.employee_id = ji.employee_id
+      LEFT JOIN public.designations d ON d.id = ji.designation_id
+      LEFT JOIN public.attendance a
+        ON a.employee_id = ji.employee_id
+       AND EXTRACT(YEAR FROM a.date) = $1
+       AND EXTRACT(MONTH FROM a.date) = $2
+      ${whereExtra.length ? `WHERE ${whereExtra.join(' AND ')}` : ''}
+      GROUP BY ei.employee_id, ei.name, d.title
+      ORDER BY ei.employee_id ASC
+    `,
+    params
+  );
+
+  const totalWorkingDaysResult = await pool.query(
+    `
+      SELECT COUNT(*)::int AS total
+      FROM generate_series(
+        make_date($1::int, $2::int, 1),
+        (make_date($1::int, $2::int, 1) + INTERVAL '1 month - 1 day')::date,
+        INTERVAL '1 day'
+      ) AS d(day)
+      WHERE EXTRACT(ISODOW FROM d.day) <= 6
+    `,
+    [year, month]
+  );
+
+  const totalWorkingDays = totalWorkingDaysResult.rows[0]?.total || 0;
+
+  return report.rows.map((row) => {
+    const weightedPresent =
+      Number(row.presents || 0) + Number(row.lates || 0) + Number(row.half_days || 0) * 0.5;
+    const attendancePercent =
+      totalWorkingDays > 0 ? Number(((weightedPresent / totalWorkingDays) * 100).toFixed(1)) : 0;
+
+    return {
+      employee_id: row.employee_id,
+      name: row.name,
+      designation: row.designation,
+      presents: Number(row.presents || 0),
+      absents: Number(row.absents || 0),
+      lates: Number(row.lates || 0),
+      half_days: Number(row.half_days || 0),
+      on_leaves: Number(row.on_leaves || 0),
+      total_working_days: totalWorkingDays,
+      attendance_percent: attendancePercent,
+    };
+  });
+}
