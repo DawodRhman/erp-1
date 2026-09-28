@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { verifyToken } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/require-permission.js';
 import * as inventoryController from './inventory.controller.js';
+import * as productImagesController from './product-images.controller.js';
 
 const router = Router();
 
@@ -10,6 +11,7 @@ router.use(verifyToken);
 
 // Summary & Dashboards
 router.get('/summary', requirePermission('inventory:read'), inventoryController.getSummary);
+router.get('/events', requirePermission('inventory:read'), inventoryController.streamInventoryEvents);
 router.get('/work-queue', requirePermission('inventory:read'), inventoryController.getWorkQueue);
 router.get('/movements', requirePermission('inventory:read'), inventoryController.getInventoryMovements);
 router.get('/tokens', requirePermission('inventory:read'), inventoryController.getInventoryTokens);
@@ -21,6 +23,9 @@ router.post('/orders/:orderId/token', requirePermission('inventory:write'), inve
 router.get('/master-settings', requirePermission('inventory:read'), inventoryController.getMasterSettings);
 router.put('/master-settings/company', requirePermission('inventory:admin'), inventoryController.updateCompanySettings);
 router.put('/master-settings/inventory', requirePermission('inventory:admin'), inventoryController.updateInventorySettings);
+router.get('/custom-fields/products', requirePermission('inventory:read'), inventoryController.getProductCustomFields);
+router.post('/custom-fields/products', requirePermission('inventory:admin'), inventoryController.upsertProductCustomField);
+router.delete('/custom-fields/products/:id', requirePermission('inventory:admin'), inventoryController.deleteProductCustomField);
 
 // Categories
 router.get('/categories', requirePermission('inventory:read'), inventoryController.getCategories);
@@ -29,7 +34,10 @@ router.patch('/categories/:id', requirePermission('inventory:admin'), inventoryC
 router.delete('/categories/:id', requirePermission('inventory:admin'), inventoryController.deleteCategory);
 
 // Products
+router.post('/product-images', requirePermission('inventory:write'), productImagesController.receiveProductImage, productImagesController.uploadProductImage);
+router.get('/product-images/:filename', productImagesController.getProductImage);
 router.get('/products', requirePermission('inventory:read'), inventoryController.getProducts);
+router.get('/products/:id', requirePermission('inventory:read'), inventoryController.getProduct);
 router.post('/products', requirePermission('inventory:write'), inventoryController.createProduct);
 router.patch('/products/:id', requirePermission('inventory:write'), inventoryController.updateProduct);
 router.delete('/products/:id', requirePermission('inventory:admin'), inventoryController.deleteProduct);
@@ -80,5 +88,9 @@ router.get('/dispatches', requirePermission('inventory:read'), logisticsControll
 router.get('/dispatches/:id', requirePermission('inventory:read'), logisticsController.getDispatch);
 router.post('/dispatches', requirePermission('inventory:write'), logisticsController.createDispatch);
 router.post('/dispatches/:id/reconcile', requirePermission('inventory:write'), logisticsController.reconcileDispatch);
+router.get('/material-requests', requirePermission('inventory:read'), logisticsController.listMaterialRequests);
+router.post('/dispatches/:id/material-requests', requirePermission('inventory:write'), logisticsController.createMaterialRequest);
+router.patch('/material-requests/:id', requirePermission('inventory:write'), logisticsController.reviewMaterialRequest);
+router.post('/material-requests/:id/issue', requirePermission('inventory:write'), logisticsController.issueMaterialRequest);
 
 export default router;

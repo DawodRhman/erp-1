@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import pool from '../../config/db.js';
 import { AppError } from '../../utils/errors.js';
+import { recordActivityLog } from '../audit/audit.service.js';
 
 async function getPublicTableColumns(tableName) {
   const result = await pool.query(
@@ -38,6 +39,23 @@ async function ensureCrmOrderInfrastructure(client = pool) {
   `);
   await client.query(`ALTER TABLE public.crm_orders ALTER COLUMN token_number DROP NOT NULL`);
   await client.query(`ALTER TABLE public.crm_orders ALTER COLUMN status SET DEFAULT 'PENDING_REVIEW'`);
+  await client.query(`
+    ALTER TABLE public.crm_orders
+      ADD COLUMN IF NOT EXISTS sales_status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+      ADD COLUMN IF NOT EXISTS technical_status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+      ADD COLUMN IF NOT EXISTS client_signoff_status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+      ADD COLUMN IF NOT EXISTS client_signoff_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS client_signoff_name TEXT,
+      ADD COLUMN IF NOT EXISTS client_signoff_note TEXT
+  `);
+  await client.query(`
+    ALTER TABLE public.quotations
+      ADD COLUMN IF NOT EXISTS sales_handoff_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS technical_handoff_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS client_signoff_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS client_signoff_name TEXT,
+      ADD COLUMN IF NOT EXISTS client_signoff_note TEXT
+  `);
 }
 
 async function nextOrderNumber(client) {
@@ -66,18 +84,31 @@ async function ensureOrdersForApprovedQuotations(client = pool) {
           nextval('public.crm_order_number_seq')::int AS seq
         FROM approved_without_order
       )
-      INSERT INTO public.crm_orders (order_number, quotation_id, customer_id, token_number, status)
+      INSERT INTO public.crm_orders (
+        order_number, quotation_id, customer_id, token_number, status,
+        sales_status, technical_status, client_signoff_status
+      )
       SELECT
         'ORD-' || $1::text || '-' || LPAD(seq::text, 4, '0'),
         quotation_id,
         customer_id,
         NULL,
-        'PENDING_REVIEW'
+        'PENDING_REVIEW',
+        'ACCEPTED',
+        'PENDING',
+        'PENDING'
       FROM numbered
       ON CONFLICT (quotation_id) DO NOTHING
     `,
     [year],
   );
+  await client.query(`
+    UPDATE public.quotations q
+    SET sales_handoff_at = COALESCE(q.sales_handoff_at, NOW()), updated_at = NOW()
+    WHERE q.status = 'APPROVED'
+      AND EXISTS (SELECT 1 FROM public.crm_orders o WHERE o.quotation_id = q.id)
+      AND q.sales_handoff_at IS NULL
+  `);
 }
 
 // --- Price Tiers ---
@@ -373,7 +404,7 @@ export async function createQuotation(data) {
     const taxAmount = data.tax_amount !== undefined ? Number(data.tax_amount || 0) : totals.tax_amount;
     const totalAmount = totals.subtotal + taxAmount;
     const requestedStatus = String(data.status || 'DRAFT').toUpperCase();
-    const status = ['DRAFT', 'SENT'].includes(requestedStatus) ? requestedStatus : 'DRAFT';
+    const status = ['DRAFT', 'MANAGEMENT_PENDING', 'MANAGEMENT_APPROVED', 'SENT'].includes(requestedStatus) ? requestedStatus : 'DRAFT';
 
     const quoteValues = {
       quotation_number: quoteNum,
@@ -389,10 +420,11 @@ export async function createQuotation(data) {
       tax_rate: taxRate,
       template_style: data.template_style || 'HBL Sales Tax Invoice',
       status,
+      approval_stage: status === 'DRAFT' ? 'CRM_DRAFT' : status,
       terms: data.terms || 'Payment within 30 days of quotation approval.',
       notes: data.notes || null,
       idempotency_key: idempotencyKey,
-      client_approval_token: data.client_approval_token || randomUUID(),
+      client_approval_token: randomUUID(),
       sent_at: status === 'SENT' ? new Date() : null,
       created_by: data.created_by || null,
     };
@@ -409,6 +441,8 @@ export async function createQuotation(data) {
     const quotation = qRes.rows[0];
 
     await insertQuotationItems(client, quotation.id, items, itemColumns);
+    await recordActivityLog({ userId: data.created_by, action: 'CRM_QUOTATION_CREATED', entityType: 'quotations',
+      entityId: quotation.id, meta: { quotation_number: quoteNum, status, total_amount: totalAmount }, db: client });
 
     // Update lead status if lead_id provided
     if (data.lead_id && quoteColumns.has('lead_id')) {
@@ -429,7 +463,7 @@ export async function createQuotation(data) {
   }
 }
 
-export async function updateQuotation(id, data) {
+export async function updateQuotation(id, data, actorId = null) {
   const quoteColumns = await getPublicTableColumns('quotations');
   const itemColumns = await getPublicTableColumns('quotation_items');
   const items = normalizeQuotationItems(data.items || []);
@@ -447,6 +481,9 @@ export async function updateQuotation(id, data) {
     if (String(quote.status || '').toUpperCase() === 'APPROVED') {
       throw new AppError(409, 'QUOTATION_LOCKED', 'Approved quotations cannot be edited. Create a revision instead.');
     }
+    if (quote.email_delivery_status === 'SENDING') {
+      throw new AppError(409, 'EMAIL_IN_PROGRESS', 'Please wait for email sending to finish before editing the quotation.');
+    }
 
     const quoteValues = {
       customer_id: data.customer_id,
@@ -461,8 +498,11 @@ export async function updateQuotation(id, data) {
       terms: data.terms || quote.terms || 'Payment within 30 days of quotation approval.',
       notes: data.notes || null,
       status: String(data.status || quote.status || 'DRAFT').toUpperCase(),
+      email_delivery_status: 'NOT_SENT',
+      email_error: null,
+      email_error_code: null,
     };
-    const allowedStatuses = ['DRAFT', 'SENT', 'REJECTED', 'EXPIRED'];
+  const allowedStatuses = ['DRAFT', 'MANAGEMENT_PENDING', 'MANAGEMENT_APPROVED', 'SENT', 'REJECTED', 'EXPIRED'];
     if (!allowedStatuses.includes(quoteValues.status)) quoteValues.status = quote.status || 'DRAFT';
     if (quoteValues.status === 'SENT' && quoteColumns.has('sent_at')) quoteValues.sent_at = quote.sent_at || new Date();
 
@@ -479,6 +519,8 @@ export async function updateQuotation(id, data) {
 
     await client.query('DELETE FROM public.quotation_items WHERE quotation_id = $1', [id]);
     await insertQuotationItems(client, id, items, itemColumns);
+    await recordActivityLog({ userId: actorId, action: 'CRM_QUOTATION_UPDATED', entityType: 'quotations',
+      entityId: id, meta: { status: quoteValues.status, total_amount: totalAmount }, db: client });
 
     await client.query('COMMIT');
     return getQuotationById(id);
@@ -493,9 +535,9 @@ export async function updateQuotation(id, data) {
 export async function updateQuotationStatus(id, status, userId = null, data = {}) {
   const quoteColumns = await getPublicTableColumns('quotations');
   const nextStatus = String(status || '').toUpperCase();
-  const allowedStatuses = ['DRAFT', 'SENT', 'APPROVED', 'REJECTED', 'EXPIRED'];
+  const allowedStatuses = ['DRAFT', 'MANAGEMENT_PENDING', 'MANAGEMENT_APPROVED', 'SENT', 'APPROVED', 'REJECTED', 'EXPIRED'];
   if (!allowedStatuses.includes(nextStatus)) {
-    throw new AppError(400, 'INVALID_QUOTATION_STATUS', 'Valid quotation statuses are DRAFT, SENT, APPROVED, REJECTED and EXPIRED.');
+    throw new AppError(400, 'INVALID_QUOTATION_STATUS', 'Valid quotation statuses are DRAFT, MANAGEMENT_PENDING, MANAGEMENT_APPROVED, SENT, APPROVED, REJECTED and EXPIRED.');
   }
   const fields = ['status = $2'];
   const params = [id, nextStatus];
@@ -505,6 +547,21 @@ export async function updateQuotationStatus(id, status, userId = null, data = {}
   }
   if (nextStatus === 'SENT' && quoteColumns.has('sent_at')) {
     fields.push('sent_at = COALESCE(sent_at, NOW())');
+  }
+  if (quoteColumns.has('approval_stage')) {
+    params.push(nextStatus === 'DRAFT' ? 'CRM_DRAFT' : nextStatus);
+    fields.push(`approval_stage = $${params.length}`);
+  }
+  if (nextStatus === 'MANAGEMENT_APPROVED' && quoteColumns.has('management_approved_at')) {
+    fields.push('management_approved_at = NOW()');
+  }
+  if (nextStatus === 'MANAGEMENT_APPROVED' && userId && quoteColumns.has('management_approved_by')) {
+    params.push(userId);
+    fields.push(`management_approved_by = $${params.length}`);
+  }
+  if (nextStatus === 'MANAGEMENT_APPROVED' && data.management_approval_note && quoteColumns.has('management_approval_note')) {
+    params.push(String(data.management_approval_note).trim());
+    fields.push(`management_approval_note = $${params.length}`);
   }
   if (nextStatus === 'SENT' && quoteColumns.has('client_approval_token')) {
     fields.push(`client_approval_token = COALESCE(client_approval_token, gen_random_uuid()::text)`);
@@ -524,12 +581,20 @@ export async function updateQuotationStatus(id, status, userId = null, data = {}
     fields.push(`approval_remarks = $${params.length}`);
   }
 
-  const result = await pool.query(
-    `UPDATE public.quotations SET ${fields.join(', ')} WHERE id = $1 RETURNING *`,
-    params
-  );
-  if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Quotation not found.');
-  return result.rows[0];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      `UPDATE public.quotations SET ${fields.join(', ')} WHERE id = $1
+        AND (status <> 'APPROVED' OR $2::varchar = 'APPROVED') RETURNING *`, params
+    );
+    if (!result.rows[0]) throw new AppError(409, 'QUOTATION_LOCKED', 'Quotation not found or already approved; its decision cannot be changed.');
+    await recordActivityLog({ userId, action: 'CRM_QUOTATION_STATUS_UPDATED', entityType: 'quotations',
+      entityId: id, meta: { status: nextStatus }, db: client });
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (err) { await client.query('ROLLBACK'); throw err; }
+  finally { client.release(); }
 }
 
 export async function getPublicQuotationByToken(token) {
@@ -562,6 +627,9 @@ export async function getPublicQuotationByToken(token) {
     [token],
   );
   if (!qResult.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Quotation link not found.');
+  if (!['SENT', 'APPROVED', 'REJECTED'].includes(qResult.rows[0].status)) {
+    throw new AppError(409, 'QUOTATION_NOT_AVAILABLE', 'This quotation is not available for client review. Please contact CRM.');
+  }
 
   const itemsResult = await pool.query(
     `
@@ -593,62 +661,49 @@ export async function getPublicQuotationByToken(token) {
 }
 
 export async function approvePublicQuotationByToken(token, data = {}) {
-  const quoteColumns = await getPublicTableColumns('quotations');
-  if (!quoteColumns.has('client_approval_token')) {
-    throw new AppError(404, 'NOT_FOUND', 'Client approval links are not enabled.');
-  }
-
-  const fields = [`status = 'APPROVED'`];
-  if (quoteColumns.has('approved_at')) fields.push('approved_at = NOW()');
-  if (quoteColumns.has('client_approved_at')) fields.push('client_approved_at = NOW()');
-  if (quoteColumns.has('approval_remarks')) {
-    fields.push(`approval_remarks = COALESCE($2, approval_remarks)`);
-  }
-  if (quoteColumns.has('updated_at')) fields.push('updated_at = NOW()');
-
-  const params = quoteColumns.has('approval_remarks')
-    ? [token, data.approval_remarks || data.client_name || null]
-    : [token];
-
-  const result = await pool.query(
-    `
-      UPDATE public.quotations
-      SET ${fields.join(', ')}
-      WHERE client_approval_token = $1
-      RETURNING *
-    `,
-    params,
-  );
-  if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Quotation link not found.');
-  return result.rows[0];
+  return decidePublicQuotation(token, 'APPROVED', data.client_name || data.approval_remarks || null);
 }
 
 export async function rejectPublicQuotationByToken(token, data = {}) {
+  const reason = String(data.rejection_reason || data.reason || '').trim();
+  if (!reason) throw new AppError(422, 'REASON_MISSING', 'A rejection reason is mandatory.');
+  return decidePublicQuotation(token, 'REJECTED', reason);
+}
+
+async function decidePublicQuotation(token, status, remarks) {
+  if (remarks && String(remarks).length > 2000) throw new AppError(422, 'INVALID_REMARKS', 'Remarks must be 2000 characters or fewer.');
   const quoteColumns = await getPublicTableColumns('quotations');
   if (!quoteColumns.has('client_approval_token')) {
     throw new AppError(404, 'NOT_FOUND', 'Client approval links are not enabled.');
   }
 
-  const fields = [`status = 'REJECTED'`];
-  const params = [token];
-
-  if (quoteColumns.has('approval_remarks')) {
-    params.push(data.rejection_reason || data.reason || 'Client rejected the quotation.');
-    fields.push(`approval_remarks = $${params.length}`);
-  }
-  if (quoteColumns.has('updated_at')) fields.push('updated_at = NOW()');
-
-  const result = await pool.query(
-    `
-      UPDATE public.quotations
-      SET ${fields.join(', ')}
-      WHERE client_approval_token = $1
-      RETURNING *
-    `,
-    params,
-  );
-  if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Quotation link not found.');
-  return result.rows[0];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const existing = await client.query('SELECT * FROM public.quotations WHERE client_approval_token = $1 FOR UPDATE', [token]);
+    const quote = existing.rows[0];
+    if (!quote) throw new AppError(404, 'NOT_FOUND', 'Quotation link not found.');
+    if (quote.status === status) {
+      await client.query('COMMIT');
+      return { id: quote.id, status, client_approved_at: quote.client_approved_at, approval_remarks: quote.approval_remarks };
+    }
+    if (quote.status !== 'SENT') throw new AppError(409, 'QUOTATION_CLOSED', 'This quotation is not awaiting approval or already has a final decision.');
+    const fields = ['status = $2'];
+    const params = [quote.id, status];
+    if (quoteColumns.has('approval_remarks')) { params.push(remarks ? String(remarks).trim() : null); fields.push(`approval_remarks = $3`); }
+    if (status === 'APPROVED' && quoteColumns.has('approved_at')) fields.push('approved_at = NOW()');
+    if (status === 'APPROVED' && quoteColumns.has('client_approved_at')) fields.push('client_approved_at = NOW()');
+    if (quoteColumns.has('client_reviewed_at')) fields.push('client_reviewed_at = NOW()');
+    if (quoteColumns.has('updated_at')) fields.push('updated_at = NOW()');
+    const result = await client.query(`UPDATE public.quotations SET ${fields.join(', ')} WHERE id = $1 RETURNING *`, params);
+    await recordActivityLog({ action: `CLIENT_QUOTATION_${status}`, entityType: 'quotations', entityId: quote.id,
+      meta: { quotation_number: quote.quotation_number, previous_status: quote.status, status }, db: client });
+    await client.query('COMMIT');
+    if (status === 'APPROVED') await ensureOrdersForApprovedQuotations();
+    const saved = result.rows[0];
+    return { id: saved.id, status: saved.status, client_approved_at: saved.client_approved_at, approval_remarks: saved.approval_remarks };
+  } catch (err) { await client.query('ROLLBACK'); throw err; }
+  finally { client.release(); }
 }
 
 export async function listOrders(filters = {}) {
@@ -726,8 +781,21 @@ export async function convertQuotationToOrder(id, userId = null) {
       [id],
     );
     if (existing.rows[0]) {
+      const accepted = await client.query(
+        `
+          UPDATE public.crm_orders
+          SET sales_status = 'ACCEPTED', updated_at = NOW()
+          WHERE quotation_id = $1
+          RETURNING *
+        `,
+        [id],
+      );
+      await client.query(
+        `UPDATE public.quotations SET sales_handoff_at = COALESCE(sales_handoff_at, NOW()), updated_at = NOW() WHERE id = $1`,
+        [id],
+      );
       await client.query('COMMIT');
-      return existing.rows[0];
+      return { ...existing.rows[0], ...(accepted.rows[0] || {}) };
     }
 
     const quoteRes = await client.query(
@@ -749,11 +817,19 @@ export async function convertQuotationToOrder(id, userId = null) {
     const orderNumber = await nextOrderNumber(client);
     const result = await client.query(
       `
-        INSERT INTO public.crm_orders (order_number, quotation_id, customer_id, token_number, status, created_by)
-        VALUES ($1, $2, $3, NULL, 'PENDING_REVIEW', $4)
+        INSERT INTO public.crm_orders (
+          order_number, quotation_id, customer_id, token_number, status, created_by,
+          sales_status, technical_status, client_signoff_status
+        )
+        VALUES ($1, $2, $3, NULL, 'PENDING_REVIEW', $4, 'ACCEPTED', 'PENDING', 'PENDING')
         RETURNING *
       `,
       [orderNumber, quote.id, quote.customer_id, userId],
+    );
+
+    await client.query(
+      `UPDATE public.quotations SET sales_handoff_at = COALESCE(sales_handoff_at, NOW()), updated_at = NOW() WHERE id = $1`,
+      [quote.id],
     );
 
     await client.query('COMMIT');

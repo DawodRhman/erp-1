@@ -22,6 +22,9 @@ export interface FinanceInvoiceItem {
   description?: string;
   product_name?: string;
   brand_model?: string;
+  brand_make?: string;
+  model_no?: string;
+  product_image_url?: string;
   quantity?: number;
   unit_price?: number;
   gst_rate?: number;
@@ -84,6 +87,10 @@ export interface FinanceCustomer {
   id: string;
   customer_name: string;
   company_name?: string;
+  customer_category?: string;
+  organization_type?: string;
+  service_categories?: string[];
+  service_description?: string;
   email?: string;
   phone?: string;
   address?: string;
@@ -102,6 +109,7 @@ export interface DirectFinanceInvoicePayload {
   po_number?: string;
   work_description: string;
   fbr_invoice_no?: string;
+  change_reason?: string;
   items: FinanceInvoiceItem[];
 }
 

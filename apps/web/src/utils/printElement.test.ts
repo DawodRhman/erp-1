@@ -40,4 +40,15 @@ describe("printElementById", () => {
 
     expect(alert).toHaveBeenCalledWith("Printable content was not found. Please reopen the record and try again.");
   });
+
+  it("fits a clean invoice to A4 without inherited screen minimum widths", () => {
+    vi.spyOn(window, "print").mockImplementation(() => undefined);
+    printElementById("invoice-preview", "Invoice", { cleanPage: true });
+    const css = document.head.querySelector('[data-print-isolated="true"]')?.textContent;
+    expect(css).toContain("margin: 0;");
+    expect(css).toContain("width: 210mm !important;");
+    expect(css).toContain("padding: 10mm !important;");
+    expect(css).toContain("min-width: 0 !important;");
+    window.dispatchEvent(new Event("afterprint"));
+  });
 });

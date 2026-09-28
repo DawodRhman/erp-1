@@ -2,10 +2,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Copy, ExternalLink, Eye, FileText, Pencil, RefreshCw, Send } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToastContext } from "../../context/ToastContext";
+import { useAuthStore } from "../../store/useAuthStore";
 import { CrmButton, EmptyState, ErrorState, LoadingState, PageHeader, card, copyText, crmPage, dateText, input, money, statusBadge, tableWrap, td, th } from "./CrmShared";
-import { CrmQuotation, approvalLink, crmApi } from "./crmApi";
+import { CrmQuotation, approvalLink, crmApi, quotationDeliveryNotice, quotationEmailSetupPending } from "./crmApi";
 
-const statuses = ["ALL", "DRAFT", "SENT", "APPROVED", "REJECTED", "EXPIRED"] as const;
+const statuses = ["ALL", "DRAFT", "MANAGEMENT_PENDING", "MANAGEMENT_APPROVED", "SENT", "APPROVED", "REJECTED", "EXPIRED"] as const;
 
 function quotationSortNumber(value?: string) {
   const match = String(value || "").match(/(\d+)$/);
@@ -15,6 +16,8 @@ function quotationSortNumber(value?: string) {
 export default function QuotationsList() {
   const navigate = useNavigate();
   const { showToast } = useToastContext();
+  const activeRole = useAuthStore((state) => state.activeRole);
+  const canApproveManagement = activeRole === "super_admin" || activeRole === "inv_fin_admin";
   const [searchParams] = useSearchParams();
   const [quotations, setQuotations] = useState<CrmQuotation[]>([]);
   const [query, setQuery] = useState("");
@@ -23,21 +26,25 @@ export default function QuotationsList() {
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
 
-  const load = async () => {
-    setLoading(true);
-    setError("");
+  const load = async (silent = false) => {
+    if (!silent) { setLoading(true); setError(""); }
     try {
       const params = status !== "ALL" ? { status } : undefined;
       setQuotations(await crmApi.listQuotations(params));
     } catch {
-      setError("Quotation list could not be loaded. Saved quotations should appear here after saving.");
+      if (!silent) setError("Quotation list could not be loaded. Saved quotations should appear here after saving.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     load();
+    const refresh = () => { if (document.visibilityState === "visible") load(true); };
+    const timer = window.setInterval(refresh, 2000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [status]);
 
   const filtered = useMemo(() => {
@@ -59,13 +66,32 @@ export default function QuotationsList() {
   const sendQuotation = async (quote: CrmQuotation) => {
     setBusyId(quote.id);
     try {
-      const saved = await crmApi.updateQuotationStatus(quote.id, "SENT");
-      const link = approvalLink(saved.client_approval_token || quote.client_approval_token);
-      if (link) await copyText(link);
-      showToast(link ? "Client approval link copied. Email service can send this link when SMTP is configured." : "Quotation marked as sent.", "success");
+      const saved = quote.status === "SENT" ? await crmApi.sendQuotationEmail(quote.id) : await crmApi.updateQuotationStatus(quote.id, "SENT");
+      const notice = quotationDeliveryNotice(saved);
+      showToast(notice.message, notice.type);
       load();
     } catch (err: any) {
       showToast(err?.response?.data?.error?.message || "Quotation could not be sent.", "error");
+    } finally {
+      setBusyId("");
+    }
+  };
+
+  const updateWorkflowStatus = async (quote: CrmQuotation, status: CrmQuotation["status"]) => {
+    setBusyId(quote.id);
+    try {
+      await crmApi.updateQuotationStatus(quote.id, status);
+      showToast(
+        status === "MANAGEMENT_PENDING"
+          ? "Quotation submitted for management approval."
+          : status === "MANAGEMENT_APPROVED"
+            ? "Management approval saved. Next: send to client review."
+            : "Quotation status updated.",
+        "success",
+      );
+      load();
+    } catch (err: any) {
+      showToast(err?.response?.data?.error?.message || "Quotation status could not be updated.", "error");
     } finally {
       setBusyId("");
     }
@@ -93,8 +119,10 @@ export default function QuotationsList() {
   };
 
   const nextStepFor = (quote: CrmQuotation) => {
-    if (quote.status === "DRAFT") return "Draft: send it to the client";
-    if (quote.status === "SENT") return "Waiting for client approval";
+    if (quote.status === "DRAFT") return "Draft: submit for management approval";
+    if (quote.status === "MANAGEMENT_PENDING") return "Waiting for senior management approval";
+    if (quote.status === "MANAGEMENT_APPROVED") return "Management approved: send to client";
+    if (quote.status === "SENT") return quotationEmailSetupPending(quote) ? "Share client link for approval" : quote.email_delivery_status === "FAILED" ? `Email not sent: ${quote.email_error || "Retry email"}` : "Waiting for client approval";
     if (quote.status === "APPROVED") return quote.order_number ? `Order created: ${quote.order_number}` : "Approved: convert to order";
     if (quote.status === "REJECTED") return "Rejected: edit and resend";
     return "Expired: resend to client";
@@ -107,7 +135,25 @@ export default function QuotationsList() {
         <>
           <CrmButton to={`/crm/quotations/${quote.id}`} tone="light"><Eye size={14} /> View</CrmButton>
           <CrmButton to={`/crm/quotations/${quote.id}/edit`} tone="light"><Pencil size={14} /> Edit</CrmButton>
-          <CrmButton disabled={disabled} onClick={() => sendQuotation(quote)}><Send size={14} /> Send</CrmButton>
+          <CrmButton disabled={disabled} onClick={() => updateWorkflowStatus(quote, "MANAGEMENT_PENDING")}><Send size={14} /> Submit for Approval</CrmButton>
+        </>
+      );
+    }
+    if (quote.status === "MANAGEMENT_PENDING") {
+      return (
+        <>
+          <CrmButton to={`/crm/quotations/${quote.id}`} tone="light"><Eye size={14} /> View</CrmButton>
+          {canApproveManagement
+            ? <CrmButton disabled={disabled} onClick={() => updateWorkflowStatus(quote, "MANAGEMENT_APPROVED")} tone="success"><FileText size={14} /> Approve as Management</CrmButton>
+            : <span style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>Senior management action required</span>}
+        </>
+      );
+    }
+    if (quote.status === "MANAGEMENT_APPROVED") {
+      return (
+        <>
+          <CrmButton to={`/crm/quotations/${quote.id}`} tone="light"><Eye size={14} /> View</CrmButton>
+          <CrmButton disabled={disabled} onClick={() => sendQuotation(quote)}><Send size={14} /> Send to Client</CrmButton>
         </>
       );
     }
@@ -116,7 +162,7 @@ export default function QuotationsList() {
         <>
           <CrmButton to={`/crm/quotations/${quote.id}`} tone="light"><Eye size={14} /> View</CrmButton>
           <CrmButton disabled={!quote.client_approval_token} onClick={() => openClientApproval(quote)} tone="dark"><ExternalLink size={14} /> Open Client Approval</CrmButton>
-          <CrmButton disabled={disabled} onClick={() => sendQuotation(quote)} tone="light"><RefreshCw size={14} /> Resend</CrmButton>
+          {!quotationEmailSetupPending(quote) ? <CrmButton disabled={disabled} onClick={() => sendQuotation(quote)} tone="light"><RefreshCw size={14} /> Resend</CrmButton> : null}
         </>
       );
     }
@@ -165,7 +211,7 @@ export default function QuotationsList() {
             {statuses.map((item) => <option key={item} value={item}>{item === "ALL" ? "All statuses" : item}</option>)}
           </select>
         </label>
-        <CrmButton onClick={load} tone="light"><RefreshCw size={14} /> Refresh</CrmButton>
+        <CrmButton onClick={() => load()} tone="light"><RefreshCw size={14} /> Refresh</CrmButton>
       </section>
 
       {loading ? <LoadingState labelText="Loading quotations..." /> : error ? <ErrorState message={error} /> : filtered.length === 0 ? (

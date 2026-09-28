@@ -543,7 +543,7 @@ export default function Inventory() {
           <div>
             <h1 style={{ fontSize: '24px', fontWeight: '800', margin: 0, letterSpacing: '-0.02em' }}>Inventory & Stock Logistics Management</h1>
             <p style={{ color: '#94a3b8', marginTop: '6px', fontSize: '14px' }}>
-              Real-time warehouse catalog, serial/IMEI tracking, vendor stock-in, and installer field dispatch reconciliations.
+              Real-time warehouse catalog, serial/IMEI tracking, vendor stock-in, field fulfilment and reconciliation.
             </p>
           </div>
         </div>
@@ -666,7 +666,7 @@ export default function Inventory() {
           <div style={{ marginTop: '14px' }}>
             <span style={{ fontSize: '26px', fontWeight: '800', color: '#1d4ed8' }}>{summary?.approved_csr_jobs || workQueue.length || 0}</span>
             <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
-              Converted by CRM and ready for stock, serials and installer handoff
+              Converted by the commercial team and ready for stock assessment and field fulfilment
             </div>
           </div>
         </button>
@@ -764,7 +764,7 @@ export default function Inventory() {
                             }}
                             style={{ border: 'none', borderRadius: '9px', padding: '9px 11px', backgroundColor: '#10b981', color: '#ffffff', fontSize: '12px', fontWeight: 800, cursor: 'pointer' }}
                           >
-                            Create Installer Handoff
+                            Prepare Field Service Assignment
                           </button>
                           <button
                             onClick={() => {
@@ -1475,17 +1475,17 @@ export default function Inventory() {
           <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #ddd6fe', padding: '20px', boxShadow: '0 6px 18px rgba(139,92,246,0.06)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.06em', color: '#7c3aed', textTransform: 'uppercase' }}>Installer / Field Dispatch Example</div>
-                <h2 style={{ margin: '4px 0', fontSize: '20px', fontWeight: 900, color: '#0f172a' }}>Stock goes to installer, then billing opens</h2>
+                <div style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.06em', color: '#7c3aed', textTransform: 'uppercase' }}>Field Service Dispatch Example</div>
+                <h2 style={{ margin: '4px 0', fontSize: '20px', fontWeight: 900, color: '#0f172a' }}>Materials are issued to the field team before billing opens</h2>
                 <p style={{ margin: 0, color: '#64748b', fontSize: '13px', lineHeight: 1.5 }}>
-                  Once serials/items are assigned, inventory creates installer handoff. Installer completes job, unused items return, and finance uses final usage summary for invoice.
+                  Once serials and items are assigned, Inventory prepares the field service assignment. The field team records completion and client sign-off, unused materials are reconciled, and Finance receives the verified billing record.
                 </p>
               </div>
               <button
                 onClick={() => setShowInstallationModal(true)}
                 style={{ border: 'none', borderRadius: '10px', padding: '10px 14px', backgroundColor: '#7c3aed', color: '#ffffff', fontWeight: 800, cursor: 'pointer' }}
               >
-                + Create Field Dispatch
+                + Create Field Service Assignment
               </button>
             </div>
           </div>
@@ -1510,16 +1510,16 @@ export default function Inventory() {
                   customer_name: 'Habib Bank Limited',
                   vehicle_number: 'Branch DHA / Ticket TKT-088',
                   tracker_serial: 'CAM-SERIAL-001',
-                  technician_name: 'Demo Installer',
+                  technician_name: 'Demo Field Technician',
                   status: 'READY_FOR_INSTALLATION',
                   installation_date: new Date().toISOString(),
-                  notes: 'Sample: installer receives stock and returns installed/unused item summary.',
+                  notes: 'Sample: field team receives material and records installed and unused quantities.',
                 } as TrackerInstallation]).map((installation) => (
                   <tr key={installation.id}>
                     <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', fontWeight: 900, color: '#0f172a' }}>{installation.installation_no}</td>
                     <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#334155' }}>{installation.customer_name || 'Client'}</td>
                     <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#64748b' }}>{installation.tracker_serial || installation.vehicle_number || 'Serial pending'}</td>
-                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#334155' }}>{installation.technician_name || 'Installer pending'}</td>
+                    <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9', color: '#334155' }}>{installation.technician_name || 'Field technician pending'}</td>
                     <td style={{ padding: '13px', borderTop: '1px solid #f1f5f9' }}>
                       <span style={{ padding: '5px 9px', borderRadius: 999, backgroundColor: '#ede9fe', color: '#6d28d9', fontSize: '11px', fontWeight: 900 }}>{installation.status}</span>
                     </td>

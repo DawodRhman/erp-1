@@ -25,6 +25,7 @@ import TaxRateControl from "../components/common/TaxRateControl";
 import { apiClient } from "../services/apiClient";
 import {
   FieldDispatch,
+  FieldMaterialRequest,
   InventoryItem,
   InventoryCompanySettings,
   InventoryInstallerUser,
@@ -34,6 +35,7 @@ import {
   InventoryWorkQueueJob,
   ItemCategory,
   Product,
+  ProductCustomFieldDefinition,
   PurchaseOrder,
   PurchaseOrderItem,
   ReturnRequest,
@@ -42,6 +44,8 @@ import {
   inventoryApi,
 } from "../services/inventoryService";
 import { printHtmlDocument } from "../utils/printElement";
+import { useInventoryLiveEvents } from "../hooks/useInventoryLiveEvents";
+import { QRCodeSVG } from "qrcode.react";
 
 type Customer = {
   id: string;
@@ -174,7 +178,7 @@ function tokenReceiptHtml(token: InventoryToken) {
         <div>
           <div style="font-size: 13px; font-weight: 800; letter-spacing: .12em; color: #2563eb;">TRACK360 ERP</div>
           <h1 style="margin: 6px 0 0; font-size: 26px; line-height: 1.1;">Inventory Token Receipt</h1>
-          <p style="margin: 8px 0 0; color: #475569; font-size: 13px;">One token is linked with one approved CRM order for stock, dispatch, returns and billing.</p>
+          <p style="margin: 8px 0 0; color: #475569; font-size: 13px;">One token links the approved order to stock allocation, field fulfilment, reconciliation and billing.</p>
         </div>
         <div style="text-align: right;">
           <div style="font-size: 12px; color: #64748b; font-weight: 700;">Token No</div>
@@ -214,7 +218,7 @@ function tokenReceiptHtml(token: InventoryToken) {
         <div style="font-weight: 900; margin-bottom: 6px;">Receipt Purpose</div>
         <div style="color: #475569; font-size: 13px; line-height: 1.55;">
           This receipt confirms that the approved CRM order has been registered in Inventory and assigned a single tracking token.
-          Stock check, dispatch, installer returns and finance billing must continue against this same token number.
+          Stock checks, material issue, field reconciliation and Finance billing must continue against this same token number.
         </div>
       </section>
 
@@ -306,12 +310,12 @@ function orderStatusHelp(status?: string) {
   const value = orderStatusLabel(status);
   const copy: Record<string, string> = {
     AWAITING_TOKEN: "Order arrived from CRM. Generate token to start stock action.",
-    TOKEN_GENERATED: "Token is ready. Check stock and create dispatch or PO.",
+    TOKEN_GENERATED: "Token is ready. Check stock and prepare field service or a purchase order.",
     STOCK_OK: "All items are available. Dispatch can be created.",
     AWAITING_STOCK: "Some items are short. Purchase order is required.",
     PARTIALLY_DISPATCHED: "Some stock has already been dispatched.",
-    FULLY_DISPATCHED: "All stock is given to installer.",
-    COMPLETED: "Installer work and returns are completed.",
+    FULLY_DISPATCHED: "All required material has been issued to the field team.",
+    COMPLETED: "Field service and material reconciliation are complete.",
     BILL_SENT: "Adjusted bill has been sent to Finance.",
   };
   return copy[value] || "Inventory action is pending.";
@@ -329,9 +333,9 @@ function tokenStatusHelp(status?: string) {
   const value = String(status || "ACTIVE").toUpperCase();
   const copy: Record<string, string> = {
     ACTIVE: "Token generated. Stock action is not dispatched yet.",
-    PARTIALLY_DISPATCHED: "Some items have been sent to installer.",
-    FULLY_DISPATCHED: "All required items have been sent to installer.",
-    COMPLETED: "Job is complete and bill has moved forward.",
+    PARTIALLY_DISPATCHED: "Some required material has been issued to the field team.",
+    FULLY_DISPATCHED: "All required material has been issued to the field team.",
+    COMPLETED: "Field service is complete and the verified billing record has moved forward.",
   };
   return copy[value] || "Token is active.";
 }
@@ -498,15 +502,54 @@ function DataTable({
   );
 }
 
+function TablePager({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const last = Math.min(page * pageSize, total);
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        flexWrap: "wrap",
+        marginTop: 12,
+        color: "#64748b",
+        fontSize: 13,
+        fontWeight: 750,
+      }}
+    >
+      <span>Showing {first}-{last} of {total} records</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Button disabled={page <= 1} onClick={() => onPageChange(page - 1)} tone="light">Previous</Button>
+        <span>Page {Math.min(page, totalPages)} of {totalPages}</span>
+        <Button disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} tone="light">Next</Button>
+      </div>
+    </div>
+  );
+}
+
 function FlowSteps() {
   const steps = [
-    ["1", "CSR creates client request and quotation"],
-    ["2", "Client approval creates token/receipt"],
-    ["3", "Inventory checks stock and purchase gaps"],
-    ["4", "Stock is dispatched to installer"],
-    ["5", "Installer returns unused items and adds field purchases"],
-    ["6", "CRM approves billing"],
-    ["7", "Finance generates invoice"],
+    ["1", "CRM records the client requirement and prepares a quotation"],
+    ["2", "Senior Management reviews and approves the quotation"],
+    ["3", "The client reviews and accepts the approved offer"],
+    ["4", "Inventory allocates stock or completes procurement"],
+    ["5", "The field team completes delivery or deployment with client sign-off"],
+    ["6", "Inventory reconciles issued, used and returned material"],
+    ["7", "Finance verifies billing and issues the invoice"],
   ];
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 12, marginBottom: 18 }}>
@@ -592,6 +635,7 @@ function useInventoryFlowData() {
   useEffect(() => {
     load();
   }, []);
+  useInventoryLiveEvents(load);
 
   return { summary, workQueue, products, items, vendors, purchaseOrders, dispatches, tokens, loading, reload: load };
 }
@@ -621,8 +665,8 @@ export function CrmDashboardPage() {
   return (
     <div className="flow-page-shell" style={pageShell}>
       <Header
-        eyebrow="CSR / CRM Service"
-        title="Client Request, Quotation and Approval"
+        eyebrow="Client & Commercial Workspace"
+        title="Client Requirement, Quotation and Approval"
         text="CRM activity and next actions."
         actions={<Button to="/crm/quotations/new" tone="success"><Plus size={16} /> New Quotation</Button>}
       />
@@ -670,7 +714,7 @@ export function CrmLeadsPage() {
 
   return (
     <div className="flow-page-shell" style={pageShell}>
-      <Header eyebrow="CSR / CRM" title="Sales Leads Pipeline" text="Manage client inquiries." actions={<Button onClick={() => setShowForm(true)}><Plus size={16} /> Add Lead</Button>} />
+      <Header eyebrow="Client & Commercial" title="Sales Leads Pipeline" text="Manage client inquiries." actions={<Button onClick={() => setShowForm(true)}><Plus size={16} /> Add Lead</Button>} />
       <div style={{ ...card, padding: 14, marginBottom: 14, display: "flex", gap: 12 }}>
         <SearchBox value={q} onChange={setQ} placeholder="Search lead, customer, contact or status" />
         <Button to="/crm/quotations/new" tone="success"><FileText size={16} /> Create Quotation</Button>
@@ -729,7 +773,7 @@ export function CrmClientsPage() {
 
   return (
     <div className="flow-page-shell" style={pageShell}>
-      <Header eyebrow="CSR / CRM" title="Client Directory" text="Manage client records." actions={<Button onClick={() => setShowForm(true)}><Plus size={16} /> Add Client</Button>} />
+      <Header eyebrow="Client & Commercial" title="Client Directory" text="Manage client records." actions={<Button onClick={() => setShowForm(true)}><Plus size={16} /> Add Client</Button>} />
       <div style={{ ...card, padding: 14, marginBottom: 14, display: "flex", gap: 12 }}>
         <SearchBox value={q} onChange={setQ} placeholder="Search client, email, phone or contact person" />
       </div>
@@ -825,7 +869,7 @@ export function CrmQuotationsPage() {
 
   return (
     <div className="flow-page-shell" style={pageShell}>
-      <Header eyebrow="CSR / CRM" title="Quotations Gallery" text="Create, send and track quotations." actions={<Button to="/crm/quotations/new" tone="success"><Plus size={16} /> New Quotation</Button>} />
+      <Header eyebrow="Client & Commercial" title="Quotations Gallery" text="Create, send and track quotations." actions={<Button to="/crm/quotations/new" tone="success"><Plus size={16} /> New Quotation</Button>} />
       <div style={{ ...card, padding: 14, marginBottom: 14, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <SearchBox value={q} onChange={setQ} placeholder="Search quotation number, client or status" />
         <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} style={{ ...input, width: 220 }}>
@@ -955,7 +999,7 @@ export function CrmCreateQuotationPage() {
 
   return (
     <div className="flow-page-shell" style={pageShell}>
-      <Header eyebrow="CSR / CRM" title="Create Client Quotation" text="Add catalog or custom items." />
+      <Header eyebrow="Client & Commercial" title="Create Client Quotation" text="Add catalog or custom items." />
       <form onSubmit={(event) => { event.preventDefault(); submitQuotation("DRAFT"); }} style={{ display: "grid", gap: 14 }}>
         <div style={{ ...card, padding: 18, display: "grid", gridTemplateColumns: "1.4fr .8fr .8fr", gap: 12 }}>
           <label>
@@ -1100,7 +1144,7 @@ export function ClientQuotationApprovalPage() {
           <div style={{ color: "#bfdbfe", fontWeight: 900, fontSize: 12, letterSpacing: ".08em", textTransform: "uppercase" }}>TRACK360 Client Approval</div>
           <h1 style={{ margin: "10px 0 8px" }}>Quotation {quotation.quotation_number}</h1>
           <p style={{ margin: 0, color: "#dbeafe" }}>
-            Review the quotation items below. Once approved, the job moves to Inventory for stock and installer dispatch.
+            Review the quotation items below. After Management approval and client acceptance, the order moves to Inventory for fulfilment.
           </p>
         </div>
 
@@ -1138,7 +1182,7 @@ export function ClientQuotationApprovalPage() {
             <input style={input} value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Your name or approval note" />
           </label>
           <button className="btn btn-primary" disabled={approving || quotation.status === "APPROVED"} onClick={approve}>
-            {quotation.status === "APPROVED" ? "Already Approved" : approving ? "Approving..." : "Approve Quotation"}
+            {quotation.status === "APPROVED" ? "Already Accepted" : approving ? "Saving..." : "I Accept This Offer"}
           </button>
         </div>
       </div>
@@ -1151,16 +1195,16 @@ export function InventoryFlowDashboardPage() {
   const cards = [
     ["Dashboard", summary?.total_products || products.length, "/inventory-dashboard", "Live stock, dispatch, return and low-stock health"],
     ["Incoming Orders", summary?.pending_incoming_orders || workQueue.length, "/inventory/queue", "CRM converted orders waiting for inventory action"],
-    ["Token Management", summary?.active_tokens || tokens.length, "/inventory/tokens", "Generated receipts linked one-to-one with orders"],
+    ["Fulfilment Tokens", summary?.active_tokens || tokens.length, "/inventory/tokens", "Traceable control records linked one-to-one with approved orders"],
     ["Product Catalog", products.length, "/inventory/products", "Stock master used by CRM quotation pricing"],
-    ["Serial / Barcode Scan", items.filter((item) => item.current_status === "AVAILABLE").length, "/inventory/serials", "Serial and IMEI items ready to issue"],
-    ["Purchase Orders", purchaseOrders.length, "/inventory/purchasing", "Buy missing items and receive vendor stock"],
-    ["Dispatch", summary?.active_dispatches || dispatches.length, "/inventory/dispatches", "Give stock to installer and track handoff"],
-    ["Returns", summary?.pending_returns || 0, "/inventory/returns", "Installer returns and adjusted bill reconciliation"],
+    ["Serialized Stock", items.filter((item) => item.current_status === "AVAILABLE").length, "/inventory/serials", "Serial and IMEI items available for controlled issue"],
+    ["Procurement & Receipt", purchaseOrders.length, "/inventory/purchasing", "Procure shortages and record supplier receipts"],
+    ["Field Service", summary?.active_dispatches || dispatches.length, "/inventory/field-service", "Issue material and track field fulfilment"],
+    ["Reconciliation", summary?.pending_returns || 0, "/inventory/reconciliation", "Reconcile used, installed and returned material"],
   ];
   return (
     <div className="flow-page-shell" style={pageShell}>
-      <Header eyebrow="Inventory / Logistics Service" title="Inventory Portal Flow" text="Stock, purchasing, dispatch and returns." actions={<Button to="/inventory/queue" tone="success"><ClipboardCheck size={16} /> Start Incoming Orders</Button>} />
+      <Header eyebrow="Inventory & Fulfilment" title="Inventory Workflow" text="Approved orders, procurement, stock allocation, field fulfilment and reconciliation." actions={<Button to="/inventory/queue" tone="success"><ClipboardCheck size={16} /> Review Incoming Orders</Button>} />
       <FlowSteps />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 14 }}>
         {cards.map(([label, value, href, help]) => (
@@ -1213,14 +1257,14 @@ export function InventoryQueuePage() {
   return (
     <div className="flow-page-shell" style={pageShell}>
       <Header
-        eyebrow="Inventory Step 1"
-        title="Incoming Orders and Client Tokens"
-        text="Generate a token and review stock readiness."
+        eyebrow="Order Intake"
+        title="Approved Order Intake"
+        text="Register approved demand, issue its fulfilment token and review stock readiness."
         actions={<Button onClick={reload} tone="light"><RefreshCw size={15} /> Refresh</Button>}
       />
       <div style={{ ...card, padding: 14, marginBottom: 14, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <SearchBox value={q} onChange={setQ} placeholder="Search order, token, quotation or client" />
-        <Button to="/inventory/tokens" tone="light"><ReceiptText size={15} /> Token Management</Button>
+        <Button to="/inventory/tokens" tone="light"><ReceiptText size={15} /> Fulfilment Tokens</Button>
       </div>
       <DataTable
         columns={["Order / Token", "Client", "Quotation", "Stock Check", "Amount", "Status", "Next Actions"]}
@@ -1313,7 +1357,7 @@ export function InventoryQueuePage() {
                 </Button>
               )}
               {token && gaps && <Button to={`/inventory/purchasing?orderId=${job.order_id}&quotationId=${job.id}`} tone="warning"><ShoppingCart size={14} /> Create PO</Button>}
-              {canDispatch && <Button to={`/inventory/dispatches?orderId=${job.order_id}&quotationId=${job.id}`} tone="success"><Wrench size={14} /> Create Dispatch</Button>}
+              {canDispatch && <Button to={`/inventory/field-service?orderId=${job.order_id}&quotationId=${job.id}`} tone="success"><Wrench size={14} /> Prepare Field Service</Button>}
             </div>,
             ],
           };
@@ -1332,9 +1376,9 @@ export function InventoryTokensPage() {
   return (
     <div className="flow-page-shell" style={pageShell}>
       <Header
-        eyebrow="Inventory Step 1B"
-        title="Token Management and Receipts"
-        text="One linked token per order."
+        eyebrow="Fulfilment Control"
+        title="Order Tokens and Stock Readiness"
+        text="Maintain one traceable fulfilment token for each approved order."
         actions={<Button onClick={reload} tone="light"><RefreshCw size={15} /> Refresh</Button>}
       />
       <div style={{ ...card, padding: 14, marginBottom: 14, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
@@ -1354,7 +1398,7 @@ export function InventoryTokensPage() {
             <div style={{ marginTop: 6, color: "#64748b", fontSize: 12 }}>{tokenStatusHelp(token.status)}</div>
           </div>,
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Button to={`/inventory/dispatches?orderId=${token.id}`} tone="success"><Wrench size={14} /> View Dispatch</Button>
+            <Button to={`/inventory/field-service?orderId=${token.id}`} tone="success"><Wrench size={14} /> View Field Service</Button>
             <Button onClick={() => printHtmlDocument(tokenReceiptHtml(token), token.token_number || "Token Receipt")} tone="light"><ReceiptText size={14} /> Print Receipt</Button>
           </div>,
         ])}
@@ -1368,33 +1412,104 @@ export function InventoryProductsPage() {
   const { products, reload } = useInventoryFlowData();
   const { showToast } = useToastContext();
   const [q, setQ] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("ALL");
+  const [typeFilter, setTypeFilter] = useState("ALL");
+  const [conditionFilter, setConditionFilter] = useState("ALL");
+  const [stockFilter, setStockFilter] = useState("ALL");
+  const [locationFilter, setLocationFilter] = useState("ALL");
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [categories, setCategories] = useState<ItemCategory[]>([]);
+  const [customFields, setCustomFields] = useState<ProductCustomFieldDefinition[]>([]);
   const emptyProduct = {
     product_name: "",
+    category_id: "",
+    sub_category: "",
+    brand_make: "",
+    condition: "NEW",
+    sku: "",
+    model_no: "",
     product_type: "ASSET" as Product["product_type"],
     tracking_type: "SERIAL" as Product["tracking_type"],
-    quantity: 0,
     min_stock_level: 5,
-    unit_price: 0,
-    cost_price: 0,
+    selling_price: 0,
+    country_of_origin: "",
+    batch_lot_number: "",
+    expiry_date: "",
+    warranty_date: "",
+    product_image_url: "",
+    warehouse_location: "Main Warehouse",
+    room_number: "",
+    rack_number: "",
+    custom_attributes: {} as Record<string, any>,
     description: "",
   };
   const [draft, setDraft] = useState(emptyProduct);
-  const filtered = products.filter((product) => [product.product_name, product.category_name, product.product_type].join(" ").toLowerCase().includes(q.toLowerCase()));
+  const locations = Array.from(new Set(products.map((product) => product.warehouse_location).filter(Boolean) as string[])).sort();
+  const filtered = products.filter((product) => {
+    const matchesSearch = [
+      product.product_name,
+      product.category_name,
+      product.sub_category,
+      product.brand_make,
+      product.sku,
+      product.model_no,
+      product.product_type,
+      product.condition,
+      product.warehouse_location,
+      product.room_number,
+      product.rack_number,
+    ].join(" ").toLowerCase().includes(q.toLowerCase());
+    const quantity = Number(product.available_count ?? product.quantity ?? 0);
+    const minimum = Number(product.min_stock_level || 0);
+    const matchesStock = stockFilter === "ALL"
+      || (stockFilter === "IN_STOCK" && quantity > minimum)
+      || (stockFilter === "LOW_STOCK" && quantity > 0 && quantity <= minimum)
+      || (stockFilter === "OUT_OF_STOCK" && quantity === 0);
+    return matchesSearch
+      && (categoryFilter === "ALL" || product.category_id === categoryFilter)
+      && (typeFilter === "ALL" || product.product_type === typeFilter)
+      && (conditionFilter === "ALL" || product.condition === conditionFilter)
+      && (locationFilter === "ALL" || product.warehouse_location === locationFilter)
+      && matchesStock;
+  });
+
+  useEffect(() => {
+    Promise.all([
+      inventoryApi.getCategories().catch(() => []),
+      inventoryApi.getProductCustomFields().catch(() => []),
+    ]).then(([categoryRows, fields]) => {
+      setCategories(categoryRows);
+      setCustomFields(fields.filter((field) => String(field.applies_to || "PRODUCT").toUpperCase() === "PRODUCT"));
+    });
+  }, []);
+
+  const setCustomValue = (fieldKey: string, value: any) => {
+    setDraft((current) => ({
+      ...current,
+      custom_attributes: {
+        ...(current.custom_attributes || {}),
+        [fieldKey]: value,
+      },
+    }));
+  };
 
   const saveProduct = async () => {
     if (!draft.product_name.trim()) {
       showToast("Product name is required.", "error");
       return;
     }
-    if (Number(draft.unit_price) <= 0) {
-      showToast("Enter a unit price greater than zero.", "error");
+    if (!draft.category_id) {
+      showToast("Select a category.", "error");
+      return;
+    }
+    if (Number(draft.selling_price) <= 0) {
+      showToast("Enter a selling price greater than zero.", "error");
       return;
     }
     setSaving(true);
     try {
-      await inventoryApi.createProduct(draft);
+      await inventoryApi.createProduct({ ...draft, unit_price: Number(draft.selling_price), quantity: 0, cost_price: 0 });
       await reload();
       setDraft(emptyProduct);
       setShowForm(false);
@@ -1408,60 +1523,172 @@ export function InventoryProductsPage() {
 
   return (
     <div className="flow-page-shell" style={pageShell}>
-      <Header eyebrow="Inventory Master" title="Product Catalog and Stock Levels" text="Products, prices and stock levels." actions={<Button onClick={() => setShowForm((open) => !open)} tone="light"><Plus size={15} /> {showForm ? "Close Form" : "Add Product"}</Button>} />
+      <Header eyebrow="Inventory Master" title="Product & Service Catalog" text="Maintain sellable products and services. Physical stock is added only through a verified stock receipt." actions={<Button onClick={() => setShowForm((open) => !open)} tone="light"><Plus size={15} /> {showForm ? "Close Form" : "Add Product / Service"}</Button>} />
       {showForm && (
         <div style={{ ...card, padding: 18, marginBottom: 14 }}>
-          <h3 style={{ margin: "0 0 14px" }}>Add Product</h3>
+          <h3 style={{ margin: "0 0 14px" }}>Add Product / Service</h3>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 12 }}>
             <label style={{ fontWeight: 800, fontSize: 12 }}>Product Name *
               <input value={draft.product_name} onChange={(event) => setDraft({ ...draft, product_name: event.target.value })} style={{ ...input, marginTop: 6 }} />
             </label>
+            <label style={{ fontWeight: 800, fontSize: 12 }}>Category *
+              <select required value={draft.category_id} onChange={(event) => setDraft({ ...draft, category_id: event.target.value })} style={{ ...input, marginTop: 6 }}>
+                <option value="">Select category</option>
+                {categories.map((category) => <option key={category.id} value={category.id}>{category.category_name}</option>)}
+              </select>
+            </label>
+            <label style={{ fontWeight: 800, fontSize: 12 }}>Sub-category
+              <input value={draft.sub_category} onChange={(event) => setDraft({ ...draft, sub_category: event.target.value })} style={{ ...input, marginTop: 6 }} placeholder="CCTV, HR staffing, access control" />
+            </label>
+            <label style={{ fontWeight: 800, fontSize: 12 }}>Brand / Make
+              <input value={draft.brand_make} onChange={(event) => setDraft({ ...draft, brand_make: event.target.value })} style={{ ...input, marginTop: 6 }} placeholder="Hikvision, ZKTeco, ESSPL service" />
+            </label>
+            <label style={{ fontWeight: 800, fontSize: 12 }}>Condition
+              <select value={draft.condition} onChange={(event) => setDraft({ ...draft, condition: event.target.value })} style={{ ...input, marginTop: 6 }}>
+                <option value="NEW">New</option><option value="USED">Used</option><option value="REFURBISHED">Refurbished</option>
+              </select>
+            </label>
+            <label style={{ fontWeight: 800, fontSize: 12 }}>SKU
+              <input value={draft.sku} onChange={(event) => setDraft({ ...draft, sku: event.target.value })} style={{ ...input, marginTop: 6 }} placeholder="Internal stock code" />
+            </label>
+            <label style={{ fontWeight: 800, fontSize: 12 }}>Model No
+              <input value={draft.model_no} onChange={(event) => setDraft({ ...draft, model_no: event.target.value })} style={{ ...input, marginTop: 6 }} />
+            </label>
             <label style={{ fontWeight: 800, fontSize: 12 }}>Product Type
-              <select value={draft.product_type} onChange={(event) => setDraft({ ...draft, product_type: event.target.value as Product["product_type"] })} style={{ ...input, marginTop: 6 }}>
+              <select value={draft.product_type} onChange={(event) => {
+                const productType = event.target.value as Product["product_type"];
+                setDraft({
+                  ...draft,
+                  product_type: productType,
+                  tracking_type: productType === "SERVICE" ? "NONE" : draft.tracking_type,
+                  min_stock_level: productType === "SERVICE" ? 0 : draft.min_stock_level,
+                  warehouse_location: productType === "SERVICE" ? "" : draft.warehouse_location || "Main Warehouse",
+                  room_number: productType === "SERVICE" ? "" : draft.room_number,
+                  rack_number: productType === "SERVICE" ? "" : draft.rack_number,
+                });
+              }} style={{ ...input, marginTop: 6 }}>
                 <option value="ASSET">Asset</option><option value="CONSUMABLE">Consumable</option><option value="SERVICE">Service</option>
               </select>
             </label>
-            <label style={{ fontWeight: 800, fontSize: 12 }}>Tracking
-              <select value={draft.tracking_type} onChange={(event) => setDraft({ ...draft, tracking_type: event.target.value as Product["tracking_type"] })} style={{ ...input, marginTop: 6 }}>
-                <option value="SERIAL">Serial</option><option value="IMEI">IMEI</option><option value="NONE">None</option>
-              </select>
+            {draft.product_type !== "SERVICE" && (
+              <label style={{ fontWeight: 800, fontSize: 12 }}>Tracking Method
+                <select value={draft.tracking_type} onChange={(event) => setDraft({ ...draft, tracking_type: event.target.value as Product["tracking_type"] })} style={{ ...input, marginTop: 6 }}>
+                  <option value="SERIAL">Serial Number</option><option value="IMEI">IMEI</option><option value="NONE">Quantity Only</option>
+                </select>
+              </label>
+            )}
+            {draft.product_type !== "SERVICE" && (
+              <label style={{ fontWeight: 800, fontSize: 12 }}>Minimum Stock
+                <input type="number" min="0" value={draft.min_stock_level} onChange={(event) => setDraft({ ...draft, min_stock_level: Number(event.target.value) })} style={{ ...input, marginTop: 6 }} />
+              </label>
+            )}
+            <label style={{ fontWeight: 800, fontSize: 12 }}>Selling Price (PKR) *
+              <input type="number" min="0" value={draft.selling_price} onChange={(event) => setDraft({ ...draft, selling_price: Number(event.target.value) })} style={{ ...input, marginTop: 6 }} />
             </label>
-            <label style={{ fontWeight: 800, fontSize: 12 }}>Opening Quantity
-              <input type="number" min="0" value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: Number(event.target.value) })} style={{ ...input, marginTop: 6 }} />
+            <label style={{ fontWeight: 800, fontSize: 12 }}>Country of Origin
+              <input value={draft.country_of_origin} onChange={(event) => setDraft({ ...draft, country_of_origin: event.target.value })} style={{ ...input, marginTop: 6 }} />
             </label>
-            <label style={{ fontWeight: 800, fontSize: 12 }}>Minimum Stock
-              <input type="number" min="0" value={draft.min_stock_level} onChange={(event) => setDraft({ ...draft, min_stock_level: Number(event.target.value) })} style={{ ...input, marginTop: 6 }} />
+            <label style={{ fontWeight: 800, fontSize: 12 }}>Batch / Lot No
+              <input value={draft.batch_lot_number} onChange={(event) => setDraft({ ...draft, batch_lot_number: event.target.value })} style={{ ...input, marginTop: 6 }} />
             </label>
-            <label style={{ fontWeight: 800, fontSize: 12 }}>Unit Price (PKR) *
-              <input type="number" min="0" value={draft.unit_price} onChange={(event) => setDraft({ ...draft, unit_price: Number(event.target.value) })} style={{ ...input, marginTop: 6 }} />
+            <label style={{ fontWeight: 800, fontSize: 12 }}>Expiry Date
+              <input type="date" value={draft.expiry_date} onChange={(event) => setDraft({ ...draft, expiry_date: event.target.value })} style={{ ...input, marginTop: 6 }} />
             </label>
-            <label style={{ fontWeight: 800, fontSize: 12 }}>Cost Price (PKR)
-              <input type="number" min="0" value={draft.cost_price} onChange={(event) => setDraft({ ...draft, cost_price: Number(event.target.value) })} style={{ ...input, marginTop: 6 }} />
+            <label style={{ fontWeight: 800, fontSize: 12 }}>Warranty Date
+              <input type="date" value={draft.warranty_date} onChange={(event) => setDraft({ ...draft, warranty_date: event.target.value })} style={{ ...input, marginTop: 6 }} />
             </label>
+            <label style={{ fontWeight: 800, fontSize: 12 }}>Product Image URL
+              <input value={draft.product_image_url} onChange={(event) => setDraft({ ...draft, product_image_url: event.target.value })} style={{ ...input, marginTop: 6 }} placeholder="Image path/URL for quotation and invoice" />
+            </label>
+            {draft.product_type !== "SERVICE" && (
+              <label style={{ fontWeight: 800, fontSize: 12 }}>Warehouse / Location
+                <input value={draft.warehouse_location} onChange={(event) => setDraft({ ...draft, warehouse_location: event.target.value })} style={{ ...input, marginTop: 6 }} />
+              </label>
+            )}
+            {draft.product_type !== "SERVICE" && (
+              <label style={{ fontWeight: 800, fontSize: 12 }}>Room Number
+                <input value={draft.room_number} onChange={(event) => setDraft({ ...draft, room_number: event.target.value })} style={{ ...input, marginTop: 6 }} />
+              </label>
+            )}
+            {draft.product_type !== "SERVICE" && (
+              <label style={{ fontWeight: 800, fontSize: 12 }}>Rack Number
+                <input value={draft.rack_number} onChange={(event) => setDraft({ ...draft, rack_number: event.target.value })} style={{ ...input, marginTop: 6 }} />
+              </label>
+            )}
+            {customFields.map((fieldDef) => (
+              <label key={fieldDef.id || fieldDef.field_key} style={{ fontWeight: 800, fontSize: 12 }}>
+                {fieldDef.label}{fieldDef.required ? " *" : ""}
+                {String(fieldDef.field_type).toUpperCase() === "SELECT" ? (
+                  <select
+                    value={draft.custom_attributes?.[fieldDef.field_key] || ""}
+                    onChange={(event) => setCustomValue(fieldDef.field_key, event.target.value)}
+                    style={{ ...input, marginTop: 6 }}
+                  >
+                    <option value="">Select</option>
+                    {(fieldDef.options || []).map((option) => <option key={option} value={option}>{option}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    type={String(fieldDef.field_type).toUpperCase() === "NUMBER" ? "number" : String(fieldDef.field_type).toUpperCase() === "DATE" ? "date" : "text"}
+                    value={draft.custom_attributes?.[fieldDef.field_key] || ""}
+                    onChange={(event) => setCustomValue(fieldDef.field_key, event.target.value)}
+                    style={{ ...input, marginTop: 6 }}
+                  />
+                )}
+              </label>
+            ))}
             <label style={{ fontWeight: 800, fontSize: 12, gridColumn: "1 / -1" }}>Description
               <textarea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} style={{ ...input, marginTop: 6, minHeight: 72, resize: "vertical" }} />
             </label>
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 14 }}>
             <Button onClick={() => setShowForm(false)} tone="light">Cancel</Button>
-            <Button onClick={saveProduct} tone="success" disabled={saving}>{saving ? "Saving..." : "Save Product"}</Button>
+            <Button onClick={saveProduct} tone="success" disabled={saving}>{saving ? "Saving..." : "Save Product / Service"}</Button>
           </div>
         </div>
       )}
-      <div style={{ ...card, padding: 14, marginBottom: 14, display: "flex", gap: 12 }}>
+      <div style={{ ...card, padding: 14, marginBottom: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
         <SearchBox value={q} onChange={setQ} placeholder="Search product, category or type" />
+        <select aria-label="Filter by category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} style={{ ...input, width: 180 }}>
+          <option value="ALL">All categories</option>
+          {categories.map((category) => <option key={category.id} value={category.id}>{category.category_name}</option>)}
+        </select>
+        <select aria-label="Filter by product type" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} style={{ ...input, width: 160 }}>
+          <option value="ALL">All types</option><option value="ASSET">Assets</option><option value="CONSUMABLE">Consumables</option><option value="SERVICE">Services</option>
+        </select>
+        <select aria-label="Filter by condition" value={conditionFilter} onChange={(event) => setConditionFilter(event.target.value)} style={{ ...input, width: 160 }}>
+          <option value="ALL">All conditions</option><option value="NEW">New</option><option value="USED">Used</option><option value="REFURBISHED">Refurbished</option>
+        </select>
+        <select aria-label="Filter by stock status" value={stockFilter} onChange={(event) => setStockFilter(event.target.value)} style={{ ...input, width: 170 }}>
+          <option value="ALL">All stock levels</option><option value="IN_STOCK">In stock</option><option value="LOW_STOCK">Low stock</option><option value="OUT_OF_STOCK">Out of stock</option>
+        </select>
+        <select aria-label="Filter by location" value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} style={{ ...input, width: 180 }}>
+          <option value="ALL">All locations</option>
+          {locations.map((location) => <option key={location} value={location}>{location}</option>)}
+        </select>
         <Button onClick={reload} tone="light"><RefreshCw size={15} /> Refresh</Button>
       </div>
       <DataTable
-        columns={["Product", "Type", "Tracking", "Available", "Min Stock", "Price", "Action"]}
+        columns={["Product", "SKU / Model", "Type", "Location", "Available", "Selling Price", "Action"]}
         rows={filtered.map((product) => [
-          <div><strong>{product.product_name}</strong><br /><span style={{ color: "#64748b" }}>{product.category_name || "Uncategorized"}</span></div>,
-          product.product_type,
-          product.tracking_type,
-          Number(product.available_count ?? product.quantity ?? 0),
-          product.min_stock_level,
-          productPriceDisplay(product),
-          resolveProductUnitPrice(product) <= 0 ? <Button to="/inventory" tone="warning">Set Price</Button> : Number(product.quantity || 0) <= Number(product.min_stock_level || 0) ? <Button to="/inventory/purchasing" tone="light"><ShoppingCart size={14} /> Create PO</Button> : statusChip("IN STOCK"),
+          <div>
+            <strong>{product.product_name}</strong>
+            <br /><span style={{ color: "#64748b" }}>{product.brand_make || product.category_name || "Uncategorized"}{product.condition ? ` | ${product.condition}` : ""}</span>
+          </div>,
+          <div>{product.sku || "-"}<br /><span style={{ color: "#64748b" }}>{product.model_no || product.sub_category || "-"}</span></div>,
+          <div>{product.product_type}<br /><span style={{ color: "#64748b" }}>{product.product_type === "SERVICE" ? "Not stock-tracked" : product.tracking_type}</span></div>,
+          product.product_type === "SERVICE"
+            ? <span style={{ color: "#64748b" }}>Not applicable</span>
+            : <div>{product.warehouse_location || "Warehouse"}<br /><span style={{ color: "#64748b" }}>{[product.room_number, product.rack_number].filter(Boolean).join(" / ") || "Room/Rack not set"}</span></div>,
+          product.product_type === "SERVICE" ? "-" : Number(product.available_count ?? product.quantity ?? 0),
+          money(Number(product.selling_price ?? product.unit_price ?? 0)),
+          resolveProductUnitPrice(product) <= 0
+            ? <Button to="/inventory" tone="warning">Set Price</Button>
+            : product.product_type === "SERVICE"
+              ? statusChip("AVAILABLE")
+              : Number(product.quantity || 0) <= Number(product.min_stock_level || 0)
+                ? <Button to="/inventory/purchasing" tone="light"><ShoppingCart size={14} /> Create PO</Button>
+                : statusChip("IN STOCK"),
         ])}
         empty="No products found."
       />
@@ -1472,18 +1699,23 @@ export function InventoryProductsPage() {
 export function InventorySerialsPage() {
   const { items } = useInventoryFlowData();
   const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
   const filtered = items.filter((item) => [item.product_name, item.serial_number, item.imei, item.current_status].join(" ").toLowerCase().includes(q.toLowerCase()));
+  const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => setPage(1), [q]);
 
   return (
     <div className="flow-page-shell" style={pageShell}>
-      <Header eyebrow="Inventory Barcode" title="Serial / IMEI Scan and Assignment" text="Read-only serial and item status." />
+      <Header eyebrow="Asset Traceability" title="Serialized Stock Register" text="Review serial, IMEI and item availability before controlled material issue." />
       <div style={{ ...card, padding: 14, marginBottom: 14, display: "flex", gap: 12 }}>
         <SearchBox value={q} onChange={setQ} placeholder="Scan or search serial / IMEI / product" />
-        <Button to="/inventory/dispatches" tone="success"><Wrench size={15} /> Dispatch Serial</Button>
+        <Button to="/inventory/field-service" tone="success"><Wrench size={15} /> Issue Serialized Item</Button>
       </div>
       <DataTable
         columns={["Product", "Serial", "IMEI", "Status", "Location"]}
-        rows={filtered.map((item) => [
+        rows={pageRows.map((item) => [
           item.product_name || "-",
           <strong>{item.serial_number || "-"}</strong>,
           item.imei || "-",
@@ -1492,6 +1724,7 @@ export function InventorySerialsPage() {
         ])}
         empty="No serial/IMEI items found."
       />
+      <TablePager page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} />
     </div>
   );
 }
@@ -1506,6 +1739,7 @@ export function InventoryPurchasingPage() {
   const sourceQuotationId = sourceParams.get("quotationId") || "";
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [purchaseCustomFields, setPurchaseCustomFields] = useState<ProductCustomFieldDefinition[]>([]);
   const newLine = () => ({
     local_id:
       typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -1526,6 +1760,10 @@ export function InventoryPurchasingPage() {
     order_date: new Date().toISOString().slice(0, 10),
     expected_delivery_date: "",
     tax_rate: 18,
+    warehouse_location: "Main Warehouse",
+    room_number: "",
+    rack_number: "",
+    custom_attributes: {} as Record<string, any>,
     notes: "",
     order_id: sourceOrderId,
     quotation_id: sourceQuotationId,
@@ -1534,6 +1772,12 @@ export function InventoryPurchasingPage() {
   const [receivePo, setReceivePo] = useState<PurchaseOrder | null>(null);
   const [receiveQty, setReceiveQty] = useState<Record<string, number>>({});
   const prefillKeyRef = useRef("");
+
+  useEffect(() => {
+    inventoryApi.getProductCustomFields()
+      .then((fields) => setPurchaseCustomFields(fields.filter((field) => ["PURCHASE", "STOCK_IN"].includes(String(field.applies_to || "").toUpperCase()))))
+      .catch(() => setPurchaseCustomFields([]));
+  }, []);
 
   const sourceJob = useMemo(
     () => workQueue.find((job) => (sourceOrderId && job.order_id === sourceOrderId) || (sourceQuotationId && job.id === sourceQuotationId)),
@@ -1624,6 +1868,10 @@ export function InventoryPurchasingPage() {
       order_date: new Date().toISOString().slice(0, 10),
       expected_delivery_date: "",
       tax_rate: 18,
+      warehouse_location: "Main Warehouse",
+      room_number: "",
+      rack_number: "",
+      custom_attributes: {},
       notes: "",
       order_id: sourceOrderId,
       quotation_id: sourceQuotationId,
@@ -1665,6 +1913,11 @@ export function InventoryPurchasingPage() {
       showToast("Please select expected delivery date before saving PO.", "error");
       return;
     }
+    const missingCustomField = purchaseCustomFields.find((field) => field.required && !String(form.custom_attributes?.[field.field_key] ?? "").trim());
+    if (missingCustomField) {
+      showToast(`${missingCustomField.label} is required.`, "error");
+      return;
+    }
     const validItems = poItems.filter((item) => item.product_id || item.product_name.trim());
     if (!validItems.length) {
       showToast("Please add at least one purchase item.", "error");
@@ -1677,6 +1930,10 @@ export function InventoryPurchasingPage() {
         order_date: form.order_date,
         expected_delivery_date: form.expected_delivery_date,
         tax_rate: form.tax_rate,
+        warehouse_location: form.warehouse_location,
+        room_number: form.room_number,
+        rack_number: form.rack_number,
+        custom_attributes: form.custom_attributes,
         order_id: form.order_id || undefined,
         quotation_id: form.quotation_id || undefined,
         notes: form.notes,
@@ -1729,8 +1986,8 @@ export function InventoryPurchasingPage() {
       || (receivingPo.quotation_id && job.id === receivingPo.quotation_id),
     );
     if (readyJob) {
-      showToast("Stock received. Next: Inventory > Installer Dispatch.", "success");
-      navigate(`/inventory/dispatches?orderId=${readyJob.order_id || ""}&quotationId=${readyJob.id}`);
+      showToast("Stock received. The order is ready for field service preparation.", "success");
+      navigate(`/inventory/field-service?orderId=${readyJob.order_id || ""}&quotationId=${readyJob.id}`);
       return;
     }
     showToast("Partial receipt saved. Next: receive remaining stock.", "success");
@@ -1746,9 +2003,9 @@ export function InventoryPurchasingPage() {
   return (
     <div className="flow-page-shell" style={pageShell}>
       <Header
-        eyebrow="Inventory Step 2"
-        title="Purchase Orders for Missing Items"
-        text="Purchase and receive missing stock."
+        eyebrow="Procurement and Receipt"
+        title="Purchase Orders and Stock Receipt"
+        text="Procure approved shortages and record actual quantities received into stock."
         actions={<Button onClick={() => setShowForm(true)}><Plus size={16} /> New PO</Button>}
       />
       {showForm && (
@@ -1759,7 +2016,7 @@ export function InventoryPurchasingPage() {
               {sourceJob?.customer_name ? ` for ${sourceJob.customer_name}` : ""}. Short items are already loaded below; you can still add or remove lines if needed.
             </div>
           )}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 12 }}>
             {fieldLabel("Supplier *", (
               <div style={{ display: "grid", gap: 6 }}>
                 <select required value={form.vendor_id} onChange={(e) => setForm({ ...form, vendor_id: e.target.value })} style={input}>
@@ -1772,7 +2029,7 @@ export function InventoryPurchasingPage() {
                   </span>
                 ) : (
                   <span style={{ color: "#b45309", fontSize: 11, fontWeight: 800 }}>
-                    Add a supplier in Master Setup to auto-fill this field.
+                    Add a supplier in Configuration to auto-fill this field.
                   </span>
                 )}
               </div>
@@ -1780,6 +2037,36 @@ export function InventoryPurchasingPage() {
             {fieldLabel("PO Date", <input type="date" value={form.order_date} onChange={(e) => setForm({ ...form, order_date: e.target.value })} style={input} />)}
             {fieldLabel("Expected Delivery *", <input required type="date" min={form.order_date || new Date().toISOString().slice(0, 10)} value={form.expected_delivery_date} onChange={(e) => setForm({ ...form, expected_delivery_date: e.target.value })} style={input} />)}
             <TaxRateControl value={form.tax_rate} onChange={(tax_rate) => setForm({ ...form, tax_rate })} />
+            {fieldLabel("Warehouse / Location", <input value={form.warehouse_location} onChange={(e) => setForm({ ...form, warehouse_location: e.target.value })} style={input} placeholder="Main Warehouse" />)}
+            {fieldLabel("Room Number", <input value={form.room_number} onChange={(e) => setForm({ ...form, room_number: e.target.value })} style={input} placeholder="Room A" />)}
+            {fieldLabel("Rack Number", <input value={form.rack_number} onChange={(e) => setForm({ ...form, rack_number: e.target.value })} style={input} placeholder="Rack 01" />)}
+            {purchaseCustomFields.map((fieldDef) => fieldLabel(`${fieldDef.label}${fieldDef.required ? " *" : ""}`, (
+              String(fieldDef.field_type).toUpperCase() === "SELECT" ? (
+                <select
+                  required={fieldDef.required}
+                  value={form.custom_attributes?.[fieldDef.field_key] || ""}
+                  onChange={(event) => setForm({
+                    ...form,
+                    custom_attributes: { ...form.custom_attributes, [fieldDef.field_key]: event.target.value },
+                  })}
+                  style={input}
+                >
+                  <option value="">Select</option>
+                  {(fieldDef.options || []).map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              ) : (
+                <input
+                  required={fieldDef.required}
+                  type={String(fieldDef.field_type).toUpperCase() === "NUMBER" ? "number" : String(fieldDef.field_type).toUpperCase() === "DATE" ? "date" : "text"}
+                  value={form.custom_attributes?.[fieldDef.field_key] || ""}
+                  onChange={(event) => setForm({
+                    ...form,
+                    custom_attributes: { ...form.custom_attributes, [fieldDef.field_key]: event.target.value },
+                  })}
+                  style={input}
+                />
+              )
+            )))}
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <h3 style={{ margin: 0, fontSize: 16 }}>PO Items</h3>
@@ -1854,7 +2141,7 @@ export function InventoryPurchasingPage() {
             <Button tone="light" onClick={() => { setShowForm(false); resetForm(); }}>Cancel</Button>
             <button type="submit" className="btn btn-primary" disabled={!vendors.length || saving}>{saving ? "Saving..." : "Save Purchase Order"}</button>
           </div>
-          {!vendors.length && <div style={{ color: "#b45309", fontWeight: 850 }}>No supplier found. Add a real supplier in Master Setup before creating a PO.</div>}
+          {!vendors.length && <div style={{ color: "#b45309", fontWeight: 850 }}>No supplier found. Add a supplier in Configuration before creating a PO.</div>}
         </form>
       )}
       <DataTable
@@ -1908,7 +2195,7 @@ export function InventoryPurchasingPage() {
               <Button onClick={() => setReceivePo(null)} tone="light">Close</Button>
             </div>
             <div style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", color: "#1e3a8a", padding: 11, fontSize: 13, fontWeight: 750 }}>
-              Enter the quantity physically received. When all shortages are covered, the linked job will open automatically in Installer Dispatch.
+              Enter the quantity physically received. When all shortages are covered, the linked assignment will become available in Field Operations.
             </div>
             <DataTable
               columns={["Product", "Ordered", "Already Received", "Receive Now", "Unit Cost"]}
@@ -1943,7 +2230,7 @@ export function InventoryPurchasingPage() {
 }
 
 export function InventoryDispatchesPage() {
-  const { dispatches, reload } = useInventoryFlowData();
+  const { dispatches, products, reload } = useInventoryFlowData();
   const { showToast } = useToastContext();
   const params = new URLSearchParams(window.location.search);
   const initialQuotationId = params.get("quotationId") || "";
@@ -1952,6 +2239,9 @@ export function InventoryDispatchesPage() {
   const [installers, setInstallers] = useState<InventoryInstallerUser[]>([]);
   const [readyQueue, setReadyQueue] = useState<InventoryWorkQueueJob[]>([]);
   const [readyLoading, setReadyLoading] = useState(true);
+  const [qrDispatch, setQrDispatch] = useState<FieldDispatch | null>(null);
+  const [materialRequests, setMaterialRequests] = useState<FieldMaterialRequest[]>([]);
+  const [requestDraft, setRequestDraft] = useState({ dispatch_id: "", product_id: "", requested_quantity: 1, reason: "" });
   const [form, setForm] = useState({
     quotation_id: initialQuotationId,
     customer_id: "",
@@ -2010,12 +2300,13 @@ export function InventoryDispatchesPage() {
 
   useEffect(() => {
     loadReadyQueue();
+    inventoryApi.getMaterialRequests().then(setMaterialRequests).catch(() => setMaterialRequests([]));
   }, []);
 
   const clearPreparedJob = () => {
     setShowForm(false);
     setForm({ quotation_id: "", customer_id: "", installer_id: "", site_address: "", notes: "" });
-    window.history.replaceState(null, "", "/inventory/dispatches");
+    window.history.replaceState(null, "", "/inventory/field-service");
   };
 
   useEffect(() => {
@@ -2031,16 +2322,16 @@ export function InventoryDispatchesPage() {
       site_address: current.site_address,
     }));
     setShowForm(true);
-    window.history.replaceState(null, "", `/inventory/dispatches?orderId=${job.order_id || ""}&quotationId=${job.id}`);
+    window.history.replaceState(null, "", `/inventory/field-service?orderId=${job.order_id || ""}&quotationId=${job.id}`);
   };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!form.customer_id) return showToast("Select an approved job first.", "error");
-    if (!form.installer_id) return showToast("Select installer before confirming dispatch.", "error");
+    if (!form.customer_id) return showToast("Select an approved field service assignment first.", "error");
+    if (!form.installer_id) return showToast("Select a field technician before issuing material.", "error");
     const stockStatus = String(selectedJob?.stock_status || selectedJob?.order_status || "").toUpperCase();
     if (stockStatus !== "STOCK_OK") return showToast("This order is not stock-ready. Create PO or receive stock first.", "error");
-    if (!selectedReadyItems.length) return showToast("No available stock is ready for this job. Create PO or receive stock first.", "error");
+    if (!selectedReadyItems.length) return showToast("No stock is available for this assignment. Create a purchase order or receive stock first.", "error");
     await inventoryApi.createDispatch({
       quotation_id: form.quotation_id || null,
       customer_id: form.customer_id,
@@ -2049,20 +2340,51 @@ export function InventoryDispatchesPage() {
       notes: form.notes,
       items: selectedReadyItems,
     });
-    showToast("Dispatch confirmed. Next: Installer completes the job.", "success");
+    showToast("Material issued. The field team can now complete the assignment and obtain client sign-off.", "success");
     setShowForm(false);
     await loadReadyQueue();
     reload();
   };
 
+  const openQrCodes = async (dispatchId: string) => {
+    try {
+      setQrDispatch(await inventoryApi.getDispatch(dispatchId));
+    } catch {
+      showToast("QR codes could not be loaded.", "error");
+    }
+  };
+
+  const submitMaterialRequest = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const product = products.find((row) => row.id === requestDraft.product_id);
+    if (!requestDraft.dispatch_id || !product || !requestDraft.reason.trim()) return showToast("Select a product and enter the request reason.", "error");
+    await inventoryApi.createMaterialRequest(requestDraft.dispatch_id, { product_id: product.id, item_description: product.product_name, requested_quantity: requestDraft.requested_quantity, reason: requestDraft.reason });
+    setRequestDraft({ dispatch_id: "", product_id: "", requested_quantity: 1, reason: "" });
+    setMaterialRequests(await inventoryApi.getMaterialRequests());
+    showToast("Additional material request submitted for Inventory review.", "success");
+  };
+
+  const reviewMaterial = async (request: FieldMaterialRequest, status: "APPROVED" | "REJECTED") => {
+    await inventoryApi.reviewMaterialRequest(request.id, { status });
+    setMaterialRequests(await inventoryApi.getMaterialRequests());
+    showToast(`Material request ${status.toLowerCase()}.`, "success");
+  };
+
+  const issueMaterial = async (request: FieldMaterialRequest) => {
+    await inventoryApi.issueMaterialRequest(request.id);
+    setMaterialRequests(await inventoryApi.getMaterialRequests());
+    await reload();
+    showToast("Additional material issued and stock updated.", "success");
+  };
+
   return (
     <div className="flow-page-shell" style={pageShell}>
-      <Header eyebrow="Inventory Step 3" title="Give Stock To Installer" text="Create dispatch from a stock-ready order." />
+      <Header eyebrow="Field Fulfilment" title="Material Issue and Field Assignment" text="Issue verified stock against a stock-ready approved order and assigned field technician." />
       <div style={{ ...card, padding: 16, marginBottom: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
           <div>
             <div style={{ color: "#2563eb", fontSize: 12, fontWeight: 950, textTransform: "uppercase", letterSpacing: ".05em" }}>Ready Queue</div>
-            <h3 style={{ margin: "4px 0 0", color: "#0f172a" }}>STOCK_OK Tokenized Jobs Waiting For Dispatch</h3>
+            <h3 style={{ margin: "4px 0 0", color: "#0f172a" }}>Stock-Ready Assignments Awaiting Material Issue</h3>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Button onClick={loadReadyQueue} tone="light"><RefreshCw size={15} /> Refresh</Button>
@@ -2086,20 +2408,20 @@ export function InventoryDispatchesPage() {
                 <span style={{ color: "#047857", fontSize: 12, fontWeight: 850 }}>{readyLines} item line(s) available</span>
               </div>,
               money(job.total_amount),
-              <Button onClick={() => prepareJob(job)} tone="success" prominent><Wrench size={14} /> Select Job</Button>,
+              <Button onClick={() => prepareJob(job)} tone="success" prominent><Wrench size={14} /> Prepare Assignment</Button>,
             ];
           })}
-          empty={readyLoading ? "Loading STOCK_OK dispatch queue..." : "No job is ready to select. Generate a token in Incoming Orders, then receive any missing stock in Purchase Orders."}
+          empty={readyLoading ? "Loading stock-ready assignments..." : "No assignment is ready. Generate a token from Incoming Orders, then receive any missing stock against its purchase order."}
         />
         {!readyLoading && readyJobs.length === 0 && (
           <div style={{ marginTop: 12, border: "1px solid #bfdbfe", background: "#eff6ff", borderRadius: 10, padding: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div>
-              <strong style={{ color: "#1e3a8a" }}>There is currently no dispatch-ready job.</strong>
-              <div style={{ marginTop: 4, color: "#475569", fontSize: 13 }}>Open Incoming Orders to generate a token. If it shows AWAITING STOCK, receive its PO first; the job will then appear here with a Select Job button.</div>
+              <strong style={{ color: "#1e3a8a" }}>There is currently no field-service assignment ready for material issue.</strong>
+              <div style={{ marginTop: 4, color: "#475569", fontSize: 13 }}>Generate a token from Incoming Orders. If stock is pending, receive the linked purchase order first; the assignment will then appear here.</div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Button to="/inventory/queue" tone="primary"><ClipboardCheck size={15} /> Incoming Orders</Button>
-              <Button to="/inventory/purchasing" tone="light"><ShoppingCart size={15} /> Purchase Orders</Button>
+              <Button to="/inventory/purchasing" tone="light"><ShoppingCart size={15} /> Procurement & Receipt</Button>
             </div>
           </div>
         )}
@@ -2108,7 +2430,7 @@ export function InventoryDispatchesPage() {
         <form onSubmit={submit} style={{ ...card, padding: 18, marginBottom: 14, display: "grid", gap: 12 }}>
           {selectedJob && (
             <div style={{ border: "1px solid #bfdbfe", background: "#eff6ff", borderRadius: 12, padding: 12 }}>
-              <div style={{ color: "#1d4ed8", fontWeight: 950, fontSize: 12, textTransform: "uppercase" }}>Selected Job</div>
+              <div style={{ color: "#1d4ed8", fontWeight: 950, fontSize: 12, textTransform: "uppercase" }}>Selected Assignment</div>
               <div style={{ marginTop: 4, color: "#0f172a", fontWeight: 900 }}>{selectedJob.customer_name} - {tokenForQuote(selectedJob) || selectedJob.order_number}</div>
               <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
                 {(selectedJob.items || []).map((item) => (
@@ -2121,9 +2443,9 @@ export function InventoryDispatchesPage() {
             </div>
           )}
           <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 12 }}>
-            <input readOnly value={selectedJob ? `${selectedJob.order_number || "Order"} / ${tokenForQuote(selectedJob)}` : "Select a STOCK_OK order from Ready Queue"} style={{ ...input, background: "#f8fafc" }} />
+            <input readOnly value={selectedJob ? `${selectedJob.order_number || "Order"} / ${tokenForQuote(selectedJob)}` : "Prepare a stock-ready assignment from the queue above"} style={{ ...input, background: "#f8fafc" }} />
             <select required disabled={!selectedJob} value={form.installer_id} onChange={(e) => setForm({ ...form, installer_id: e.target.value })} style={input}>
-              <option value="">Select installer / field user</option>
+              <option value="">Select field technician</option>
               {installers.map((installer) => (
                 <option key={installer.id} value={installer.id}>
                   {installer.display_name || installer.email} {installer.email ? `(${installer.email})` : ""}
@@ -2142,35 +2464,83 @@ export function InventoryDispatchesPage() {
               item.available_stock,
               money(item.unit_price),
             ])}
-            empty="No dispatch items loaded."
+            empty="No field service items loaded."
           />
-          <input disabled={!selectedJob} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} style={input} placeholder="Dispatch notes" />
+          <input disabled={!selectedJob} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} style={input} placeholder="Material issue and field service notes" />
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
             <Button tone="light" onClick={clearPreparedJob}>Cancel</Button>
-            <button type="submit" className="btn btn-primary" disabled={!selectedJob || !form.installer_id || selectedReadyItems.length === 0}>Confirm Dispatch</button>
+            <button type="submit" className="btn btn-primary" disabled={!selectedJob || !form.installer_id || selectedReadyItems.length === 0}>Confirm Material Issue</button>
           </div>
         </form>
       )}
-      <h3 style={{ margin: "8px 0 10px", color: "#0f172a" }}>Active Installer Dispatches</h3>
+      <h3 style={{ margin: "8px 0 10px", color: "#0f172a" }}>Active Field Service Assignments</h3>
       <DataTable
-        columns={["Dispatch No", "Client", "Token No", "Installer Name", "Items Count", "Status", "Dispatched Date", "Actions"]}
+        columns={["Assignment No", "Client", "Token No", "Field Technician", "Items Issued", "Status", "Issued Date", "Actions"]}
         rows={dispatches
           .filter((dispatch) => !["CANCELLED", "COMPLETED", "RETURN_PENDING", "RETURN_CONFIRMED", "RECONCILED", "BILL_SENT"].includes(String(dispatch.status || "").toUpperCase()))
           .map((dispatch) => [
           <strong>{dispatch.dispatch_number}</strong>,
           dispatch.customer_name || "-",
           <div><strong>{dispatch.token_number || "-"}</strong><br /><span style={{ color: "#64748b", fontSize: 12 }}>{dispatch.order_number || dispatch.quotation_number || "-"}</span></div>,
-          dispatch.installer_name || dispatch.installer_email || "Installer missing",
+          dispatch.installer_name || dispatch.installer_email || "Not assigned",
           dispatch.item_count ?? dispatch.items?.length ?? "-",
           statusChip(dispatchStatusLabel(dispatch.status)),
           dispatch.dispatched_at ? new Date(dispatch.dispatched_at).toLocaleDateString("en-GB") : "-",
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Button to={`/inventory/serials?dispatchId=${dispatch.id}`} tone="light"><Barcode size={14} /> View QR Codes</Button>
-            <Button to={`/inventory/returns?dispatchId=${dispatch.id}`} tone="dark"><Wrench size={14} /> Complete Job</Button>
+            <Button onClick={() => openQrCodes(dispatch.id)} tone="light"><Barcode size={14} /> View QR Codes</Button>
+            <Button onClick={() => setRequestDraft({ dispatch_id: dispatch.id, product_id: "", requested_quantity: 1, reason: "" })} tone="light"><Plus size={14} /> Request Material</Button>
+            <Button to={`/inventory/reconciliation?dispatchId=${dispatch.id}`} tone="dark"><Wrench size={14} /> Record Completion</Button>
           </div>,
         ])}
-        empty="No active installer dispatches yet. Prepare a dispatch from the ready queue above."
+        empty="No active field service assignments. Prepare an assignment from the ready queue above."
       />
+      <h3 style={{ margin: "18px 0 10px", color: "#0f172a" }}>Additional Material Requests</h3>
+      <DataTable
+        columns={["Request", "Assignment", "Client", "Material", "Quantity", "Reason", "Status", "Actions"]}
+        rows={materialRequests.map((request) => [
+          <strong>{request.request_number}</strong>,
+          request.dispatch_number || "-",
+          request.customer_name || "-",
+          request.product_name || request.item_description,
+          Number(request.requested_quantity || 0),
+          request.reason,
+          statusChip(request.status),
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+            {request.status === "PENDING" && <><Button onClick={() => reviewMaterial(request, "APPROVED")} tone="success">Approve</Button><Button onClick={() => reviewMaterial(request, "REJECTED")} tone="light">Reject</Button></>}
+            {request.status === "APPROVED" && <Button onClick={() => issueMaterial(request)} tone="success">Issue Stock</Button>}
+            {request.status === "ISSUED" && <span style={{ color: "#047857", fontWeight: 900 }}>Stock issued</span>}
+          </div>,
+        ])}
+        empty="No additional material requests."
+      />
+      {requestDraft.dispatch_id && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1100, background: "rgba(15,23,42,.52)", display: "grid", placeItems: "center", padding: 18 }}>
+          <form onSubmit={submitMaterialRequest} style={{ ...card, width: "min(620px,100%)", padding: 18, display: "grid", gap: 12 }}>
+            <div><div style={{ color: "#2563eb", fontSize: 11, fontWeight: 950, textTransform: "uppercase" }}>Field Material Control</div><h3 style={{ margin: "4px 0" }}>Request Additional Material</h3><p style={{ margin: 0, color: "#64748b" }}>Inventory approval is required before extra stock can be issued.</p></div>
+            <select required value={requestDraft.product_id} onChange={(event) => setRequestDraft({ ...requestDraft, product_id: event.target.value })} style={input}><option value="">Select available product</option>{products.filter((product) => product.product_type !== "SERVICE").map((product) => <option key={product.id} value={product.id}>{product.product_name} (Available {Number(product.available_count ?? product.quantity ?? 0)})</option>)}</select>
+            <input required type="number" min="1" value={requestDraft.requested_quantity} onChange={(event) => setRequestDraft({ ...requestDraft, requested_quantity: Number(event.target.value) || 1 })} style={input} placeholder="Quantity" />
+            <textarea required value={requestDraft.reason} onChange={(event) => setRequestDraft({ ...requestDraft, reason: event.target.value })} style={{ ...input, minHeight: 90 }} placeholder="Why is additional material required?" />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}><Button onClick={() => setRequestDraft({ dispatch_id: "", product_id: "", requested_quantity: 1, reason: "" })} tone="light">Cancel</Button><button className="btn btn-primary" type="submit">Submit Request</button></div>
+          </form>
+        </div>
+      )}
+      {qrDispatch && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1100, background: "rgba(15,23,42,.52)", display: "grid", placeItems: "center", padding: 18 }}>
+          <div style={{ ...card, width: "min(960px,100%)", maxHeight: "calc(100vh - 36px)", overflowY: "auto", padding: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 16 }}>
+              <div><div style={{ color: "#2563eb", fontSize: 11, fontWeight: 950, textTransform: "uppercase" }}>Material Traceability</div><h3 style={{ margin: "4px 0" }}>{qrDispatch.dispatch_number} QR Codes</h3><p style={{ margin: 0, color: "#64748b" }}>{qrDispatch.token_number || "Token pending"} | {qrDispatch.customer_name || "Client"}</p></div>
+              <Button onClick={() => setQrDispatch(null)} tone="light">Close</Button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12 }}>
+              {(qrDispatch.items || []).map((item) => {
+                const payload = item.qr_payload || JSON.stringify({ token_number: qrDispatch.token_number, dispatch_number: qrDispatch.dispatch_number, item: item.product_name, serial_number: item.serial_number || item.imei || null, quantity: item.quantity_issued });
+                return <div key={item.id || `${item.product_id}-${item.serial_number || item.imei || item.product_name}`} style={{ border: "1px solid #dbe3ef", borderRadius: 8, padding: 14, background: "#fff", textAlign: "center" }}><QRCodeSVG value={payload} size={150} level="M" /><strong style={{ display: "block", marginTop: 10 }}>{item.product_name || "Issued item"}</strong><span style={{ display: "block", marginTop: 4, color: "#64748b", fontSize: 12 }}>{item.serial_number || item.imei || `Quantity ${item.quantity_issued}`}</span></div>;
+              })}
+              {!qrDispatch.items?.length && <div style={{ color: "#64748b" }}>No issued items found for this assignment.</div>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2188,13 +2558,22 @@ export function InstallerReturnsPage() {
   const [confirming, setConfirming] = useState(false);
   const [completingJob, setCompletingJob] = useState(false);
   const [sendingBill, setSendingBill] = useState(false);
+  const [clientSignoffName, setClientSignoffName] = useState("");
+  const [clientSignoffNote, setClientSignoffNote] = useState("");
+  const [fieldPurchases, setFieldPurchases] = useState<Array<{
+    item_description: string;
+    vendor_name: string;
+    amount: number;
+    receipt_url: string;
+    notes: string;
+  }>>([]);
 
   const loadReturns = async () => {
     setLoading(true);
     try {
       setReturns(await inventoryApi.getReturnRequests());
     } catch {
-      showToast("Unable to load installer return requests.", "error");
+      showToast("Unable to load material reconciliation records.", "error");
       setReturns([]);
     } finally {
       setLoading(false);
@@ -2205,6 +2584,15 @@ export function InstallerReturnsPage() {
     try {
       const detail = await inventoryApi.getReturnRequest(id);
       setSelectedReturn(detail);
+      setClientSignoffName(detail.client_signoff_name || "");
+      setClientSignoffNote(detail.client_signoff_note || "");
+      setFieldPurchases((detail.on_the_go_purchases || []).map((item) => ({
+        item_description: item.item_description || "",
+        vendor_name: item.vendor_name || "",
+        amount: Number(item.amount || 0),
+        receipt_url: item.receipt_url || "",
+        notes: item.notes || "",
+      })));
       setItems((detail.items || []).map((item) => ({
         ...item,
         condition: item.condition || "GOOD",
@@ -2212,7 +2600,7 @@ export function InstallerReturnsPage() {
         quantity_returned: Number(item.quantity_returned || 0),
       })));
     } catch {
-      showToast("Unable to load return request detail.", "error");
+      showToast("Unable to load material reconciliation detail.", "error");
     }
   };
 
@@ -2230,12 +2618,16 @@ export function InstallerReturnsPage() {
 
   const completeFieldJob = async () => {
     if (!selectedId || !selectedReturn) return;
+    if (!clientSignoffName.trim()) {
+      showToast("Enter the authorized client sign-off name before completing field service.", "error");
+      return;
+    }
     const unmarked = items.some((item) => {
       const issued = Number(item.quantity_issued || 0);
       return Number(item.quantity_used || 0) + Number(item.quantity_returned || 0) !== issued;
     });
     if (unmarked) {
-      showToast("Mark every item as Given / Installed or Not Used before completing the job.", "error");
+      showToast("Record the actual result for every issued item before completing field service.", "error");
       return;
     }
     setCompletingJob(true);
@@ -2245,20 +2637,25 @@ export function InstallerReturnsPage() {
           id: item.id,
           quantity_used: Number(item.quantity_used || 0),
           quantity_returned: Number(item.quantity_returned || 0),
-          notes: item.notes || "Inventory recorded field job result.",
+          notes: item.notes || "Inventory recorded the field service result.",
         })),
-        notes: "Field job completed and submitted for return review.",
+        on_the_go_purchases: fieldPurchases
+          .filter((item) => item.item_description.trim() && Number(item.amount) > 0)
+          .map((item) => ({ ...item, amount: Number(item.amount) })),
+        client_signoff_name: clientSignoffName.trim(),
+        client_signoff_note: clientSignoffNote.trim(),
+        notes: "Field service completed with client sign-off and submitted for material reconciliation.",
       });
       if (updated?.invoice || updated?.status === "STOCK_UPDATED" || updated?.dispatch_status === "BILL_SENT") {
-        showToast("Job completed. Next: Finance > Billing Approvals.", "success");
-        navigate("/inventory/dispatches");
+        showToast("Field service completed. The verified billing record is now available to Finance.", "success");
+        navigate("/inventory/field-service");
         return;
       }
-      showToast("Job completed. Next: Inventory > Installer Returns.", "success");
+      showToast("Field service completed. Reconcile any unused or returned material next.", "success");
       await loadReturnDetail(selectedId);
       await loadReturns();
     } catch {
-      showToast("Job completion could not be saved. Check every item and try again.", "error");
+      showToast("Field service completion could not be saved. Check every item and try again.", "error");
     } finally {
       setCompletingJob(false);
     }
@@ -2318,14 +2715,14 @@ export function InstallerReturnsPage() {
           confirmed: Boolean(item.confirm),
           notes: item.notes || "",
         })),
-        notes: "Inventory reviewed and confirmed installer returns.",
+        notes: "Inventory reviewed and confirmed the material reconciliation.",
       });
-      showToast("Returns confirmed. Stock and bill adjustment updated.", "success");
+      showToast("Material reconciliation confirmed. Stock and billing adjustments are updated.", "success");
       setSelectedReturn(updated);
       await loadReturns();
       await loadReturnDetail(selectedId);
     } catch {
-      showToast("Return confirmation failed. Please check backend/API connection.", "error");
+      showToast("Material reconciliation could not be confirmed. Check the connection and try again.", "error");
     } finally {
       setConfirming(false);
     }
@@ -2338,7 +2735,7 @@ export function InstallerReturnsPage() {
       const updated = await inventoryApi.sendAdjustedBillToFinance(selectedId);
       showToast(
         updated.no_charge
-          ? "No-charge job closed. All chargeable items were returned, so no Finance invoice was generated."
+          ? "Zero-balance record closed. All chargeable items were returned, so no Finance invoice was generated."
           : "Adjusted bill sent to Finance. Order status is BILL_SENT.",
         "success",
       );
@@ -2363,10 +2760,10 @@ export function InstallerReturnsPage() {
     return (
       <div className="flow-page-shell" style={pageShell}>
         <Header
-          eyebrow={fieldJobPending ? "Inventory Step 4" : "Installer Returns Detail"}
-          title={selectedReturn ? `${fieldJobPending ? "Complete Job" : selectedReturn.return_request_no} - ${selectedReturn.customer_name || "Client"}` : "Job Review"}
-          text={fieldJobPending ? "Mark each dispatched item." : "Confirm returns and send billing."}
-          actions={<Button onClick={() => navigate("/inventory/returns")} tone="light"><ArrowRight size={15} /> Back to Returns List</Button>}
+          eyebrow={fieldJobPending ? "Field Service Completion" : "Material Reconciliation Detail"}
+          title={selectedReturn ? `${fieldJobPending ? "Complete Field Service" : selectedReturn.return_request_no} - ${selectedReturn.customer_name || "Client"}` : "Field Service Review"}
+          text={fieldJobPending ? "Record each issued item's site result and obtain client sign-off." : "Verify returned material and submit the adjusted billing record."}
+          actions={<Button onClick={() => navigate("/inventory/reconciliation")} tone="light"><ArrowRight size={15} /> Back to Reconciliation</Button>}
         />
 
         {selectedReturn && fieldJobPending && (
@@ -2376,7 +2773,7 @@ export function InstallerReturnsPage() {
                 ["Dispatch", selectedReturn.dispatch_number || "-"],
                 ["Token / Order", `${selectedReturn.token_number || "-"} / ${selectedReturn.order_number || "-"}`],
                 ["Client", selectedReturn.customer_name || "-"],
-                ["Installer", selectedReturn.installer_name || selectedReturn.installer_email || "-"],
+                ["Field Technician", selectedReturn.installer_name || selectedReturn.installer_email || "-"],
               ].map(([label, value]) => (
                 <div key={String(label)}>
                   <div style={{ color: "#64748b", fontSize: 11, fontWeight: 900, textTransform: "uppercase" }}>{label}</div>
@@ -2386,8 +2783,8 @@ export function InstallerReturnsPage() {
             </div>
 
             <div style={{ ...card, padding: 18 }}>
-              <h3 style={{ margin: "0 0 5px" }}>Job Items</h3>
-              <p style={{ margin: "0 0 14px", color: "#64748b" }}>Choose the actual site result for every item. Nothing is sent to Finance until the job and return review are complete.</p>
+              <h3 style={{ margin: "0 0 5px" }}>Issued Material Results</h3>
+              <p style={{ margin: "0 0 14px", color: "#64748b" }}>Record the actual result for every issued item. Finance receives nothing until field completion and material reconciliation are verified.</p>
               <DataTable
                 columns={["Item", "Serial / IMEI", "Issued", "Site Result"]}
                 rows={items.map((item, index) => {
@@ -2413,13 +2810,58 @@ export function InstallerReturnsPage() {
                     </div>,
                   ];
                 })}
-                empty="No dispatched items were found for this job."
+                empty="No issued material was found for this assignment."
               />
             </div>
 
+            <div style={{ ...card, padding: 18 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <div>
+                  <h3 style={{ margin: "0 0 5px" }}>Additional Items Used On Site</h3>
+                  <p style={{ margin: 0, color: "#64748b" }}>Add only items purchased or used outside the original dispatch. They will be included in the Finance bill.</p>
+                </div>
+                <Button
+                  type="button"
+                  tone="light"
+                  onClick={() => setFieldPurchases((current) => [...current, {
+                    item_description: "",
+                    vendor_name: "",
+                    amount: 0,
+                    receipt_url: "",
+                    notes: "",
+                  }])}
+                >
+                  <Plus size={15} /> Add Extra Item
+                </Button>
+              </div>
+              {fieldPurchases.length === 0 ? (
+                <div style={{ marginTop: 14, padding: 14, border: "1px dashed #cbd5e1", borderRadius: 8, color: "#64748b" }}>No additional site items recorded.</div>
+              ) : (
+                <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+                  {fieldPurchases.map((purchase, index) => (
+                    <div key={index} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10, alignItems: "end" }}>
+                      <label style={label}>Item description<input style={input} value={purchase.item_description} onChange={(event) => setFieldPurchases((current) => current.map((item, i) => i === index ? { ...item, item_description: event.target.value } : item))} /></label>
+                      <label style={label}>Vendor<input style={input} value={purchase.vendor_name} onChange={(event) => setFieldPurchases((current) => current.map((item, i) => i === index ? { ...item, vendor_name: event.target.value } : item))} /></label>
+                      <label style={label}>Amount (PKR)<input style={input} type="number" min="0" value={purchase.amount || ""} onChange={(event) => setFieldPurchases((current) => current.map((item, i) => i === index ? { ...item, amount: Number(event.target.value) } : item))} /></label>
+                      <Button type="button" tone="light" onClick={() => setFieldPurchases((current) => current.filter((_, i) => i !== index))}><XCircle size={15} /> Remove</Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ ...card, padding: 18 }}>
+              <h3 style={{ margin: "0 0 5px" }}>Client Sign-off</h3>
+              <p style={{ margin: "0 0 14px", color: "#64748b" }}>Required after on-site work. This confirms the client received the installed items or completed service.</p>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 12 }}>
+                <label style={label}>Authorized client name *<input style={input} value={clientSignoffName} onChange={(event) => setClientSignoffName(event.target.value)} placeholder="Name of person accepting the work" /></label>
+                <label style={label}>Sign-off note<input style={input} value={clientSignoffNote} onChange={(event) => setClientSignoffNote(event.target.value)} placeholder="Completion note, designation or reference" /></label>
+              </div>
+            </div>
+
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <Button onClick={completeFieldJob} disabled={completingJob || !allJobItemsMarked} tone="success" prominent>
-                <CheckCircle2 size={16} /> {completingJob ? "Completing..." : "Complete Job & Submit Returns"}
+              <Button onClick={completeFieldJob} disabled={completingJob || !allJobItemsMarked || !clientSignoffName.trim()} tone="success" prominent>
+                <CheckCircle2 size={16} /> {completingJob ? "Completing..." : "Save Sign-off & Complete Field Service"}
               </Button>
             </div>
           </div>
@@ -2431,7 +2873,7 @@ export function InstallerReturnsPage() {
               {[
                 ["Token / Order", `${selectedReturn.token_number || "-"} / ${selectedReturn.order_number || "-"}`],
                 ["Client", selectedReturn.customer_name || "-"],
-                ["Installer", selectedReturn.installer_name || selectedReturn.installer_email || "-"],
+                ["Field Technician", selectedReturn.installer_name || selectedReturn.installer_email || "-"],
                 ["Status", statusChip(status)],
               ].map(([label, value]) => (
                 <div key={String(label)}>
@@ -2442,9 +2884,9 @@ export function InstallerReturnsPage() {
             </div>
 
             <div style={{ ...card, padding: 18 }}>
-              <h3 style={{ marginTop: 0 }}>Items to Return</h3>
+              <h3 style={{ marginTop: 0 }}>Returned Material Verification</h3>
               <DataTable
-                columns={["Item Name", "Qty Returned", "Condition", "Confirm"]}
+                columns={["Item", "Returned Quantity", "Condition", "Verified"]}
                 rows={items.map((item, index) => [
                   <div>
                     <strong>{item.product_name || item.serial_number || item.imei || "Dispatch item"}</strong>
@@ -2479,7 +2921,7 @@ export function InstallerReturnsPage() {
                     Confirm
                   </label>,
                 ])}
-                empty="No returned items are attached to this request."
+                empty="No returned material is attached to this reconciliation record."
               />
             </div>
 
@@ -2500,7 +2942,7 @@ export function InstallerReturnsPage() {
               </div>
               {bill.final <= 0 && (
                 <div style={{ marginTop: 12, border: "1px solid #bfdbfe", borderRadius: 10, padding: 12, color: "#1e3a8a", background: "#eff6ff", fontWeight: 800 }}>
-                  No charge: all chargeable items were returned. Closing this request will not generate a Finance invoice.
+                  Zero balance: all chargeable items were returned. Closing this record will not generate a Finance invoice.
                 </div>
               )}
             </div>
@@ -2508,12 +2950,12 @@ export function InstallerReturnsPage() {
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
               {status === "PENDING" && (
                 <Button onClick={confirmReturns} disabled={confirming} tone="primary">
-                  <CheckCircle2 size={16} /> {confirming ? "Confirming..." : "Confirm Returns"}
+                  <CheckCircle2 size={16} /> {confirming ? "Confirming..." : "Confirm Reconciliation"}
                 </Button>
               )}
               {status === "CONFIRMED" && (
                 <Button onClick={sendBill} disabled={sendingBill} tone="success" prominent>
-                  <ReceiptText size={16} /> {sendingBill ? "Processing..." : bill.final <= 0 ? "Close as No Charge" : "Send Adjusted Bill to Finance"}
+                  <ReceiptText size={16} /> {sendingBill ? "Processing..." : bill.final <= 0 ? "Close Zero-Balance Record" : "Submit Verified Billing Record"}
                 </Button>
               )}
               {status === "STOCK_UPDATED" && statusChip("BILL_SENT")}
@@ -2528,16 +2970,16 @@ export function InstallerReturnsPage() {
   return (
     <div className="flow-page-shell" style={pageShell}>
       <Header
-        eyebrow="Installer Returns"
-        title="Pending Return Requests"
-        text="Confirm returns and send billing to Finance."
+        eyebrow="Material Control"
+        title="Field Completion & Material Reconciliation"
+        text="Verify field results, reconcile returned material and submit an auditable billing record to Finance."
         actions={<Button onClick={loadReturns} tone="light"><RefreshCw size={15} /> Refresh</Button>}
       />
       <div style={{ ...card, padding: 14, marginBottom: 14 }}>
-        <SearchBox value={q} onChange={setQ} placeholder="Search return no, token, order, client or installer" />
+        <SearchBox value={q} onChange={setQ} placeholder="Search reconciliation no, token, order, client or technician" />
       </div>
       <DataTable
-        columns={["Return Request No", "Token / Order", "Client Name", "Installer Name", "Items to Return", "Status", "Submitted Date", "Action"]}
+        columns={["Reconciliation No", "Token / Order", "Client", "Field Technician", "Returned Items", "Status", "Submitted", "Action"]}
         rows={filteredReturns.map((request) => [
           <strong>{request.return_request_no}</strong>,
           <div>
@@ -2549,11 +2991,11 @@ export function InstallerReturnsPage() {
           `${request.items_to_return_count || 0} items`,
           statusChip(request.status),
           request.submitted_date ? new Date(request.submitted_date).toLocaleDateString("en-GB") : "-",
-          <Button to={`/inventory/returns?returnId=${request.id}`} tone={request.status === "PENDING" ? "primary" : "light"}>
-            <Undo2 size={14} /> Review & Confirm
+          <Button to={`/inventory/reconciliation?returnId=${request.id}`} tone={request.status === "PENDING" ? "primary" : "light"}>
+            <Undo2 size={14} /> Review Reconciliation
           </Button>,
         ])}
-        empty={loading ? "Loading return requests..." : "No installer return requests found."}
+        empty={loading ? "Loading reconciliation records..." : "No material reconciliation records found."}
       />
     </div>
   );
@@ -2571,7 +3013,19 @@ const defaultCompanySettings: InventoryCompanySettings = {
 const defaultInventorySettings: InventoryPreferenceSettings = {
   default_min_stock_threshold: 5,
   low_stock_alert_email: "",
+  theme_preset: "executive",
+  primary_color: "#10234D",
+  accent_color: "#0F766E",
+  page_color: "#EEF5FF",
+  surface_color: "#FFFFFF",
 };
+
+const inventoryThemePresets = [
+  { id: "executive", label: "Executive", primary: "#10234D", accent: "#0F766E", page: "#EEF5FF", surface: "#FFFFFF" },
+  { id: "ocean", label: "Ocean", primary: "#164E63", accent: "#0284C7", page: "#F0F9FF", surface: "#FFFFFF" },
+  { id: "emerald", label: "Emerald", primary: "#134E4A", accent: "#059669", page: "#ECFDF5", surface: "#FFFFFF" },
+  { id: "graphite", label: "Graphite", primary: "#1E293B", accent: "#475569", page: "#F1F5F9", surface: "#FFFFFF" },
+] as const;
 
 function SettingsSection({
   title,
@@ -2607,24 +3061,30 @@ export function InventoryMasterSetupPage() {
   const [categories, setCategories] = useState<ItemCategory[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [installers, setInstallers] = useState<InventoryInstallerUser[]>([]);
+  const [customFields, setCustomFields] = useState<ProductCustomFieldDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [categoryForm, setCategoryForm] = useState({ id: "", category_name: "" });
-  const [vendorForm, setVendorForm] = useState({ id: "", name: "", contact_person: "", email: "", phone: "" });
+  const emptyVendorForm = { id: "", name: "", vendor_code: "", contact_person: "", email: "", phone: "", address: "", ntn_number: "", gst_number: "", payment_terms: "", status: "ACTIVE", notes: "" };
+  const [vendorForm, setVendorForm] = useState(emptyVendorForm);
+  const emptyCustomFieldForm = { id: "", label: "", field_key: "", field_type: "TEXT", applies_to: "PRODUCT", required: false, optionsText: "", sort_order: 0 };
+  const [customFieldForm, setCustomFieldForm] = useState(emptyCustomFieldForm);
 
   const loadSetup = async () => {
     setLoading(true);
     try {
-      const [settings, categoryRows, vendorRows, installerRows] = await Promise.all([
+      const [settings, categoryRows, vendorRows, installerRows, customFieldRows] = await Promise.all([
         inventoryApi.getMasterSettings().catch(() => ({ company: defaultCompanySettings, inventory: defaultInventorySettings })),
         inventoryApi.getCategories().catch(() => []),
         inventoryApi.getVendors().catch(() => []),
         inventoryApi.getInstallers({ includeInactive: true }).catch(() => []),
+        inventoryApi.getProductCustomFields().catch(() => []),
       ]);
       setCompany(settings.company || defaultCompanySettings);
-      setInventory(settings.inventory || defaultInventorySettings);
+      setInventory({ ...defaultInventorySettings, ...(settings.inventory || {}) });
       setCategories(categoryRows);
       setVendors(vendorRows);
       setInstallers(installerRows);
+      setCustomFields(customFieldRows);
     } catch {
       showToast("Master setup data could not be loaded. Please check backend connection.", "error");
     } finally {
@@ -2652,7 +3112,8 @@ export function InventoryMasterSetupPage() {
     try {
       const saved = await inventoryApi.updateInventorySettings(inventory);
       setInventory(saved);
-      showToast("Inventory settings saved.", "success");
+      window.dispatchEvent(new Event("track360:inventory-theme-updated"));
+      showToast("Inventory controls and workspace appearance saved.", "success");
     } catch {
       showToast("Inventory settings could not be saved.", "error");
     }
@@ -2698,7 +3159,7 @@ export function InventoryMasterSetupPage() {
         await inventoryApi.createVendor(vendorForm);
         showToast("Supplier added.", "success");
       }
-      setVendorForm({ id: "", name: "", contact_person: "", email: "", phone: "" });
+      setVendorForm(emptyVendorForm);
       loadSetup();
     } catch {
       showToast("Supplier could not be saved.", "error");
@@ -2719,10 +3180,42 @@ export function InventoryMasterSetupPage() {
   const toggleInstaller = async (installer: InventoryInstallerUser) => {
     try {
       await inventoryApi.updateInstallerStatus(installer.id, installer.is_active === false);
-      showToast("Installer status updated.", "success");
+      showToast("Field technician status updated.", "success");
       loadSetup();
     } catch {
-      showToast("Installer status could not be updated.", "error");
+      showToast("Field technician status could not be updated.", "error");
+    }
+  };
+
+  const saveCustomField = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!customFieldForm.label.trim()) return showToast("Field label is required.", "error");
+    try {
+      await inventoryApi.upsertProductCustomField({
+        label: customFieldForm.label.trim(),
+        field_key: customFieldForm.field_key.trim() || customFieldForm.label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_"),
+        field_type: customFieldForm.field_type,
+        applies_to: customFieldForm.applies_to,
+        required: customFieldForm.required,
+        sort_order: customFieldForm.sort_order,
+        options: customFieldForm.optionsText.split(",").map((option) => option.trim()).filter(Boolean),
+      });
+      setCustomFieldForm(emptyCustomFieldForm);
+      showToast("Custom purchasing/product field saved.", "success");
+      loadSetup();
+    } catch (error: any) {
+      showToast(error?.response?.data?.error?.message || "Custom field could not be saved.", "error");
+    }
+  };
+
+  const deleteCustomField = async (fieldDef: ProductCustomFieldDefinition) => {
+    if (!window.confirm(`Remove custom field "${fieldDef.label}"?`)) return;
+    try {
+      await inventoryApi.deleteProductCustomField(fieldDef.id);
+      showToast("Custom field removed.", "success");
+      loadSetup();
+    } catch {
+      showToast("Custom field could not be removed.", "error");
     }
   };
 
@@ -2733,12 +3226,23 @@ export function InventoryMasterSetupPage() {
     </label>
   );
 
+  const selectThemePreset = (preset: (typeof inventoryThemePresets)[number]) => {
+    setInventory({
+      ...inventory,
+      theme_preset: preset.id,
+      primary_color: preset.primary,
+      accent_color: preset.accent,
+      page_color: preset.page,
+      surface_color: preset.surface,
+    });
+  };
+
   return (
     <div className="flow-page-shell" style={pageShell}>
       <Header
-        eyebrow="Inventory Settings"
-        title="Master Setup"
-        text="Simple configuration only: company profile, inventory defaults, categories, suppliers and installers."
+        eyebrow="Inventory Administration"
+        title="Configuration and Master Data"
+        text="Configure company details, inventory controls, categories, vendors, dynamic fields and field-team access."
         actions={<Button onClick={loadSetup} tone="light"><RefreshCw size={15} /> Refresh</Button>}
       />
 
@@ -2759,14 +3263,62 @@ export function InventoryMasterSetupPage() {
           </form>
         </SettingsSection>
 
-        <SettingsSection title="Inventory Settings" description="Low-stock defaults and notification routing for warehouse monitoring.">
+        <SettingsSection title="Workspace Appearance and Inventory Controls" description="Choose an approved visual theme or configure workspace colors, low-stock rules and alert routing.">
           <form onSubmit={saveInventory} style={{ display: "grid", gap: 12 }}>
+            <div className="inventory-theme-presets" aria-label="Inventory workspace theme presets">
+              {inventoryThemePresets.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`inventory-theme-preset${inventory.theme_preset === preset.id ? " is-active" : ""}`}
+                  onClick={() => selectThemePreset(preset)}
+                >
+                  <span className="inventory-theme-preset__swatches" aria-hidden="true">
+                    {[preset.primary, preset.accent, preset.page, preset.surface].map((color, index) => <span key={`${preset.id}-${index}`} style={{ background: color }} />)}
+                  </span>
+                  <strong>{preset.label}</strong>
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 12 }}>
+              {field("Header and Primary Actions", (
+                <span className="inventory-color-control">
+                  <input type="color" aria-label="Inventory primary color" value={inventory.primary_color} onChange={(e) => setInventory({ ...inventory, theme_preset: "custom", primary_color: e.target.value.toUpperCase() })} />
+                  <input style={input} value={inventory.primary_color} onChange={(e) => setInventory({ ...inventory, theme_preset: "custom", primary_color: e.target.value })} />
+                </span>
+              ))}
+              {field("Inventory Accent", (
+                <span className="inventory-color-control">
+                  <input type="color" aria-label="Inventory accent color" value={inventory.accent_color} onChange={(e) => setInventory({ ...inventory, theme_preset: "custom", accent_color: e.target.value.toUpperCase() })} />
+                  <input style={input} value={inventory.accent_color} onChange={(e) => setInventory({ ...inventory, theme_preset: "custom", accent_color: e.target.value })} />
+                </span>
+              ))}
+              {field("Workspace Background", (
+                <span className="inventory-color-control">
+                  <input type="color" aria-label="Inventory workspace background" value={inventory.page_color} onChange={(e) => setInventory({ ...inventory, theme_preset: "custom", page_color: e.target.value.toUpperCase() })} />
+                  <input style={input} value={inventory.page_color} onChange={(e) => setInventory({ ...inventory, theme_preset: "custom", page_color: e.target.value })} />
+                </span>
+              ))}
+              {field("Cards and Forms", (
+                <span className="inventory-color-control">
+                  <input type="color" aria-label="Inventory surface color" value={inventory.surface_color} onChange={(e) => setInventory({ ...inventory, theme_preset: "custom", surface_color: e.target.value.toUpperCase() })} />
+                  <input style={input} value={inventory.surface_color} onChange={(e) => setInventory({ ...inventory, theme_preset: "custom", surface_color: e.target.value })} />
+                </span>
+              ))}
+            </div>
+            <div style={{ padding: 14, borderRadius: 8, border: `1px solid ${inventory.accent_color}`, background: inventory.page_color }}>
+              <div style={{ padding: "12px 14px", borderRadius: 7, background: inventory.primary_color, color: "#fff", fontWeight: 900 }}>Inventory workspace preview</div>
+              <div style={{ marginTop: 8, padding: 12, borderRadius: 7, border: "1px solid rgba(15,23,42,.12)", background: inventory.surface_color, color: "#10213f" }}>
+                <span style={{ display: "inline-block", width: 8, height: 8, marginRight: 8, borderRadius: 999, background: inventory.accent_color }} />
+                Operational cards, forms and tables use this saved appearance.
+              </div>
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 12 }}>
               {field("Default Minimum Stock Threshold", <input type="number" min="0" style={input} value={inventory.default_min_stock_threshold} onChange={(e) => setInventory({ ...inventory, default_min_stock_threshold: Number(e.target.value) || 0 })} />)}
               {field("Low Stock Alert Email", <input type="email" style={input} value={inventory.low_stock_alert_email} onChange={(e) => setInventory({ ...inventory, low_stock_alert_email: e.target.value })} placeholder="warehouse@esspl.com.pk" />)}
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button type="submit" className="btn btn-primary">Save Inventory Settings</button>
+              <button type="submit" className="btn btn-primary">Save Appearance and Controls</button>
             </div>
           </form>
         </SettingsSection>
@@ -2794,26 +3346,100 @@ export function InventoryMasterSetupPage() {
         </SettingsSection>
 
         <SettingsSection
+          title="Dynamic Product Fields"
+          description="Create purchasing/product fields without code changes. These fields appear on the Product Catalog form and are stored in custom attributes."
+          action={<Button onClick={() => setCustomFieldForm(emptyCustomFieldForm)} tone="success"><Plus size={15} /> New Field</Button>}
+        >
+          <form onSubmit={saveCustomField} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr)) auto", gap: 10, marginBottom: 12, alignItems: "end" }}>
+            {field("Field Label", <input required style={input} value={customFieldForm.label} onChange={(e) => setCustomFieldForm({ ...customFieldForm, label: e.target.value })} placeholder="Field A, cable type, capacity" />)}
+            {field("Field Key", <input style={input} value={customFieldForm.field_key} onChange={(e) => setCustomFieldForm({ ...customFieldForm, field_key: e.target.value })} placeholder="auto if blank" />)}
+            {field("Type", (
+              <select style={input} value={customFieldForm.field_type} onChange={(e) => setCustomFieldForm({ ...customFieldForm, field_type: e.target.value })}>
+                <option value="TEXT">Text</option><option value="NUMBER">Number</option><option value="DATE">Date</option><option value="SELECT">Dropdown</option><option value="BOOLEAN">Yes / No</option>
+              </select>
+            ))}
+            {field("Applies To", (
+              <select style={input} value={customFieldForm.applies_to} onChange={(e) => setCustomFieldForm({ ...customFieldForm, applies_to: e.target.value })}>
+                <option value="PRODUCT">Product master</option><option value="PURCHASE">Purchasing</option><option value="STOCK_IN">Stock-in</option>
+              </select>
+            ))}
+            {field("Dropdown Options", <input style={input} value={customFieldForm.optionsText} onChange={(e) => setCustomFieldForm({ ...customFieldForm, optionsText: e.target.value })} placeholder="Option 1, Option 2" />)}
+            {field("Sort", <input type="number" style={input} value={customFieldForm.sort_order} onChange={(e) => setCustomFieldForm({ ...customFieldForm, sort_order: Number(e.target.value) || 0 })} />)}
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 850, color: "#475569" }}>
+              <input type="checkbox" checked={customFieldForm.required} onChange={(e) => setCustomFieldForm({ ...customFieldForm, required: e.target.checked })} /> Required
+            </label>
+            <button type="submit" className="btn btn-primary">Save Field</button>
+          </form>
+          <DataTable
+            columns={["Field", "Key", "Type", "Applies To", "Required", "Action"]}
+            rows={customFields.map((fieldDef) => [
+              <strong>{fieldDef.label}</strong>,
+              fieldDef.field_key,
+              fieldDef.field_type,
+              fieldDef.applies_to,
+              fieldDef.required ? "Yes" : "No",
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Button onClick={() => setCustomFieldForm({
+                  id: fieldDef.id,
+                  label: fieldDef.label || "",
+                  field_key: fieldDef.field_key || "",
+                  field_type: String(fieldDef.field_type || "TEXT"),
+                  applies_to: String(fieldDef.applies_to || "PRODUCT"),
+                  required: Boolean(fieldDef.required),
+                  optionsText: (fieldDef.options || []).join(", "),
+                  sort_order: Number(fieldDef.sort_order || 0),
+                })} tone="light">Edit</Button>
+                <Button onClick={() => deleteCustomField(fieldDef)} tone="light"><XCircle size={14} /> Delete</Button>
+              </div>,
+            ])}
+            empty={loading ? "Loading custom fields..." : "No custom fields yet."}
+          />
+        </SettingsSection>
+
+        <SettingsSection
           title="Suppliers List"
           description="Suppliers are used by purchase orders and stock receipts."
-          action={<Button onClick={() => setVendorForm({ id: "", name: "", contact_person: "", email: "", phone: "" })} tone="success"><Plus size={15} /> Add New Supplier</Button>}
+          action={<Button onClick={() => setVendorForm(emptyVendorForm)} tone="success"><Plus size={15} /> Add New Supplier</Button>}
         >
           <form onSubmit={saveVendor} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr)) auto auto", gap: 10, marginBottom: 12, alignItems: "end" }}>
             {field("Supplier Name", <input required style={input} value={vendorForm.name} onChange={(e) => setVendorForm({ ...vendorForm, name: e.target.value })} />)}
+            {field("Supplier Code", <input style={input} value={vendorForm.vendor_code} onChange={(e) => setVendorForm({ ...vendorForm, vendor_code: e.target.value })} />)}
             {field("Contact", <input style={input} value={vendorForm.contact_person} onChange={(e) => setVendorForm({ ...vendorForm, contact_person: e.target.value })} />)}
             {field("Email", <input type="email" style={input} value={vendorForm.email} onChange={(e) => setVendorForm({ ...vendorForm, email: e.target.value })} />)}
             {field("Phone", <input style={input} value={vendorForm.phone} onChange={(e) => setVendorForm({ ...vendorForm, phone: e.target.value })} />)}
+            {field("NTN", <input style={input} value={vendorForm.ntn_number} onChange={(e) => setVendorForm({ ...vendorForm, ntn_number: e.target.value })} />)}
+            {field("GST", <input style={input} value={vendorForm.gst_number} onChange={(e) => setVendorForm({ ...vendorForm, gst_number: e.target.value })} />)}
+            {field("Payment Terms", <input style={input} value={vendorForm.payment_terms} onChange={(e) => setVendorForm({ ...vendorForm, payment_terms: e.target.value })} placeholder="Net 15, COD, advance" />)}
+            {field("Status", (
+              <select style={input} value={vendorForm.status} onChange={(e) => setVendorForm({ ...vendorForm, status: e.target.value })}>
+                <option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option>
+              </select>
+            ))}
             <button type="submit" className="btn btn-primary">{vendorForm.id ? "Update Supplier" : "Save Supplier"}</button>
-            {vendorForm.id && <Button onClick={() => setVendorForm({ id: "", name: "", contact_person: "", email: "", phone: "" })} tone="light">Cancel</Button>}
+            {vendorForm.id && <Button onClick={() => setVendorForm(emptyVendorForm)} tone="light">Cancel</Button>}
           </form>
           <DataTable
-            columns={["Supplier Name", "Contact", "Email", "Phone", "Edit", "Delete"]}
+            columns={["Supplier", "Contact", "Tax / Terms", "Status", "Edit", "Delete"]}
             rows={vendors.map((vendor) => [
-              <strong>{vendor.name}</strong>,
-              vendor.contact_person || "-",
-              vendor.email || "-",
-              vendor.phone || "-",
-              <Button onClick={() => setVendorForm({ id: vendor.id, name: vendor.name || "", contact_person: vendor.contact_person || "", email: vendor.email || "", phone: vendor.phone || "" })} tone="light">Edit</Button>,
+              <div><strong>{vendor.name}</strong><br /><span style={{ color: "#64748b" }}>{vendor.vendor_code || "No supplier code"}</span></div>,
+              <div>{vendor.contact_person || "-"}<br /><span style={{ color: "#64748b" }}>{vendor.email || vendor.phone || "-"}</span></div>,
+              <div>{vendor.ntn_number || vendor.gst_number || "-"}<br /><span style={{ color: "#64748b" }}>{vendor.payment_terms || "-"}</span></div>,
+              statusChip(vendor.status || "ACTIVE"),
+              <Button onClick={() => setVendorForm({
+                ...emptyVendorForm,
+                id: vendor.id,
+                name: vendor.name || "",
+                vendor_code: vendor.vendor_code || "",
+                contact_person: vendor.contact_person || "",
+                email: vendor.email || "",
+                phone: vendor.phone || "",
+                address: vendor.address || "",
+                ntn_number: vendor.ntn_number || "",
+                gst_number: vendor.gst_number || "",
+                payment_terms: vendor.payment_terms || "",
+                status: vendor.status || "ACTIVE",
+                notes: vendor.notes || "",
+              })} tone="light">Edit</Button>,
               <Button onClick={() => deleteVendor(vendor)} tone="light"><XCircle size={14} /> Delete</Button>,
             ])}
             empty={loading ? "Loading suppliers..." : "No suppliers found."}
@@ -2821,20 +3447,20 @@ export function InventoryMasterSetupPage() {
         </SettingsSection>
 
         <SettingsSection
-          title="Installers List"
-          description="Installer accounts appear here from system users. Dispatch pages use active installers only."
+          title="Field Team Directory"
+          description="Active field technicians can be assigned to approved field service work. User access is managed by Senior Management."
           action={
             canManageInstallerAccounts ? (
-              <Button to="/accounts" tone="success"><Plus size={15} /> Add New Installer</Button>
+              <Button to="/accounts" tone="success"><Plus size={15} /> Add Field Technician</Button>
             ) : (
-              <Button onClick={() => showToast("Installer accounts are created from User Accounts by Super Admin.", "error")} tone="success">
-                <Plus size={15} /> Add New Installer
+              <Button onClick={() => showToast("Field technician accounts are created from User Management by Senior Management.", "error")} tone="success">
+                <Plus size={15} /> Add Field Technician
               </Button>
             )
           }
         >
           <DataTable
-            columns={["Installer Name", "Email", "Phone", "Active / Inactive", "Edit"]}
+            columns={["Field Technician", "Email", "Phone", "Access Status", "Action"]}
             rows={installers.map((installer) => [
               <strong>{installer.display_name || installer.email}</strong>,
               installer.email || "-",
@@ -2844,7 +3470,7 @@ export function InventoryMasterSetupPage() {
                 {installer.is_active === false ? "Activate" : "Deactivate"}
               </Button>,
             ])}
-            empty={loading ? "Loading installers..." : "No installer accounts found."}
+            empty={loading ? "Loading field team..." : "No field technician accounts found."}
           />
         </SettingsSection>
       </div>
@@ -2855,19 +3481,43 @@ export function InventoryMasterSetupPage() {
 export function InventoryMovementsPage() {
   const [movements, setMovements] = useState<any[]>([]);
   const [q, setQ] = useState("");
+  const [movementType, setMovementType] = useState("ALL");
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
+  const load = () => inventoryApi.getMovements({ limit: 500 }).then(setMovements).catch(() => setMovements([]));
+
   useEffect(() => {
-    inventoryApi.getMovements({ limit: 500 }).then(setMovements).catch(() => setMovements([]));
+    load();
   }, []);
-  const filtered = movements.filter((movement) => [movement.product_name, movement.serial_number, movement.movement_type, movement.reference_type, movement.notes].join(" ").toLowerCase().includes(q.toLowerCase()));
+  useInventoryLiveEvents(load);
+
+  const filtered = movements.filter((movement) => {
+    const matchesText = [movement.product_name, movement.serial_number, movement.movement_type, movement.reference_type, movement.notes]
+      .join(" ")
+      .toLowerCase()
+      .includes(q.toLowerCase());
+    return matchesText && (movementType === "ALL" || movement.movement_type === movementType);
+  });
+  const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => setPage(1), [q, movementType]);
   return (
     <div className="flow-page-shell" style={pageShell}>
-      <Header eyebrow="Inventory Ledger" title="Stock Movement Ledger" text="Stock movement audit trail." />
-      <div style={{ ...card, padding: 14, marginBottom: 14 }}>
+      <Header eyebrow="Inventory Audit" title="Stock Movement Ledger" text="Trace every receipt, issue, return and adjustment against its source record." />
+      <div style={{ ...card, padding: 14, marginBottom: 14, display: "flex", gap: 12, flexWrap: "wrap" }}>
         <SearchBox value={q} onChange={setQ} placeholder="Search product, serial, reference or notes" />
+        <select aria-label="Filter movement type" value={movementType} onChange={(event) => setMovementType(event.target.value)} style={{ ...input, width: 190 }}>
+          <option value="ALL">All movement types</option>
+          <option value="STOCK_IN">Stock received</option>
+          <option value="STOCK_OUT">Stock issued</option>
+          <option value="RETURN">Material returned</option>
+          <option value="ADJUSTMENT">Stock adjustment</option>
+        </select>
+        <Button onClick={load} tone="light"><RefreshCw size={15} /> Refresh</Button>
       </div>
       <DataTable
         columns={["Date", "Product", "Movement", "Quantity", "Reference", "Notes"]}
-        rows={filtered.map((movement) => [
+        rows={pageRows.map((movement) => [
           movement.created_at ? new Date(movement.created_at).toLocaleString() : "-",
           movement.product_name || movement.serial_number || "-",
           statusChip(movement.movement_type),
@@ -2877,6 +3527,7 @@ export function InventoryMovementsPage() {
         ])}
         empty="No stock movements yet."
       />
+      <TablePager page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} />
     </div>
   );
 }

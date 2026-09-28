@@ -5,13 +5,23 @@ import { useData } from '../context/DataContext';
 import Sidebar from '../components/layout/Sidebar';
 import Topbar from '../components/layout/Topbar';
 import { AlertTriangle, X } from 'lucide-react';
+import { inventoryApi, InventoryPreferenceSettings } from '../services/inventoryService';
+
+const defaultInventoryTheme: Pick<InventoryPreferenceSettings, 'primary_color' | 'accent_color' | 'page_color' | 'surface_color'> = {
+  primary_color: '#10234D',
+  accent_color: '#0F766E',
+  page_color: '#EEF5FF',
+  surface_color: '#FFFFFF',
+};
 
 export default function MainLayout() {
   const { user, activeRole } = useAuth();
   const { globalDays } = useData();
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [inventoryTheme, setInventoryTheme] = useState(defaultInventoryTheme);
   const location = useLocation();
+  const isInventoryWorkspace = location.pathname === '/inventory-dashboard' || location.pathname.startsWith('/inventory');
 
   // workflow banner removed per UI preference
 
@@ -22,6 +32,20 @@ export default function MainLayout() {
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (!isInventoryWorkspace) return;
+
+    const loadTheme = () => {
+      inventoryApi.getMasterSettings()
+        .then((settings) => setInventoryTheme({ ...defaultInventoryTheme, ...settings.inventory }))
+        .catch(() => setInventoryTheme(defaultInventoryTheme));
+    };
+
+    loadTheme();
+    window.addEventListener('track360:inventory-theme-updated', loadTheme);
+    return () => window.removeEventListener('track360:inventory-theme-updated', loadTheme);
+  }, [isInventoryWorkspace]);
 
   if (!user) return <Navigate to="/login" />;
   if (activeRole === 'employee') return <Navigate to="/my-dashboard" />;
@@ -34,8 +58,17 @@ export default function MainLayout() {
     sessionStorage.setItem('ems_banner_dismissed', 'true');
   };
 
+  const workspaceStyle = isInventoryWorkspace
+    ? ({
+        '--inventory-primary': inventoryTheme.primary_color,
+        '--inventory-accent': inventoryTheme.accent_color,
+        '--inventory-page': inventoryTheme.page_color,
+        '--inventory-surface': inventoryTheme.surface_color,
+      } as React.CSSProperties)
+    : undefined;
+
   return (
-    <div className="app-layout">
+    <div className={`app-layout${isInventoryWorkspace ? ' workspace-inventory' : ''}`} style={workspaceStyle}>
       <button
         className={`sidebar-backdrop ${sidebarOpen ? 'is-visible' : ''}`}
         type="button"

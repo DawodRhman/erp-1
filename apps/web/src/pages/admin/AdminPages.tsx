@@ -73,7 +73,7 @@ const emptyAdminData: AdminData = {
 
 const adminPortalCards = [
   { label: "CRM Overview", to: "/admin/crm", icon: Building2, description: "Clients, quotations, approvals, orders and complaints." },
-  { label: "Inventory Overview", to: "/admin/inventory", icon: Package, description: "Incoming orders, stock health, dispatches and returns." },
+  { label: "Inventory Overview", to: "/admin/inventory", icon: Package, description: "Approved orders, stock health, field fulfilment and reconciliation." },
   { label: "Finance Overview", to: "/admin/finance", icon: DollarSign, description: "Billing approvals, invoices, value and accounts health." },
   { label: "EMS Workspace", to: "/dashboard", icon: Users, description: "Employee management, attendance, leave and HR operations." },
   { label: "User Management", to: "/admin/users", icon: ShieldCheck, description: "Portal roles, access ownership and active/inactive users." },
@@ -319,13 +319,14 @@ function amountOf(row: any) {
 }
 
 function buildMetrics(data: AdminData) {
-  const activeQuotations = data.quotations.filter((q) => ["SENT", "DRAFT"].includes(normalizeStatus(q.status))).length;
+  const activeQuotations = data.quotations.filter((q) => ["DRAFT", "MANAGEMENT_PENDING", "MANAGEMENT_APPROVED", "SENT"].includes(normalizeStatus(q.status))).length;
+  const managementApprovals = data.quotations.filter((q) => normalizeStatus(q.status) === "MANAGEMENT_PENDING");
   const pendingOrders = data.orders.filter((order) => !["COMPLETED", "CANCELLED", "BILL_SENT"].includes(normalizeStatus(order.status))).length;
   const lowStockItems = data.products.filter((product) => Number(product.quantity || 0) <= Number(product.min_stock_level || 0));
   const activeDispatches = data.dispatches.filter((dispatch) => !["COMPLETED", "CANCELLED", "BILL_SENT"].includes(normalizeStatus(dispatch.status)));
   const pendingReturns = data.returns.filter((item) => normalizeStatus(item.status) === "PENDING");
   const pendingBills = data.financeApprovals.filter((item) => !["APPROVED", "REJECTED", "ISSUED"].includes(normalizeStatus(item.status || item.approval_status)));
-  return { activeQuotations, pendingOrders, lowStockItems, activeDispatches, pendingReturns, pendingBills, invoicesInPeriod: data.financeInvoices };
+  return { activeQuotations, managementApprovals, pendingOrders, lowStockItems, activeDispatches, pendingReturns, pendingBills, invoicesInPeriod: data.financeInvoices };
 }
 
 function RevenueSummary({ invoices }: { invoices: FinanceInvoice[] }) {
@@ -513,11 +514,11 @@ export function AdminDashboard() {
         <section className="admin-dashboard-slide">
           <div className="admin-stat-grid admin-stat-grid-8 admin-stat-grid-dense">
             <StatCard label="Registered Clients" value={number(periodData.customers.length)} sub={dashboardPeriodLabel(period)} icon={Building2} to="/admin/crm" tone="blue" />
-            <StatCard label="Active Quotations" value={number(metrics.activeQuotations)} sub={`${dashboardPeriodLabel(period)} draft or sent`} icon={FileSpreadsheet} to="/crm/quotations" tone="teal" />
+            <StatCard label="Management Approval Queue" value={number(metrics.managementApprovals.length)} sub="Quotations awaiting decision" icon={ShieldCheck} to="/crm/quotations?status=MANAGEMENT_PENDING" tone="teal" />
             <StatCard label="Pending Orders" value={number(metrics.pendingOrders)} sub={`${dashboardPeriodLabel(period)} pipeline`} icon={ClipboardIcon} to="/admin/orders" tone="amber" />
             <StatCard label="Low Stock Alerts" value={number(metrics.lowStockItems.length || data.inventorySummary?.low_stock_count || 0)} sub="Need reorder review" icon={AlertTriangle} to="/admin/inventory" tone="red" />
-            <StatCard label="Active Dispatches" value={number(metrics.activeDispatches.length)} sub={`${dashboardPeriodLabel(period)} field work`} icon={Truck} to="/inventory/dispatches" tone="green" />
-            <StatCard label="Pending Returns" value={number(metrics.pendingReturns.length)} sub={`${dashboardPeriodLabel(period)} inventory review`} icon={RefreshCw} to="/inventory/returns" tone="purple" />
+            <StatCard label="Active Field Service" value={number(metrics.activeDispatches.length)} sub={`${dashboardPeriodLabel(period)} field work`} icon={Truck} to="/inventory/field-service" tone="green" />
+            <StatCard label="Pending Reconciliation" value={number(metrics.pendingReturns.length)} sub={`${dashboardPeriodLabel(period)} inventory review`} icon={RefreshCw} to="/inventory/reconciliation" tone="purple" />
             <StatCard label="Pending Bills" value={number(metrics.pendingBills.length)} sub={`${dashboardPeriodLabel(period)} finance queue`} icon={ReceiptText} to="/finance/billing-approvals" tone="steel" />
             <StatCard label="Invoices" value={number(metrics.invoicesInPeriod.length)} sub={`${dashboardPeriodLabel(period)} generated`} icon={DollarSign} to="/finance/invoices" tone="green" />
           </div>
@@ -528,31 +529,31 @@ export function AdminDashboard() {
         <section className="admin-dashboard-slide">
           <div className="admin-area-grid">
             <DashboardAreaCard
-              title="CRM / CSR"
-              subtitle="Client request, quotation, approval and order conversion."
+              title="Client & Commercial"
+              subtitle="Client requirement, quotation, approval and order conversion."
               icon={Building2}
               to="/admin/crm"
               rows={[
                 { label: "Clients", value: number(periodData.customers.length), to: "/crm/clients" },
                 { label: "Quotations", value: number(periodData.quotations.length), to: "/crm/quotations" },
+                { label: "Management Approval", value: number(metrics.managementApprovals.length), to: "/crm/quotations?status=MANAGEMENT_PENDING" },
                 { label: "Orders", value: number(periodData.orders.length), to: "/crm/orders" },
-                { label: "Complaints", value: number(periodData.complaints.length), to: "/crm/complaints" },
               ]}
             />
             <DashboardAreaCard
-              title="Inventory"
-              subtitle="Stock gaps, PO action, dispatches and returns."
+              title="Inventory & Fulfilment"
+              subtitle="Stock gaps, procurement, field fulfilment and reconciliation."
               icon={Package}
               to="/admin/inventory"
               rows={[
                 { label: "Incoming", value: number(periodData.workQueue.length), to: "/inventory/queue" },
                 { label: "Awaiting Stock", value: number(awaitingStock), to: "/inventory/purchase-orders" },
-                { label: "Dispatches", value: number(metrics.activeDispatches.length), to: "/inventory/dispatches" },
-                { label: "Returns", value: number(metrics.pendingReturns.length), to: "/inventory/returns" },
+                { label: "Field Service", value: number(metrics.activeDispatches.length), to: "/inventory/field-service" },
+                { label: "Reconciliation", value: number(metrics.pendingReturns.length), to: "/inventory/reconciliation" },
               ]}
             />
             <DashboardAreaCard
-              title="Finance"
+              title="Finance & Receivables"
               subtitle="Billing approvals, issued invoices and value visibility."
               icon={DollarSign}
               to="/admin/finance"
@@ -578,8 +579,9 @@ export function AdminDashboard() {
               <Link to="/admin/orders">Open tracker</Link>
             </div>
             <div className="admin-alert-list admin-alert-list-compact">
+              <Link to="/crm/quotations?status=MANAGEMENT_PENDING"><ShieldCheck size={16} /> {metrics.managementApprovals.length} quotations awaiting senior management approval</Link>
               <Link to="/inventory/queue"><AlertTriangle size={16} /> {awaitingStock} orders awaiting stock or PO action</Link>
-              <Link to="/inventory/returns"><RefreshCw size={16} /> {metrics.pendingReturns.length} installer returns waiting review</Link>
+              <Link to="/inventory/reconciliation"><RefreshCw size={16} /> {metrics.pendingReturns.length} material reconciliations awaiting review</Link>
               <Link to="/finance/billing-approvals"><ReceiptText size={16} /> {metrics.pendingBills.length} finance bills pending approval</Link>
               <Link to="/inventory/products"><Package size={16} /> {metrics.lowStockItems.length} products at or below minimum stock</Link>
             </div>
@@ -794,15 +796,15 @@ export function AdminInventoryOverview() {
   return (
     <AdminShell
       kicker="INVENTORY OVERVIEW"
-      title="Stock, Dispatch and Returns"
+      title="Stock, Field Fulfilment and Reconciliation"
       description="Inventory health and active work."
       actions={<RefreshButton loading={loading} updatedAt={updatedAt} onClick={refresh} />}
     >
       <div className="admin-stat-grid">
         <StatCard label="Products" value={data.inventorySummary?.total_products || data.products.length} sub="Catalog items" icon={Package} to="/inventory/products" />
         <StatCard label="Incoming Orders" value={data.workQueue.length} sub="CRM handoff queue" icon={ClipboardIcon} to="/inventory/queue" tone="amber" />
-        <StatCard label="Active Dispatches" value={metrics.activeDispatches.length} sub="Installer jobs" icon={Truck} to="/inventory/dispatches" tone="green" />
-        <StatCard label="Pending Returns" value={metrics.pendingReturns.length} sub="Needs confirmation" icon={RefreshCw} to="/inventory/returns" tone="purple" />
+        <StatCard label="Active Field Service" value={metrics.activeDispatches.length} sub="Assignments in progress" icon={Truck} to="/inventory/field-service" tone="green" />
+        <StatCard label="Pending Reconciliation" value={metrics.pendingReturns.length} sub="Needs verification" icon={RefreshCw} to="/inventory/reconciliation" tone="purple" />
       </div>
       <div className="admin-two-grid">
         <MiniTable
@@ -818,12 +820,12 @@ export function AdminInventoryOverview() {
         />
         <MiniTable
           title="Active Dispatches"
-          columns={["Dispatch", "Client", "Installer", "Status"]}
-          empty="No active dispatches."
+          columns={["Assignment", "Client", "Field Technician", "Status"]}
+          empty="No active field service assignments."
           rows={recent(metrics.activeDispatches, 8, "created_at" as any).map((dispatch) => [
             dispatch.dispatch_number || "-",
             dispatch.customer_name || "-",
-            dispatch.installer_name || "Not assigned",
+            dispatch.installer_name || "Field technician not assigned",
             <StatusBadge status={dispatch.status} />,
           ])}
         />
@@ -917,7 +919,7 @@ export function AdminOrdersTracker() {
             order.token_number || "-",
             order.customer_name || "-",
             <StatusBadge status={order.status} />,
-            dispatch ? <StatusBadge status={dispatch.status} /> : <span className="admin-muted">No dispatch</span>,
+            dispatch ? <StatusBadge status={dispatch.status} /> : <span className="admin-muted">Field service not prepared</span>,
             finance ? <StatusBadge status={finance.status} /> : <span className="admin-muted">No invoice</span>,
             <Link to="/crm/orders">Open</Link>,
           ];

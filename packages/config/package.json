@@ -1,0 +1,10 @@
+{
+  "name": "@track360/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./prettier": "./prettier.config.cjs",
+    "./tsconfig": "./tsconfig.base.json"
+  }
+}

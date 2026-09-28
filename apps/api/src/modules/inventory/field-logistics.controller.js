@@ -37,6 +37,42 @@ export async function reconcileDispatch(req, res, next) {
   }
 }
 
+export async function listMaterialRequests(req, res, next) {
+  try {
+    const requests = await logisticsService.listMaterialRequests(req.query);
+    return sendSuccess(res, requests, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function createMaterialRequest(req, res, next) {
+  try {
+    const request = await logisticsService.createMaterialRequest(req.params.id, req.body, req.user?.user_id);
+    return sendSuccess(res, request, 201);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function reviewMaterialRequest(req, res, next) {
+  try {
+    const request = await logisticsService.reviewMaterialRequest(req.params.id, req.body, req.user?.user_id);
+    return sendSuccess(res, request, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function issueMaterialRequest(req, res, next) {
+  try {
+    const request = await logisticsService.issueMaterialRequest(req.params.id, req.user?.user_id);
+    return sendSuccess(res, request, 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
 export async function listReturnRequests(req, res, next) {
   try {
     const list = await logisticsService.listReturnRequests(req.query);

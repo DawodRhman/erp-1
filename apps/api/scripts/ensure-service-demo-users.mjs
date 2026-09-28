@@ -5,7 +5,7 @@ const SALT_ROUNDS = 12;
 
 const roles = [
   ['super_admin', 'System Super Admin - full ERP access across CRM, Inventory, Finance and EMS'],
-  ['csr_officer', 'CSR Officer - client requests, leads, quotations and approvals'],
+  ['csr_officer', 'CRM Officer - client requirements, quotations and commercial coordination'],
   ['inventory_officer', 'Inventory Officer - stock, tokens, purchase orders and dispatches'],
   ['finance_officer', 'Finance Officer - accounts, invoices, billing and settlement'],
   ['inv_fin_admin', 'Inventory and Finance Admin - dual access to inventory and finance'],

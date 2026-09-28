@@ -1,6 +1,6 @@
 # TRACK360 ERP Final Flow Document
 
-This document is the source of truth for the required TRACK360 ERP flow. It explains how the system should work from client request to quotation, inventory action, installer handoff, return/reconciliation, CRM billing approval, invoice generation, and monthly summaries.
+This document is the source of truth for the required TRACK360 ERP flow. It explains how the system should work from client requirement to quotation, inventory action, installer handoff, return/reconciliation, CRM billing approval, invoice generation, and monthly summaries.
 
 The main goal is simple: every role should get its own clean workspace, every action should happen on its own clear page, and the system should guide users step by step without mixing everything into one confusing screen.
 
@@ -13,7 +13,7 @@ It should connect:
 - CSR / CRM
 - Inventory and stock logistics
 - Purchasing
-- Installer dispatch and returns
+- Field service dispatch and material reconciliation
 - CRM billing approval
 - Finance invoicing
 - Client billing summaries
@@ -48,7 +48,7 @@ Example:
 - Quotations Gallery has its own page.
 - Approved Job Queue has its own inventory page.
 - Purchase Orders has its own page.
-- Installer Dispatch has its own page.
+- Field Service Dispatch has its own page.
 - Invoice Builder has its own finance page.
 
 This keeps the software easy to understand, easy to demo, and scalable for office use.
@@ -98,8 +98,8 @@ Inventory Officer should see:
 - Serial / Barcode Scan
 - Purchase Orders
 - Vendor Stock Receipts
-- Installer Dispatch
-- Installer Returns
+- Field Service Dispatch
+- Field Reconciliation
 - Billing Approval Queue
 - Stock Movement Ledger
 - Master Setup
@@ -154,7 +154,7 @@ Finance should generate invoices from approved billing data, not from random man
 ## 4. High-Level End-To-End Flow
 
 ```text
-Client Request
+Client Requirement
 -> CSR creates lead/client
 -> CSR creates quotation
 -> Quotation is sent to client
@@ -166,7 +166,7 @@ Client Request
 -> Available stock is assigned
 -> Stock is given to installer
 -> Installer completes work
--> Installer returns unused items and reports extras
+-> Field team returns unused items and reports extras
 -> CRM approves billing
 -> Finance generates invoice
 -> Finance saves/prints/downloads invoice
@@ -175,7 +175,7 @@ Client Request
 
 ## 5. Detailed User Journey
 
-### Step 1: Client Request Starts
+### Step 1: Client Requirement Starts
 
 The client contacts CSR and requests a product/service.
 
@@ -491,7 +491,7 @@ Expected system result:
 Inventory opens:
 
 ```text
-Inventory / Logistics -> Installer Dispatch
+Inventory / Logistics -> Field Service Dispatch
 ```
 
 This page should create the stock handoff.
@@ -553,7 +553,7 @@ After installation, installer submits:
 Inventory or installer opens:
 
 ```text
-Inventory / Logistics -> Installer Returns
+Inventory / Logistics -> Field Reconciliation
 ```
 
 Expected system result:
@@ -736,8 +736,8 @@ Inventory / Logistics Service should have these pages:
 6. Stock Allocation
 7. Purchase Orders
 8. Vendor Stock Receipts
-9. Installer Dispatch
-10. Installer Returns
+9. Field Service Dispatch
+10. Field Reconciliation
 11. Billing Approval Queue
 12. Stock Movement Ledger
 13. Master Setup
@@ -933,7 +933,7 @@ This applies to:
 - Create Quotation
 - Invoice Builder
 - Purchase Order items
-- Installer dispatch where applicable
+- Field service dispatch where applicable
 
 Manual price entry should still be allowed only when user has permission.
 
@@ -961,8 +961,8 @@ Inventory Dashboard should show:
 - CSR approved jobs
 - Pending purchase orders
 - Pending vendor receipts
-- Installer dispatches
-- Installer returns
+- Field service assignments
+- Material reconciliations
 - Stock value
 
 ### 11.3 Finance Dashboard
@@ -1060,12 +1060,12 @@ This is the clean demo journey for office review.
 6. Select serial/IMEI where needed.
 7. Create PO for missing items if required.
 8. Receive vendor stock.
-9. Create installer dispatch.
+9. Create field service dispatch.
 10. Mark stock as given to installer.
 
 ### Demo Part 4: Installer Return
 
-1. Open Installer Returns.
+1. Open Field Reconciliation.
 2. Select dispatch.
 3. Mark used items.
 4. Mark returned items.
@@ -1120,7 +1120,7 @@ Use this checklist to compare the current app against the required flow.
 - Stock assignment is separated from dashboard.
 - Purchase Orders has date, vendor, items and status.
 - Vendor receipt updates stock.
-- Installer dispatch records items given.
+- Field service dispatch records materials issued.
 - Installer return adjusts used/returned stock.
 - Billing approval is separate.
 - Invoice builder loads correct client/job only.
@@ -1152,7 +1152,7 @@ CSR creates request and quotation
 -> Inventory receives approved job
 -> Inventory allocates/purchases stock
 -> Inventory gives stock to installer
--> Installer returns/reconciles
+-> Field team reconciles unused material
 -> CRM approves billing
 -> Finance generates invoice
 -> Finance generates client summary

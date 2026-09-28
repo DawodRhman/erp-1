@@ -1,0 +1,31 @@
+{
+  "name": "track360-erp",
+  "version": "2.0.0",
+  "private": true,
+  "description": "TRACK360 ERP unified monorepo",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node --env-file=.env.example --env-file-if-exists=.env scripts/workspace-command.mjs dev",
+    "dev:web": "node --env-file=.env.example --env-file-if-exists=.env scripts/workspace-command.mjs dev:web",
+    "dev:api": "node --env-file=.env.example --env-file-if-exists=.env scripts/workspace-command.mjs dev:api",
+    "dev:worker": "node --env-file=.env.example --env-file-if-exists=.env scripts/workspace-command.mjs dev:worker",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm --workspace-concurrency=1 -r --if-present test",
+    "build": "pnpm -r --if-present build",
+    "format": "prettier --write \"{apps,packages,infra,db,docs}/**/*.{js,jsx,ts,tsx,json,yaml,yml,md}\" \"*.{json,yaml,yml,md}\"",
+    "format:check": "prettier --check \"{apps,packages,infra,db,docs}/**/*.{js,jsx,ts,tsx,json,yaml,yml,md}\" \"*.{json,yaml,yml,md}\"",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "db:migrate": "node --env-file=.env.example --env-file-if-exists=.env scripts/workspace-command.mjs db:migrate",
+    "db:rollback": "node --env-file=.env.example --env-file-if-exists=.env scripts/workspace-command.mjs db:rollback",
+    "db:seed": "node --env-file=.env.example --env-file-if-exists=.env scripts/workspace-command.mjs db:seed"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.8.3"
+  }
+}

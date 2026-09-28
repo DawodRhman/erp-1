@@ -59,7 +59,7 @@ export default function CrmDashboard() {
     <main style={crmPage} className="crm-page-shell crm-dashboard">
       <PageHeader
         eyebrow="CRM service"
-        title="Client Request, Quotation and Approval"
+        title="Client Requirement, Quotation and Approval"
         text="Clients, quotations and order activity."
         actions={
           <>
@@ -87,7 +87,7 @@ export default function CrmDashboard() {
           <h2 style={{ margin: 0, fontSize: 19 }}>CRM user journey</h2>
           <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
             {[
-              ["1", "Client request comes to CSR/CRM.", "/crm/leads"],
+              ["1", "Client requirement comes to CSR/CRM.", "/crm/leads"],
               ["2", "CSR registers/selects client.", "/crm/clients"],
               ["3", "CSR creates quotation with stock products or custom purchase items.", "/crm/quotations/new"],
               ["4", "Generate & Send creates one QT number and one client approval link.", "/crm/quotations"],

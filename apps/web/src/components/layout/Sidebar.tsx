@@ -80,7 +80,7 @@ export default function Sidebar({ open = false }: { open?: boolean }) {
     // Active/Enabled first
     { to: "/launchpad", icon: Zap, label: "Launchpad" },
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/crm", icon: Users, label: "CSR / CRM" },
+    { to: "/crm", icon: Users, label: "Client & Commercial" },
     { to: "/inventory-dashboard", icon: LayoutDashboard, label: "Inventory Dashboard" },
     { to: "/inventory", icon: Package, label: "Inventory Logistics" },
     { to: "/invoice-builder", icon: FileSpreadsheet, label: "Invoice Builder" },
@@ -214,7 +214,7 @@ export default function Sidebar({ open = false }: { open?: boolean }) {
   ];
 
   const csrOfficerLinks: SidebarLink[] = [
-    { to: "/crm", icon: Users, label: "CSR / CRM" },
+    { to: "/crm", icon: Users, label: "Client & Commercial" },
     { to: "/matrix-operations", icon: GitBranch, label: "Sales Matrix" },
     { to: "/directory", icon: MapPin, label: "Directory" },
   ];
@@ -259,7 +259,7 @@ export default function Sidebar({ open = false }: { open?: boolean }) {
     if (activeRole === "super_admin") {
       return [
         {
-          label: "Super Admin Portal",
+          label: "Management & Governance",
           links: [
             { to: "/admin", icon: LayoutDashboard, label: "Admin Dashboard" },
             { to: "/admin/users", icon: Users, label: "User Management" },
@@ -277,9 +277,9 @@ export default function Sidebar({ open = false }: { open?: boolean }) {
           ],
         },
         {
-          label: "CSR / CRM Service",
+          label: "Client & Commercial Workspace",
           links: [
-            { to: "/crm", icon: Users, label: "CSR / CRM" },
+            { to: "/crm", icon: Users, label: "Client & Commercial" },
             { to: "/crm/leads", icon: ClipboardList, label: "Sales Leads" },
             { to: "/crm/clients", icon: Building2, label: "Clients" },
             { to: "/crm/clients/new", icon: Building2, label: "Add Client" },
@@ -291,23 +291,23 @@ export default function Sidebar({ open = false }: { open?: boolean }) {
           ],
         },
         {
-          label: "Inventory Service",
+          label: "Inventory & Fulfilment Workspace",
           links: [
             { to: "/inventory-dashboard", icon: LayoutDashboard, label: "Inventory Dashboard" },
-            { to: "/inventory", icon: LayoutDashboard, label: "Flow Dashboard" },
+            { to: "/inventory", icon: LayoutDashboard, label: "Workflow Overview" },
             { to: "/inventory/queue", icon: ClipboardList, label: "Incoming Orders" },
-            { to: "/inventory/tokens", icon: ReceiptText, label: "Token Management" },
-            { to: "/inventory/products", icon: Package, label: "Product Catalog" },
-            { to: "/inventory/serials", icon: Barcode, label: "Serial / Barcode Scan" },
-            { to: "/inventory/purchasing", icon: ShoppingCart, label: "Purchase Orders" },
-            { to: "/inventory/dispatches", icon: Wrench, label: "Installer Dispatch" },
-            { to: "/inventory/returns", icon: Undo2, label: "Installer Returns" },
+            { to: "/inventory/tokens", icon: ReceiptText, label: "Fulfilment Tokens" },
+            { to: "/inventory/products", icon: Package, label: "Product & Service Catalog" },
+            { to: "/inventory/serials", icon: Barcode, label: "Serialized Stock" },
+            { to: "/inventory/purchasing", icon: ShoppingCart, label: "Procurement & Receipt" },
+            { to: "/inventory/field-service", icon: Wrench, label: "Field Operations" },
+            { to: "/inventory/reconciliation", icon: Undo2, label: "Material Reconciliation" },
             { to: "/inventory/movements", icon: GitBranch, label: "Stock Movement Ledger" },
-            { to: "/inventory/master-setup", icon: Package, label: "Master Setup" },
+            { to: "/inventory/master-setup", icon: Package, label: "Configuration" },
           ],
         },
         {
-          label: "Finance Service",
+          label: "Finance & Receivables Workspace",
           links: [
             { to: "/finance-dashboard", icon: LayoutDashboard, label: "Finance Dashboard" },
             { to: "/finance/billing-approvals", icon: ReceiptText, label: "Billing Approvals" },
@@ -342,19 +342,19 @@ export default function Sidebar({ open = false }: { open?: boolean }) {
     if (activeRole === "inventory_officer") {
       return [
         {
-          label: "Inventory Service",
+          label: "Inventory & Fulfilment Workspace",
           links: [
             { to: "/inventory-dashboard", icon: LayoutDashboard, label: "Inventory Dashboard" },
-            { to: "/inventory", icon: LayoutDashboard, label: "Flow Dashboard" },
+            { to: "/inventory", icon: LayoutDashboard, label: "Workflow Overview" },
             { to: "/inventory/queue", icon: ClipboardList, label: "Incoming Orders" },
-            { to: "/inventory/tokens", icon: ReceiptText, label: "Token Management" },
-            { to: "/inventory/products", icon: Package, label: "Product Catalog" },
-            { to: "/inventory/serials", icon: Barcode, label: "Serial / Barcode Scan" },
-            { to: "/inventory/purchasing", icon: ShoppingCart, label: "Purchase Orders" },
-            { to: "/inventory/dispatches", icon: Wrench, label: "Installer Dispatch" },
-            { to: "/inventory/returns", icon: Undo2, label: "Installer Returns" },
+            { to: "/inventory/tokens", icon: ReceiptText, label: "Fulfilment Tokens" },
+            { to: "/inventory/products", icon: Package, label: "Product & Service Catalog" },
+            { to: "/inventory/serials", icon: Barcode, label: "Serialized Stock" },
+            { to: "/inventory/purchasing", icon: ShoppingCart, label: "Procurement & Receipt" },
+            { to: "/inventory/field-service", icon: Wrench, label: "Field Operations" },
+            { to: "/inventory/reconciliation", icon: Undo2, label: "Material Reconciliation" },
             { to: "/inventory/movements", icon: GitBranch, label: "Stock Movement Ledger" },
-            { to: "/inventory/master-setup", icon: Package, label: "Master Setup" },
+            { to: "/inventory/master-setup", icon: Package, label: "Configuration" },
             { to: "/matrix-operations", icon: GitBranch, label: "Operations Matrix" },
           ],
         },
@@ -365,7 +365,7 @@ export default function Sidebar({ open = false }: { open?: boolean }) {
     if (activeRole === "finance_officer") {
       return [
         {
-          label: "Finance Service",
+          label: "Finance & Receivables Workspace",
           links: financeServiceLinks,
         },
         { label: "Reference", links: [{ to: "/directory", icon: MapPin, label: "Directory" }] },
@@ -375,17 +375,17 @@ export default function Sidebar({ open = false }: { open?: boolean }) {
     if (activeRole === "inv_fin_admin") {
       return [
         {
-          label: "Inventory & Finance Service",
+          label: "Inventory, Fulfilment & Finance",
           links: [
             { to: "/inventory-dashboard", icon: LayoutDashboard, label: "Inventory Dashboard" },
-            { to: "/inventory", icon: LayoutDashboard, label: "Inventory Flow Dashboard" },
+            { to: "/inventory", icon: LayoutDashboard, label: "Workflow Overview" },
             { to: "/inventory/queue", icon: ClipboardList, label: "Incoming Orders" },
-            { to: "/inventory/tokens", icon: ReceiptText, label: "Token Management" },
-            { to: "/inventory/products", icon: Package, label: "Product Catalog" },
-            { to: "/inventory/serials", icon: Barcode, label: "Serial / Barcode Scan" },
-            { to: "/inventory/purchasing", icon: ShoppingCart, label: "Purchase Orders" },
-            { to: "/inventory/dispatches", icon: Wrench, label: "Installer Dispatch" },
-            { to: "/inventory/returns", icon: Undo2, label: "Installer Returns" },
+            { to: "/inventory/tokens", icon: ReceiptText, label: "Fulfilment Tokens" },
+            { to: "/inventory/products", icon: Package, label: "Product & Service Catalog" },
+            { to: "/inventory/serials", icon: Barcode, label: "Serialized Stock" },
+            { to: "/inventory/purchasing", icon: ShoppingCart, label: "Procurement & Receipt" },
+            { to: "/inventory/field-service", icon: Wrench, label: "Field Operations" },
+            { to: "/inventory/reconciliation", icon: Undo2, label: "Material Reconciliation" },
             ...financeServiceLinks,
           ],
         },
@@ -396,9 +396,9 @@ export default function Sidebar({ open = false }: { open?: boolean }) {
     if (activeRole === "csr_officer") {
       return [
         {
-          label: "CSR / CRM Service",
+          label: "Client & Commercial Workspace",
           links: [
-            { to: "/crm", icon: Users, label: "CSR / CRM" },
+            { to: "/crm", icon: Users, label: "Client & Commercial" },
             { to: "/crm/leads", icon: ClipboardList, label: "Sales Leads" },
             { to: "/crm/clients", icon: Building2, label: "Clients" },
             { to: "/crm/clients/new", icon: Building2, label: "Add Client" },

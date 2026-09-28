@@ -536,10 +536,10 @@ export default function MatrixOperations() {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
               <div>
                 <div style={{ color: '#059669', fontSize: 11, fontWeight: 900, letterSpacing: 0.6, textTransform: 'uppercase' }}>Phase 3</div>
-                <h2 style={{ margin: '4px 0', fontSize: 21, fontWeight: 900 }}>Stock Out & Installer Handoff</h2>
-                <p style={{ margin: 0, color: '#64748b', fontSize: 13 }}>Inventory assigns serials/items and moves approved jobs into dispatch and billing.</p>
+                <h2 style={{ margin: '4px 0', fontSize: 21, fontWeight: 900 }}>Material Issue & Field Service Handoff</h2>
+                <p style={{ margin: 0, color: '#64748b', fontSize: 13 }}>Inventory assigns serials and materials, then prepares the approved requirement for field service and verified billing.</p>
               </div>
-              <button onClick={() => { window.location.href = '/inventory'; }} style={{ ...primaryButton, backgroundColor: '#10b981' }}><Truck size={16} /> Open Inventory Dispatch</button>
+              <button onClick={() => { window.location.href = '/inventory/field-service'; }} style={{ ...primaryButton, backgroundColor: '#10b981' }}><Truck size={16} /> Open Field Service Dispatch</button>
             </div>
           </section>
 

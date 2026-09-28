@@ -107,6 +107,11 @@ export interface Product {
   product_name: string;
   category_id?: string;
   category_name?: string;
+  sub_category?: string;
+  brand_make?: string;
+  condition?: 'NEW' | 'USED' | 'REFURBISHED' | string;
+  sku?: string;
+  model_no?: string;
   vendor_id?: string;
   supplier_id?: string;
   vendor_name?: string;
@@ -116,13 +121,38 @@ export interface Product {
   quantity: number;
   min_stock_level: number;
   unit_price: number;
+  selling_price?: number;
   cost_price: number;
+  country_of_origin?: string;
+  batch_lot_number?: string;
+  expiry_date?: string;
+  warranty_date?: string;
+  product_image_url?: string;
+  warehouse_location?: string;
+  room_number?: string;
+  rack_number?: string;
+  custom_attributes?: Record<string, any>;
   price_tiers?: Record<string, number | string>;
   description?: string;
   available_count?: number;
   allocated_count?: number;
   installed_count?: number;
   damaged_count?: number;
+  serials?: InventoryItem[];
+  movements?: InventoryMovement[];
+}
+
+export interface ProductInput extends Partial<Product> {
+  initial_quantity?: number;
+  serial_numbers?: string[];
+}
+
+export interface ProductImageUpload {
+  filename: string;
+  original_filename: string;
+  mime_type: string;
+  size_bytes: number;
+  url: string;
 }
 
 export interface InventoryItem {
@@ -158,15 +188,38 @@ export interface InventoryMovement {
 export interface Vendor {
   id: string;
   name: string;
+  vendor_code?: string;
   contact_person?: string;
   email?: string;
   phone?: string;
   address?: string;
+  ntn_number?: string;
+  gst_number?: string;
+  payment_terms?: string;
+  status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | string;
+  notes?: string;
+}
+
+export interface ProductCustomFieldDefinition {
+  id: string;
+  field_key: string;
+  label: string;
+  field_type: 'TEXT' | 'NUMBER' | 'DATE' | 'SELECT' | 'BOOLEAN' | string;
+  applies_to: 'PRODUCT' | 'PURCHASE' | 'STOCK_IN' | string;
+  required: boolean;
+  options?: string[];
+  active?: boolean;
+  sort_order?: number;
 }
 
 export interface Customer {
   id: string;
   customer_name: string;
+  company_name?: string;
+  customer_category?: string;
+  organization_type?: string;
+  service_categories?: string[];
+  service_description?: string;
   contact_person?: string;
   email?: string;
   phone?: string;
@@ -202,6 +255,9 @@ export interface PurchaseOrder {
   order_date: string;
   created_at?: string;
   expected_delivery_date?: string;
+  warehouse_location?: string;
+  room_number?: string;
+  rack_number?: string;
   notes?: string;
   item_count?: number;
   items?: PurchaseOrderItem[];
@@ -273,6 +329,9 @@ export interface FieldDispatch {
   notes?: string;
   dispatched_at?: string;
   completed_at?: string;
+  client_signoff_at?: string;
+  client_signoff_name?: string;
+  client_signoff_note?: string;
   created_at?: string;
   item_count?: number;
   items?: FieldDispatchItem[];
@@ -293,6 +352,24 @@ export interface FieldDispatchItem {
   unit_of_measure?: string;
   unit_price?: number;
   notes?: string;
+  qr_token?: string;
+  qr_payload?: string;
+}
+
+export interface FieldMaterialRequest {
+  id: string;
+  request_number: string;
+  dispatch_id: string;
+  dispatch_number?: string;
+  customer_name?: string;
+  product_id?: string;
+  product_name?: string;
+  item_description: string;
+  requested_quantity: number;
+  reason: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'ISSUED' | string;
+  review_note?: string;
+  created_at?: string;
 }
 
 export interface FieldPurchase {
@@ -332,6 +409,9 @@ export interface ReturnRequest {
   installer_id?: string;
   installer_name?: string;
   installer_email?: string;
+  client_signoff_at?: string;
+  client_signoff_name?: string;
+  client_signoff_note?: string;
   items_to_return_count?: number;
   dispatch_status?: string;
   status: 'PENDING' | 'CONFIRMED' | 'STOCK_UPDATED' | string;
@@ -417,13 +497,41 @@ export const inventoryApi = {
     return res.data.data;
   },
 
-  createProduct: async (data: Partial<Product>): Promise<Product> => {
+  getProduct: async (id: string): Promise<Product> => {
+    const res = await api.get(`/inventory/products/${id}`);
+    return res.data.data;
+  },
+
+  getProductCustomFields: async (): Promise<ProductCustomFieldDefinition[]> => {
+    const res = await api.get('/inventory/custom-fields/products');
+    return res.data.data;
+  },
+
+  upsertProductCustomField: async (data: Partial<ProductCustomFieldDefinition>): Promise<ProductCustomFieldDefinition> => {
+    const res = await api.post('/inventory/custom-fields/products', data);
+    return res.data.data;
+  },
+
+  deleteProductCustomField: async (id: string): Promise<void> => {
+    await api.delete(`/inventory/custom-fields/products/${id}`);
+  },
+
+  createProduct: async (data: ProductInput): Promise<Product> => {
     const res = await api.post('/inventory/products', data);
     return res.data.data;
   },
 
   updateProduct: async (id: string, data: Partial<Product>): Promise<Product> => {
     const res = await api.patch(`/inventory/products/${id}`, data);
+    return res.data.data;
+  },
+
+  uploadProductImage: async (file: File): Promise<ProductImageUpload> => {
+    const formData = new FormData();
+    formData.append('image', file);
+    const res = await api.post('/inventory/product-images', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return res.data.data;
   },
 
@@ -560,6 +668,26 @@ export const inventoryApi = {
     return res.data.data;
   },
 
+  getMaterialRequests: async (params?: Record<string, any>): Promise<FieldMaterialRequest[]> => {
+    const res = await api.get('/inventory/material-requests', { params });
+    return res.data.data;
+  },
+
+  createMaterialRequest: async (dispatchId: string, data: Partial<FieldMaterialRequest>): Promise<FieldMaterialRequest> => {
+    const res = await api.post(`/inventory/dispatches/${dispatchId}/material-requests`, data);
+    return res.data.data;
+  },
+
+  reviewMaterialRequest: async (id: string, data: { status: 'APPROVED' | 'REJECTED'; review_note?: string }): Promise<FieldMaterialRequest> => {
+    const res = await api.patch(`/inventory/material-requests/${id}`, data);
+    return res.data.data;
+  },
+
+  issueMaterialRequest: async (id: string): Promise<FieldMaterialRequest> => {
+    const res = await api.post(`/inventory/material-requests/${id}/issue`);
+    return res.data.data;
+  },
+
   reconcileDispatch: async (id: string, data: any): Promise<FieldDispatch> => {
     const res = await api.post(`/inventory/dispatches/${id}/reconcile`, data);
     return res.data.data;
@@ -629,6 +757,11 @@ export interface InventoryCompanySettings {
 export interface InventoryPreferenceSettings {
   default_min_stock_threshold: number;
   low_stock_alert_email: string;
+  theme_preset: 'executive' | 'ocean' | 'emerald' | 'graphite' | 'custom' | string;
+  primary_color: string;
+  accent_color: string;
+  page_color: string;
+  surface_color: string;
 }
 
 export interface InventoryMasterSettings {

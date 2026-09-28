@@ -62,10 +62,12 @@ const ClientQuotationApproval = lazy(() => import("./pages/ClientQuotationApprov
 const InventoryQueue = lazy(() => import("./pages/InventoryQueue"));
 const InventoryTokens = lazy(() => import("./pages/InventoryTokens"));
 const InventoryProducts = lazy(() => import("./pages/InventoryProducts"));
+const InventoryProductForm = lazy(() => import("./pages/inventory/InventoryProductPages").then((module) => ({ default: module.InventoryProductFormPage })));
+const InventoryProductDetail = lazy(() => import("./pages/inventory/InventoryProductPages").then((module) => ({ default: module.InventoryProductDetailPage })));
 const InventorySerials = lazy(() => import("./pages/InventorySerials"));
 const InventoryPurchasing = lazy(() => import("./pages/InventoryPurchasing"));
-const InventoryDispatches = lazy(() => import("./pages/InventoryDispatches"));
-const InstallerReturns = lazy(() => import("./pages/InstallerReturns"));
+const FieldServiceDispatch = lazy(() => import("./pages/FieldServiceDispatch"));
+const FieldReconciliation = lazy(() => import("./pages/FieldReconciliation"));
 const InventoryMovements = lazy(() => import("./pages/InventoryMovements"));
 const InventoryMasterSetup = lazy(() => import("./pages/InventoryMasterSetup"));
 const ClientInvoicing = lazy(() => import("./pages/ClientInvoicing"));
@@ -74,6 +76,7 @@ const FinanceDashboard = lazy(() => import("./pages/finance/FinancePages").then(
 const BillingApprovals = lazy(() => import("./pages/finance/FinancePages").then((module) => ({ default: module.BillingApprovals })));
 const BillingApprovalDetail = lazy(() => import("./pages/finance/FinancePages").then((module) => ({ default: module.BillingApprovalDetail })));
 const FinanceInvoices = lazy(() => import("./pages/finance/FinancePages").then((module) => ({ default: module.FinanceInvoices })));
+const FinanceInvoiceDetail = lazy(() => import("./pages/finance/FinancePages").then((module) => ({ default: module.FinanceInvoiceDetail })));
 const FinanceSummaries = lazy(() => import("./pages/finance/FinancePages").then((module) => ({ default: module.FinanceSummaries })));
 const FinanceAccounts = lazy(() => import("./pages/finance/FinancePages").then((module) => ({ default: module.FinanceAccounts })));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminPages").then((module) => ({ default: module.AdminDashboard })));
@@ -257,7 +260,7 @@ const App = () => (
             <Route path="/unauthorized" element={<Unauthorized />} />
             <Route path="/client/quotations/:token" element={<ClientQuotationApproval />} />
             <Route path="/" element={<RootRedirect />} />
-            <Route path="/installer/*" element={<Navigate to="/inventory/dispatches" replace />} />
+            <Route path="/installer/*" element={<Navigate to="/inventory/field-service" replace />} />
 
             {/* --- ADMIN & HR ROUTES (MainLayout) --- */}
             <Route
@@ -333,10 +336,15 @@ const App = () => (
                   <Route path="/inventory/incoming-orders" element={<InventoryQueue />} />
                   <Route path="/inventory/tokens" element={<InventoryTokens />} />
                   <Route path="/inventory/products" element={<InventoryProducts />} />
+                  <Route path="/inventory/products/new" element={<InventoryProductForm />} />
+                  <Route path="/inventory/products/:id" element={<InventoryProductDetail />} />
+                  <Route path="/inventory/products/:id/edit" element={<InventoryProductForm />} />
                   <Route path="/inventory/serials" element={<InventorySerials />} />
                   <Route path="/inventory/purchasing" element={<InventoryPurchasing />} />
-                  <Route path="/inventory/dispatches" element={<InventoryDispatches />} />
-                  <Route path="/inventory/returns" element={<InstallerReturns />} />
+                  <Route path="/inventory/field-service" element={<FieldServiceDispatch />} />
+                  <Route path="/inventory/reconciliation" element={<FieldReconciliation />} />
+                  <Route path="/inventory/dispatches" element={<FieldServiceDispatch />} />
+                  <Route path="/inventory/returns" element={<FieldReconciliation />} />
                   <Route path="/inventory/movements" element={<InventoryMovements />} />
                   <Route path="/inventory/master-setup" element={<InventoryMasterSetup />} />
                 </Route>
@@ -348,6 +356,7 @@ const App = () => (
                   <Route path="/finance/billing-approvals/:id" element={<BillingApprovalDetail />} />
                   <Route path="/finance/billing-approval" element={<Navigate to="/finance/billing-approvals" replace />} />
                   <Route path="/finance/invoices" element={<FinanceInvoices />} />
+                  <Route path="/finance/invoices/view/:id" element={<FinanceInvoiceDetail />} />
                   <Route path="/finance/invoices/:expenseType" element={<FinanceInvoices />} />
                   <Route path="/finance/summaries" element={<FinanceSummaries />} />
                   <Route path="/finance/accounts" element={<FinanceAccounts />} />

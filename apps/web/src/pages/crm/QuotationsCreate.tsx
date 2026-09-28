@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FilePlus2, PackageSearch, Plus, Save, Send, Trash2, X } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useToastContext } from "../../context/ToastContext";
+import { clientCategoryLabel, normalizeClientCategory, serviceSummary } from "../../utils/customerProfile";
 import TaxRateControl from "../../components/common/TaxRateControl";
 import SearchableSelect from "../../components/common/SearchableSelect";
 import {
@@ -10,7 +11,6 @@ import {
   LoadingState,
   PageHeader,
   card,
-  copyText,
   crmPage,
   input,
   label,
@@ -19,7 +19,7 @@ import {
   td,
   th,
 } from "./CrmShared";
-import { CrmCustomer, CrmProduct, CrmQuotationItem, approvalLink, crmApi, makeIdempotencyKey, productPrice } from "./crmApi";
+import { CrmCustomer, CrmProduct, CrmQuotationItem, crmApi, makeIdempotencyKey, productPrice } from "./crmApi";
 
 type DraftLine = {
   rowId: string;
@@ -80,7 +80,7 @@ export default function QuotationsCreate() {
   const [showProductModal, setShowProductModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState<"" | "draft" | "send">("");
+  const [submitting, setSubmitting] = useState<"" | "draft" | "approval">("");
   const [generatedOnce, setGeneratedOnce] = useState(false);
   const [form, setForm] = useState({
     customer_id: preselectedCustomerId,
@@ -118,7 +118,7 @@ export default function QuotationsCreate() {
             notes: quote.notes || "",
           });
           setLines((quote.items || []).map(toLine));
-          setGeneratedOnce(quote.status === "SENT");
+          setGeneratedOnce(["MANAGEMENT_PENDING", "MANAGEMENT_APPROVED", "SENT", "APPROVED"].includes(quote.status));
         }
       } catch (err) {
         if (mounted) setError(errorMessage(err, "Quotation form data could not be loaded. Please check the backend connection and try again."));
@@ -199,18 +199,18 @@ export default function QuotationsCreate() {
     );
   };
 
-  const validate = (status: "DRAFT" | "SENT") => {
+  const validate = (status: "DRAFT" | "MANAGEMENT_PENDING") => {
     if (!form.customer_id) return "Please select a client before saving the quotation.";
     if (!lines.length) return "Add at least one catalog product or custom item.";
     const invalidLine = lines.find((line) => !line.description.trim() || Number(line.quantity || 0) <= 0);
     if (invalidLine) return "Each quotation line must have an item name and a valid quantity.";
-    if (status === "SENT" && lines.some((line) => Number(line.unit_price || 0) <= 0)) {
-      return "Generate & Send requires every item to have a price greater than zero.";
+    if (status === "MANAGEMENT_PENDING" && lines.some((line) => Number(line.unit_price || 0) <= 0)) {
+      return "Submit for Approval requires every item to have a price greater than zero.";
     }
     return "";
   };
 
-  const payload = (status: "DRAFT" | "SENT") => ({
+  const payload = (status: "DRAFT" | "MANAGEMENT_PENDING") => ({
     ...form,
     status,
     tax_rate: Number(form.tax_rate || 0),
@@ -222,27 +222,25 @@ export default function QuotationsCreate() {
     })),
   });
 
-  const save = async (status: "DRAFT" | "SENT") => {
+  const save = async (status: "DRAFT" | "MANAGEMENT_PENDING") => {
     const validation = validate(status);
     if (validation) {
       showToast(validation, "error");
       return;
     }
-    if (status === "SENT" && generatedOnce && !editingId) {
-      showToast("This quotation has already been generated. Duplicate quotation creation is blocked.", "error");
+    if (status === "MANAGEMENT_PENDING" && generatedOnce && !editingId) {
+      showToast("This quotation has already been submitted. Duplicate quotation creation is blocked.", "error");
       return;
     }
 
-    setSubmitting(status === "SENT" ? "send" : "draft");
+    setSubmitting(status === "MANAGEMENT_PENDING" ? "approval" : "draft");
     try {
       const saved = editingId
         ? await crmApi.updateQuotation(editingId, payload(status))
         : await crmApi.createQuotation(payload(status), idempotencyKeyRef.current);
-      if (status === "SENT") {
+      if (status === "MANAGEMENT_PENDING") {
         setGeneratedOnce(true);
-        const link = approvalLink(saved.client_approval_token);
-        if (link) await copyText(link);
-        showToast(link ? `Quotation ${saved.quotation_number} generated once. Client link copied.` : "Quotation generated and sent status saved.", "success");
+        showToast(`${saved.quotation_number || "Quotation"} submitted for management approval.`, "success");
       } else {
         showToast(`Draft ${saved.quotation_number || "quotation"} saved and visible in list.`, "success");
       }
@@ -268,8 +266,8 @@ export default function QuotationsCreate() {
             <CrmButton onClick={() => save("DRAFT")} disabled={Boolean(submitting)} tone="light">
               <Save size={16} /> {submitting === "draft" ? "Saving..." : "Save as Draft"}
             </CrmButton>
-            <CrmButton onClick={() => save("SENT")} disabled={Boolean(submitting) || (generatedOnce && !editingId)} tone="success">
-              <Send size={16} /> {submitting === "send" ? "Generating..." : "Generate & Send"}
+            <CrmButton onClick={() => save("MANAGEMENT_PENDING")} disabled={Boolean(submitting) || (generatedOnce && !editingId)} tone="success">
+              <Send size={16} /> {submitting === "approval" ? "Submitting..." : "Submit for Approval"}
             </CrmButton>
           </>
         }
@@ -294,8 +292,9 @@ export default function QuotationsCreate() {
                 emptyText="No matching client found. Add the client first, then return here."
                 options={customers.map((customer) => ({
                   value: customer.id,
-                  label: `${customer.customer_name}${customer.email ? ` - ${customer.email}` : customer.phone ? ` - ${customer.phone}` : ""}`,
-                  searchText: [customer.customer_name, customer.email, customer.phone, customer.contact_person].filter(Boolean).join(" "),
+                  label: `${customer.customer_name} - ${clientCategoryLabel(normalizeClientCategory(customer))}${customer.email ? ` - ${customer.email}` : customer.phone ? ` - ${customer.phone}` : ""}`,
+                  searchText: [customer.customer_name, customer.company_name, customer.email, customer.phone, customer.contact_person,
+                    customer.customer_category, customer.organization_type, serviceSummary(customer, ""), customer.service_description].filter(Boolean).join(" "),
                 }))}
               />
             </div>
@@ -312,6 +311,8 @@ export default function QuotationsCreate() {
             {selectedCustomer ? (
               <div className="crm-selected-client" style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: 12, color: "#334155", fontSize: 13 }}>
                 <strong style={{ color: "#0f172a" }}>{selectedCustomer.customer_name}</strong>
+                <div>{clientCategoryLabel(normalizeClientCategory(selectedCustomer))}</div>
+                <div>{serviceSummary(selectedCustomer, "No service interests recorded")}</div>
                 <div>{selectedCustomer.email || "No email saved"}</div>
                 <div>{selectedCustomer.phone || "No phone saved"}</div>
               </div>

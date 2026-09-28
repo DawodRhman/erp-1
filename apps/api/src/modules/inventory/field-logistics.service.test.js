@@ -178,6 +178,7 @@ describe('field logistics service', () => {
     const service = await loadService();
     const dispatch = await service.reconcileDispatch('dispatch-1', {
       items: [{ id: 'item-1', quantity_used: 1, quantity_returned: 1 }],
+      client_signoff_name: 'Authorized Client',
     });
 
     const sql = client.query.mock.calls.map(([statement]) => String(statement)).join('\n');
@@ -218,12 +219,32 @@ describe('field logistics service', () => {
     const service = await loadService();
     const result = await service.reconcileDispatch('dispatch-1', {
       items: [{ id: 'item-1', quantity_used: 1, quantity_returned: 0 }],
+      client_signoff_name: 'Authorized Client',
     }, 'inventory-user-1');
 
     expect(client.query).toHaveBeenCalledWith(expect.stringContaining('SET status = $3'), ['dispatch-1', null, 'RETURN_CONFIRMED']);
     expect(createClientInvoiceFromDispatch).toHaveBeenCalledWith(expect.objectContaining({ dispatch_id: 'dispatch-1', customer_id: 'customer-1' }));
     expect(result.status).toBe('STOCK_UPDATED');
     expect(result.invoice).toMatchObject({ id: 'invoice-1' });
+  });
+
+  it('requires client sign-off before a field job can be completed', async () => {
+    const client = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ id: 'dispatch-1', status: 'DISPATCHED' }] })
+        .mockResolvedValueOnce({ rows: [] }),
+      release: vi.fn(),
+    };
+    connect.mockResolvedValueOnce(client);
+
+    const service = await loadService();
+    await expect(service.reconcileDispatch('dispatch-1', { items: [] }))
+      .rejects.toMatchObject({ statusCode: 400, code: 'CLIENT_SIGNOFF_REQUIRED' });
+
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+    expect(client.release).toHaveBeenCalled();
   });
 
   it('locks only the dispatch item row and marks an Inventory-confirmed return once', async () => {

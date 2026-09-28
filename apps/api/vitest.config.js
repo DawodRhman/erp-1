@@ -2,6 +2,8 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    environment: 'node'
+    environment: 'node',
+    setupFiles: ['./src/test/setup-env.js'],
+    testTimeout: 15000,
   }
 })

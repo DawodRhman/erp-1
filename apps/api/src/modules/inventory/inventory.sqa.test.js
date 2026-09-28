@@ -66,17 +66,12 @@ describe('Inventory SQA Boundary & Edge Case Audit Tests', () => {
   });
 
   it('handles negative price inputs gracefully by enforcing minimum zero bounds', async () => {
-    query.mockResolvedValueOnce({
-      rows: [
-        {
-          id: 'prod-sqa',
-          product_name: 'Boundary Test Asset',
-          unit_price: 0,
-          cost_price: 0,
-          quantity: 0,
-        },
-      ],
-    });
+    const clientQuery = vi.fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ id: 'prod-sqa', product_name: 'Boundary Test Asset', unit_price: 0, cost_price: 0, quantity: 0 }] })
+      .mockResolvedValueOnce({ rows: [] });
+    connect.mockResolvedValue({ query: clientQuery, release: vi.fn() });
 
     const service = await loadService();
     const prod = await service.createProduct({
@@ -86,7 +81,7 @@ describe('Inventory SQA Boundary & Edge Case Audit Tests', () => {
       quantity: -10,
     });
 
-    const params = query.mock.calls[0][1];
+    const params = clientQuery.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO public.products'))[1];
     expect(params[4]).toBe(0); // quantity bounded at 0
     expect(params[6]).toBe(0); // unit_price bounded at 0
     expect(params[7]).toBe(0); // cost_price bounded at 0

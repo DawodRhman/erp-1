@@ -1,12 +1,16 @@
 import { apiClient } from "../../services/apiClient";
 
-export type CrmStatus = "DRAFT" | "SENT" | "APPROVED" | "REJECTED" | "EXPIRED";
+export type CrmStatus = "DRAFT" | "MANAGEMENT_PENDING" | "MANAGEMENT_APPROVED" | "SENT" | "APPROVED" | "REJECTED" | "EXPIRED";
 
 export interface CrmCustomer {
   id: string;
   customer_name: string;
   company_name?: string;
   customer_type?: string;
+  customer_category?: string;
+  organization_type?: string;
+  service_categories?: string[];
+  service_description?: string;
   contact_person?: string;
   email?: string;
   phone?: string;
@@ -54,6 +58,9 @@ export interface CrmQuotation {
   price_tier?: string;
   template_style?: string;
   status: CrmStatus;
+  approval_stage?: string;
+  management_approved_at?: string;
+  management_approval_note?: string;
   currency?: string;
   exchange_rate?: number;
   subtotal?: number;
@@ -65,6 +72,13 @@ export interface CrmQuotation {
   client_approval_token?: string;
   sent_at?: string;
   client_approved_at?: string;
+  email_delivery_status?: "NOT_SENT" | "SENDING" | "SENT" | "FAILED";
+  email_sent_at?: string;
+  email_recipient?: string;
+  email_error?: string;
+  email_error_code?: string;
+  email_configured?: boolean;
+  email_delivery?: { status: "SENT" | "FAILED"; recipient?: string; message?: string; code?: string };
   approval_remarks?: string;
   item_count?: number;
   order_id?: string;
@@ -174,6 +188,21 @@ export function approvalLink(token?: string) {
   return `${window.location.origin}/client/quotations/${token}`;
 }
 
+export function quotationEmailSetupPending(quote: CrmQuotation): boolean {
+  const code = quote.email_error_code || quote.email_delivery?.code;
+  return quote.email_configured !== true && quote.email_delivery_status !== "SENT" && ["SMTP_NOT_CONFIGURED", "PUBLIC_URL_NOT_CONFIGURED"].includes(code || "");
+}
+
+export function quotationDeliveryNotice(quote: CrmQuotation): { message: string; type: "success" | "error" } {
+  if (quotationEmailSetupPending(quote)) {
+    return { message: "Quotation saved. Copy Client Link and share it for approval. Automatic email setup is pending.", type: "success" };
+  }
+  if (quote.email_delivery_status === "SENT" || quote.email_delivery?.status === "SENT") {
+    return { message: `Quotation email submitted to ${quote.email_recipient || quote.email_delivery?.recipient || quote.customer_email || "the client"}. Awaiting client approval.`, type: "success" };
+  }
+  return { message: `Quotation saved. ${quote.email_error || quote.email_delivery?.message || "Email was not sent. Configure SMTP or retry from the quotation."}`, type: "error" };
+}
+
 export function makeIdempotencyKey(prefix: string) {
   const cryptoObj = window.crypto;
   if (cryptoObj?.randomUUID) return `${prefix}-${cryptoObj.randomUUID()}`;
@@ -242,6 +271,11 @@ export const crmApi = {
 
   updateQuotationStatus: async (id: string, status: CrmStatus, data: Record<string, any> = {}): Promise<CrmQuotation> => {
     const res = await apiClient.patch(`/crm/quotations/${id}/status`, { status, ...data });
+    return record<CrmQuotation>(res);
+  },
+
+  sendQuotationEmail: async (id: string): Promise<CrmQuotation> => {
+    const res = await apiClient.post(`/crm/quotations/${id}/send-email`);
     return record<CrmQuotation>(res);
   },
 

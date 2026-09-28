@@ -1,5 +1,34 @@
 import { sendSuccess } from '../../utils/respond.js';
 import * as inventoryService from './inventory.service.js';
+import { subscribeToInventoryEvents } from './inventory-events.js';
+
+export function streamInventoryEvents(req, res) {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  const writeEvent = (event) => {
+    res.write(`id: ${event.id}\n`);
+    res.write(`event: ${event.type}\n`);
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+  const unsubscribe = subscribeToInventoryEvents(writeEvent);
+  const heartbeat = setInterval(() => res.write(': inventory-heartbeat\n\n'), 25000);
+
+  writeEvent({
+    id: `connected-${Date.now()}`,
+    type: 'connected',
+    payload: {},
+    occurred_at: new Date().toISOString(),
+  });
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+    res.end();
+  });
+}
 
 export async function getSummary(req, res, next) {
   try {
@@ -91,6 +120,33 @@ export async function updateInstallerStatus(req, res, next) {
   }
 }
 
+export async function getProductCustomFields(req, res, next) {
+  try {
+    const fields = await inventoryService.listProductCustomFieldDefinitions();
+    sendSuccess(res, fields);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function upsertProductCustomField(req, res, next) {
+  try {
+    const field = await inventoryService.upsertProductCustomFieldDefinition(req.body, req.user?.user_id);
+    sendSuccess(res, field, 201);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteProductCustomField(req, res, next) {
+  try {
+    const result = await inventoryService.deleteProductCustomFieldDefinition(req.params.id);
+    sendSuccess(res, result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 // Categories
 export async function getCategories(req, res, next) {
   try {
@@ -138,9 +194,18 @@ export async function getProducts(req, res, next) {
   }
 }
 
+export async function getProduct(req, res, next) {
+  try {
+    const product = await inventoryService.getProductById(req.params.id);
+    sendSuccess(res, product);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function createProduct(req, res, next) {
   try {
-    const product = await inventoryService.createProduct(req.body);
+    const product = await inventoryService.createProduct(req.body, req.user?.user_id);
     sendSuccess(res, product, 201);
   } catch (error) {
     next(error);
@@ -259,7 +324,7 @@ export async function getCustomers(req, res, next) {
 
 export async function createCustomer(req, res, next) {
   try {
-    const customer = await inventoryService.createCustomer(req.body);
+    const customer = await inventoryService.createCustomer(req.body, req.user?.user_id || req.user?.id);
     sendSuccess(res, customer, 201);
   } catch (error) {
     next(error);

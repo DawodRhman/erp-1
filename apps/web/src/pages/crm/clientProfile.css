@@ -1,0 +1,94 @@
+.crm-client-form-grid,
+.crm-client-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.crm-field-help {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.crm-service-picker {
+  border: 1px solid #cbd8ea;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.crm-service-picker summary {
+  min-height: 46px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.crm-service-picker summary::-webkit-details-marker { display: none; }
+
+.crm-service-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fbff;
+}
+
+.crm-service-option {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid #dbe6f5;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.crm-service-option:has(input:checked) {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.crm-service-option input { accent-color: #2563eb; }
+
+.crm-client-profile-details {
+  display: grid;
+  grid-template-columns: 165px minmax(0, 1fr);
+  gap: 11px 18px;
+  margin-top: 16px;
+}
+
+.crm-client-profile-details dt { color: #64748b; }
+.crm-client-profile-details dd { margin: 0; font-weight: 850; overflow-wrap: anywhere; }
+
+.crm-service-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.crm-service-chip {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #e8f1ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+@media (max-width: 760px) {
+  .crm-client-form-grid,
+  .crm-client-profile-grid,
+  .crm-service-options { grid-template-columns: 1fr; }
+  .crm-client-profile-details { grid-template-columns: 1fr; gap: 4px; }
+  .crm-client-profile-details dd { margin-bottom: 9px; }
+}

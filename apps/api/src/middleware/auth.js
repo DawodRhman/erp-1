@@ -38,9 +38,11 @@ export async function verifyToken(req, res, next) {
     const decoded = jwt.verify(token, secret);
     const userResult = await pool.query(
       `
-        SELECT id, email, employee_id, role_id, must_change_password, COALESCE(is_active, true) AS is_active
-        FROM public.users
-        WHERE id = $1
+        SELECT u.id, u.email, u.employee_id, u.role_id, u.must_change_password,
+               COALESCE(u.is_active, true) AS is_active, r.role_name
+        FROM public.users u
+        LEFT JOIN public.roles r ON r.id = u.role_id
+        WHERE u.id = $1
         LIMIT 1
       `,
       [decoded.user_id]
@@ -59,6 +61,7 @@ export async function verifyToken(req, res, next) {
       user_id: currentUser.id,
       employee_id: currentUser.employee_id,
       role_id: currentUser.role_id,
+      role_name: currentUser.role_name,
       must_change_password: currentUser.must_change_password,
       email: currentUser.email,
     };

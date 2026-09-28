@@ -28,7 +28,7 @@ const ROLE_PORTAL_META: Record<string, RolePortalMeta> = {
     label: "Inventory Officer",
     portalGroup: "Inventory",
     accessLevel: "Full inventory access",
-    summary: "Stock, tokens, purchase orders, dispatches, returns and setup.",
+    summary: "Catalog, stock, procurement, field fulfilment and reconciliation.",
   },
   finance_officer: {
     label: "Finance Officer",

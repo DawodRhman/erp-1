@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Eye, FileText, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useToastContext } from "../../context/ToastContext";
+import { clientCategoryLabel, normalizeClientCategory, organizationTypeLabel, serviceSummary } from "../../utils/customerProfile";
 import { CrmButton, EmptyState, ErrorState, LoadingState, PageHeader, card, crmPage, input, statusBadge, tableWrap, td, th } from "./CrmShared";
 import { CrmCustomer, crmApi } from "./crmApi";
 
@@ -31,7 +32,8 @@ export default function ClientsList() {
     const q = query.trim().toLowerCase();
     if (!q) return customers;
     return customers.filter((customer) =>
-      [customer.customer_name, customer.contact_person, customer.email, customer.phone, customer.address]
+      [customer.customer_name, customer.company_name, customer.customer_category, customer.organization_type, customer.customer_type,
+        serviceSummary(customer, ""), customer.service_description, customer.contact_person, customer.email, customer.phone, customer.address]
         .join(" ")
         .toLowerCase()
         .includes(q),
@@ -72,7 +74,7 @@ export default function ClientsList() {
 
       <section style={{ ...card, padding: 16, display: "flex", gap: 12, alignItems: "center" }}>
         <Search size={18} color="#64748b" />
-        <input style={input} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search client name, email, phone or address" />
+        <input style={input} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search client, category, service, email or phone" />
       </section>
 
       {loading ? <LoadingState labelText="Loading clients..." /> : error ? <ErrorState message={error} /> : filtered.length === 0 ? (
@@ -82,7 +84,8 @@ export default function ClientsList() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
-                <th style={th}>Client / Company</th>
+                <th style={th}>Client</th>
+                <th style={th}>Services</th>
                 <th style={th}>Contact</th>
                 <th style={th}>Email</th>
                 <th style={th}>Phone</th>
@@ -95,8 +98,13 @@ export default function ClientsList() {
                 <tr key={customer.id}>
                   <td style={td}>
                     <strong>{customer.customer_name}</strong>
-                    <div style={{ color: "#64748b", fontSize: 12 }}>{customer.company_name || customer.customer_type || "Corporate client"}</div>
+                    <div style={{ color: "#64748b", fontSize: 12 }}>
+                      {clientCategoryLabel(normalizeClientCategory(customer))}
+                      {normalizeClientCategory(customer) !== "INDIVIDUAL" ? ` · ${organizationTypeLabel(customer.organization_type || customer.customer_type)}` : ""}
+                    </div>
+                    {customer.company_name ? <div style={{ color: "#64748b", fontSize: 12 }}>{customer.company_name}</div> : null}
                   </td>
+                  <td style={{ ...td, maxWidth: 280 }}>{serviceSummary(customer, "Not recorded")}</td>
                   <td style={td}>{customer.contact_person || "-"}</td>
                   <td style={td}>{customer.email || "-"}</td>
                   <td style={td}>{customer.phone || "-"}</td>

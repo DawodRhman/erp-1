@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FileText, Pencil } from "lucide-react";
 import { useParams } from "react-router-dom";
+import { clientCategoryLabel, normalizeClientCategory, organizationTypeLabel, serviceCategoryLabel } from "../../utils/customerProfile";
 import { CrmButton, EmptyState, ErrorState, LoadingState, PageHeader, card, crmPage, dateText, money, statusBadge, tableWrap, td, th } from "./CrmShared";
 import { CrmComplaint, CrmCustomer, CrmInvoice, CrmOrder, CrmQuotation, crmApi } from "./crmApi";
+import "./clientProfile.css";
 
 type DetailTab = "quotations" | "orders" | "invoices" | "complaints";
 
@@ -53,6 +55,9 @@ export default function ClientDetail() {
   if (loading) return <main style={crmPage}><LoadingState labelText="Loading client profile..." /></main>;
   if (error) return <main style={crmPage}><ErrorState message={error} /></main>;
   if (!customer) return <main style={crmPage}><EmptyState title="Client not found" detail="Open the client list and select an existing client." /></main>;
+  const category = normalizeClientCategory(customer);
+  const isIndividual = category === "INDIVIDUAL";
+  const services = Array.isArray(customer.service_categories) ? customer.service_categories : [];
 
   return (
     <main style={crmPage}>
@@ -68,23 +73,33 @@ export default function ClientDetail() {
         }
       />
 
-      <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+      <section className="crm-client-profile-grid">
         <div style={{ ...card, padding: 20 }}>
-          <h2 style={{ margin: 0, fontSize: 18 }}>Client Details</h2>
-          <dl style={{ display: "grid", gridTemplateColumns: "150px 1fr", gap: "10px 18px", marginTop: 16 }}>
-            <dt style={{ color: "#64748b" }}>Company</dt><dd style={{ margin: 0, fontWeight: 850 }}>{customer.company_name || customer.customer_name}</dd>
-            <dt style={{ color: "#64748b" }}>Type</dt><dd style={{ margin: 0, fontWeight: 850 }}>{customer.customer_type || "Corporate"}</dd>
-            <dt style={{ color: "#64748b" }}>Contact</dt><dd style={{ margin: 0, fontWeight: 850 }}>{customer.contact_person || "-"}</dd>
-            <dt style={{ color: "#64748b" }}>Email</dt><dd style={{ margin: 0, fontWeight: 850 }}>{customer.email || "-"}</dd>
-            <dt style={{ color: "#64748b" }}>Phone</dt><dd style={{ margin: 0, fontWeight: 850 }}>{customer.phone || "-"}</dd>
-            <dt style={{ color: "#64748b" }}>Address</dt><dd style={{ margin: 0, fontWeight: 850 }}>{customer.address || "-"}</dd>
+          <h2 style={{ margin: 0, fontSize: 18 }}>Profile & Contact</h2>
+          <dl className="crm-client-profile-details">
+            <dt>Client Category</dt><dd>{clientCategoryLabel(category)}</dd>
+            {!isIndividual ? <><dt>Organization Type</dt><dd>{organizationTypeLabel(customer.organization_type || customer.customer_type)}</dd></> : null}
+            {!isIndividual && customer.company_name ? <><dt>Legal Registered Name</dt><dd>{customer.company_name}</dd></> : null}
+            <dt>{isIndividual ? "Alternate Contact" : "Primary Contact"}</dt><dd>{customer.contact_person || "-"}</dd>
+            <dt>Email</dt><dd>{customer.email || "-"}</dd>
+            <dt>Phone</dt><dd>{customer.phone || "-"}</dd>
+            <dt>Address</dt><dd>{customer.address || "-"}</dd>
           </dl>
         </div>
-        <div style={{ ...card, padding: 20, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-          <div><div style={{ color: "#64748b", fontWeight: 900 }}>Quotations</div><strong style={{ fontSize: 32 }}>{quotations.length}</strong></div>
-          <div><div style={{ color: "#64748b", fontWeight: 900 }}>Orders</div><strong style={{ fontSize: 32 }}>{orders.length}</strong></div>
-          <div><div style={{ color: "#64748b", fontWeight: 900 }}>Invoices</div><strong style={{ fontSize: 32 }}>{invoices.length}</strong></div>
-          <div><div style={{ color: "#64748b", fontWeight: 900 }}>Complaints</div><strong style={{ fontSize: 32 }}>{complaints.length}</strong></div>
+        <div style={{ ...card, padding: 20, display: "grid", gap: 18 }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 18 }}>Service Profile</h2>
+            <div className="crm-service-chips" style={{ marginTop: 14 }}>
+              {services.length ? services.map((service) => <span key={service} className="crm-service-chip">{serviceCategoryLabel(service)}</span>) : <span style={{ color: "#64748b" }}>No service interests recorded.</span>}
+            </div>
+            {customer.service_description ? <p style={{ margin: "14px 0 0", color: "#334155", lineHeight: 1.55 }}>{customer.service_description}</p> : null}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+            <div><div style={{ color: "#64748b", fontWeight: 900 }}>Quotations</div><strong style={{ fontSize: 28 }}>{quotations.length}</strong></div>
+            <div><div style={{ color: "#64748b", fontWeight: 900 }}>Orders</div><strong style={{ fontSize: 28 }}>{orders.length}</strong></div>
+            <div><div style={{ color: "#64748b", fontWeight: 900 }}>Invoices</div><strong style={{ fontSize: 28 }}>{invoices.length}</strong></div>
+            <div><div style={{ color: "#64748b", fontWeight: 900 }}>Complaints</div><strong style={{ fontSize: 28 }}>{complaints.length}</strong></div>
+          </div>
         </div>
       </section>
 

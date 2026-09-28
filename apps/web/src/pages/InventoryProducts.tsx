@@ -1,1 +1,1 @@
-export { InventoryProductsPage as default } from "./FlowPages";
+export { InventoryProductCatalogPage as default } from './inventory/InventoryProductPages';

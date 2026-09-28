@@ -233,7 +233,7 @@ export default function ClientInvoicing() {
       customer_name: 'Habib Bank Limited',
       branch_name: 'DHA Phase 5 Branch',
       branch_code: '0112',
-      technician_name: 'Tariq Mehmood (Senior Installer)',
+      technician_name: 'Tariq Mehmood (Senior Field Technician)',
       items_summary: '1x 32-CH NVR, 4x 4MP IP Cameras, 300ft CAT6 Cable used',
       subtotal: 600000,
       tax_amount: 108000,

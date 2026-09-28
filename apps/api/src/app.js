@@ -73,7 +73,8 @@ app.use(compression());
 app.use((req, res, next) => {
   req.id = req.headers['x-request-id'] || req.headers['x-correlation-id'] || randomUUID();
   res.setHeader('x-request-id', req.id);
-  logger.info({ requestId: req.id, method: req.method, url: req.url }, 'incoming request');
+  const loggedUrl = req.url.replace(/(\/api\/crm\/public\/quotations\/)[^/?]+/, '$1[redacted]');
+  logger.info({ requestId: req.id, method: req.method, url: loggedUrl }, 'incoming request');
   next();
 });
 

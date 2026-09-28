@@ -1,11 +1,13 @@
 {
-  "name": "backend",
+  "name": "@track360/api",
   "version": "1.0.0",
   "description": "",
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",
-    "start": "nodemon server.js",
+    "start": "node server.js",
+    "build": "node --check server.js && node --check src/app.js",
+    "typecheck": "node --check server.js && node --check src/app.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:create": "node-pg-migrate create",
@@ -36,11 +38,13 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
     "node-pg-migrate": "^8.0.4",
+    "nodemailer": "^10.0.10",
     "pg": "^8.20.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "nodemon": "^3.1.11",
+    "smtp-server": "^3.19.13",
     "vitest": "^4.1.4"
   }
 }

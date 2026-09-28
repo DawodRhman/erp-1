@@ -48,7 +48,7 @@ describe("Launchpad", () => {
   it("shows every operational workspace for super admin", () => {
     renderLaunchpad("super_admin");
 
-    expect(screen.getByText("CSR / CRM")).toBeTruthy();
+    expect(screen.getByText("Client & Commercial")).toBeTruthy();
     expect(screen.getByText("Inventory Logistics")).toBeTruthy();
     expect(screen.getByText("Invoice Builder")).toBeTruthy();
     expect(screen.getByText("Finance & Client Billing")).toBeTruthy();

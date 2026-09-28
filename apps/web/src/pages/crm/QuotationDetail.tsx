@@ -2,44 +2,54 @@ import React, { useEffect, useState } from "react";
 import { Copy, ExternalLink, FileText, Pencil, Send } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useToastContext } from "../../context/ToastContext";
+import { useAuthStore } from "../../store/useAuthStore";
 import { CrmButton, EmptyState, ErrorState, LoadingState, PageHeader, card, copyText, crmPage, dateText, money, statusBadge, tableWrap, td, th } from "./CrmShared";
-import { CrmQuotation, approvalLink, crmApi } from "./crmApi";
+import { CrmQuotation, approvalLink, crmApi, quotationDeliveryNotice, quotationEmailSetupPending } from "./crmApi";
 
 export default function QuotationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToastContext();
+  const activeRole = useAuthStore((state) => state.activeRole);
+  const canApproveManagement = activeRole === "super_admin" || activeRole === "inv_fin_admin";
   const [quote, setQuote] = useState<CrmQuotation | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
-  const load = async () => {
+  const load = async (silent = false) => {
     if (!id) return;
-    setLoading(true);
-    setError("");
+    if (!silent) { setLoading(true); setError(""); }
     try {
       setQuote(await crmApi.getQuotation(id));
     } catch {
-      setError("Quotation detail could not be loaded. Please check the backend connection.");
+      if (!silent) setError("Quotation detail could not be loaded. Please check the backend connection.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     load();
+    const refresh = () => { if (document.visibilityState === "visible") load(true); };
+    const timer = window.setInterval(refresh, 2000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [id]);
 
-  const updateStatus = async (status: "SENT") => {
+  const updateStatus = async (status: "MANAGEMENT_PENDING" | "MANAGEMENT_APPROVED" | "SENT") => {
     if (!quote) return;
     setBusy(status);
     try {
-      const saved = await crmApi.updateQuotationStatus(quote.id, status);
-      const link = approvalLink(saved.client_approval_token || quote.client_approval_token);
-      if (status === "SENT" && link) await copyText(link);
-      setQuote(await crmApi.getQuotation(quote.id));
-      showToast(link ? "Client approval link copied." : "Quotation marked SENT.", "success");
+      const saved = status === "SENT" && quote.status === "SENT" ? await crmApi.sendQuotationEmail(quote.id) : await crmApi.updateQuotationStatus(quote.id, status);
+      setQuote(saved);
+      if (status === "SENT") {
+        const notice = quotationDeliveryNotice(saved);
+        showToast(notice.message, notice.type);
+      } else {
+        showToast(status === "MANAGEMENT_PENDING" ? "Quotation submitted for management approval." : "Management approval saved. Next: send to client.", "success");
+      }
     } catch (err: any) {
       showToast(err?.response?.data?.error?.message || "Quotation could not be updated.", "error");
     } finally {
@@ -75,6 +85,7 @@ export default function QuotationDetail() {
   if (!quote) return <main style={crmPage}><EmptyState title="Quotation not found" detail="Open the quotation list and select an existing quotation." /></main>;
 
   const clientLink = approvalLink(quote.client_approval_token);
+  const manualApproval = quotationEmailSetupPending(quote);
   const itemSubtotal = (quote.items || []).reduce((sum, item) => {
     const quantity = Number(item.quantity || 0);
     const unitPrice = Number(item.unit_price || 0);
@@ -90,18 +101,23 @@ export default function QuotationDetail() {
   const total = hasSavedBreakdown && savedTotal > 0 ? savedTotal : subtotal + tax;
   const timeline = [
     { label: "Created", date: quote.created_at, active: true },
+    { label: "Management", date: quote.management_approved_at, active: ["MANAGEMENT_APPROVED", "SENT", "APPROVED", "REJECTED", "EXPIRED"].includes(quote.status) },
     { label: "Sent", date: quote.sent_at, active: ["SENT", "APPROVED", "REJECTED", "EXPIRED"].includes(quote.status) },
     { label: quote.status === "REJECTED" ? "Rejected" : "Approved", date: quote.status === "REJECTED" ? quote.updated_at : quote.client_approved_at, active: ["APPROVED", "REJECTED"].includes(quote.status) },
   ];
   const flowHint =
     quote.status === "SENT"
-      ? "This quotation has been sent. Open or copy the client approval link; after client approval, Convert to Order will become available."
+      ? "Awaiting client approval. Email status and the approval link are shown below."
       : quote.status === "APPROVED"
         ? quote.order_number
           ? `${quote.order_number} has already been created and is visible in CRM Orders Tracker and Inventory.`
           : "Client has approved this quotation. Convert it to an order so Inventory can receive it in the queue."
-        : quote.status === "DRAFT"
-          ? "This quotation is still a draft. Send it when the details are ready."
+        : quote.status === "MANAGEMENT_PENDING"
+          ? "This quotation is waiting for senior management approval before it can be sent to the client."
+          : quote.status === "MANAGEMENT_APPROVED"
+            ? "Senior management has approved this quotation. Send it to the client for review."
+            : quote.status === "DRAFT"
+          ? "This quotation is still a draft. Submit it for management approval when the details are ready."
           : quote.status === "REJECTED"
             ? "Client rejected this quotation. Edit and resend it with the required changes."
             : "This quotation is expired. Resend it if the client still needs it.";
@@ -116,9 +132,11 @@ export default function QuotationDetail() {
           <>
             <CrmButton to="/crm/quotations" tone="light">Back to list</CrmButton>
             {quote.status === "DRAFT" ? <CrmButton to={`/crm/quotations/${quote.id}/edit`} tone="light"><Pencil size={16} /> Edit</CrmButton> : null}
-            {quote.status === "DRAFT" ? <CrmButton onClick={() => updateStatus("SENT")} disabled={Boolean(busy)}><Send size={16} /> Generate & Send</CrmButton> : null}
+            {quote.status === "DRAFT" ? <CrmButton onClick={() => updateStatus("MANAGEMENT_PENDING")} disabled={Boolean(busy)}><Send size={16} /> Submit for Approval</CrmButton> : null}
+            {quote.status === "MANAGEMENT_PENDING" && canApproveManagement ? <CrmButton onClick={() => updateStatus("MANAGEMENT_APPROVED")} disabled={Boolean(busy)} tone="success"><FileText size={16} /> Approve as Management</CrmButton> : null}
+            {quote.status === "MANAGEMENT_APPROVED" ? <CrmButton onClick={() => updateStatus("SENT")} disabled={Boolean(busy)}><Send size={16} /> Send to Client</CrmButton> : null}
             {quote.status === "SENT" ? <CrmButton onClick={openClientApproval} disabled={!clientLink} tone="dark"><ExternalLink size={16} /> Open Client Approval</CrmButton> : null}
-            {quote.status === "SENT" ? <CrmButton onClick={() => updateStatus("SENT")} disabled={Boolean(busy)} tone="light"><Send size={16} /> Resend</CrmButton> : null}
+            {quote.status === "SENT" && !manualApproval ? <CrmButton onClick={() => updateStatus("SENT")} disabled={Boolean(busy)} tone="light"><Send size={16} /> Resend</CrmButton> : null}
             {quote.status === "REJECTED" ? <CrmButton to={`/crm/quotations/${quote.id}/edit`} tone="light"><Pencil size={16} /> Edit & Resend</CrmButton> : null}
             {quote.status === "EXPIRED" ? <CrmButton onClick={() => updateStatus("SENT")} disabled={Boolean(busy)} tone="light"><Send size={16} /> Resend</CrmButton> : null}
             {quote.status === "APPROVED" && quote.order_number ? <CrmButton to="/crm/orders" tone="success"><FileText size={16} /> View {quote.order_number}</CrmButton> : null}
@@ -144,7 +162,13 @@ export default function QuotationDetail() {
         </div>
         <div style={{ ...card, padding: 20, display: "grid", gap: 12 }}>
           <h2 style={{ margin: 0, fontSize: 18 }}>Client Approval Link</h2>
-          <p style={{ margin: 0, color: "#64748b" }}>Email automation will be connected through SMTP later. For now, CSR can share this no-login client approval link manually.</p>
+          <p style={{ margin: 0, color: manualApproval ? "#475569" : quote.email_delivery_status === "FAILED" ? "#b91c1c" : "#64748b" }} role="status">
+            {manualApproval ? "Share the client approval link manually. Automatic email setup is pending."
+              : quote.email_delivery_status === "SENT" ? `Email submitted to ${quote.email_recipient || quote.customer_email}. ${dateText(quote.email_sent_at)}`
+              : quote.email_delivery_status === "FAILED" ? `Email not sent: ${quote.email_error || "Retry sending the quotation."}`
+              : quote.email_delivery_status === "SENDING" ? "Sending quotation email..." : "No email has been sent for this quotation yet."}
+          </p>
+          {quote.status === "SENT" && quote.email_delivery_status === "FAILED" && !manualApproval ? <CrmButton onClick={() => updateStatus("SENT")} disabled={Boolean(busy)}><Send size={16} /> Retry Email</CrmButton> : null}
           <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 12, wordBreak: "break-all", background: "#f8fafc" }}>{clientLink || "Link token not available"}</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <CrmButton tone="dark" onClick={() => copyText(clientLink).then(() => showToast("Client approval link copied.", "success"))} disabled={!clientLink}>
@@ -199,7 +223,7 @@ export default function QuotationDetail() {
         </div>
         <div>
           <h2 style={{ margin: 0, fontSize: 18 }}>Status Timeline</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginTop: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginTop: 12 }}>
             {timeline.map((step) => (
               <div
                 key={step.label}

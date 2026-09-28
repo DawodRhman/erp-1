@@ -19,6 +19,7 @@ function cleanupPrintDocument(previousTitle: string, printRoot: HTMLElement, pri
 
 type PrintOptions = {
   orientation?: "portrait" | "landscape";
+  cleanPage?: boolean;
 };
 
 export function printElementById(elementId: string, title = "Document", options: PrintOptions = {}) {
@@ -37,7 +38,7 @@ export function printHtmlDocument(printableHtml: string, title = "Document", opt
   const printRoot = document.createElement("div");
   const printStyle = document.createElement("style");
   const orientation = options.orientation === "landscape" ? "landscape" : "portrait";
-  const printWidth = orientation === "landscape" ? "277mm" : "190mm";
+  const printWidth = options.cleanPage ? (orientation === "landscape" ? "297mm" : "210mm") : (orientation === "landscape" ? "277mm" : "190mm");
 
   printRoot.className = "print-isolated-root";
   printRoot.innerHTML = `<main class="print-page">${printableHtml}</main>`;
@@ -51,7 +52,7 @@ export function printHtmlDocument(printableHtml: string, title = "Document", opt
     @media print {
       @page {
         size: A4 ${orientation};
-        margin: 10mm;
+        margin: ${options.cleanPage ? "0" : "10mm"};
       }
 
       * {
@@ -84,7 +85,7 @@ export function printHtmlDocument(printableHtml: string, title = "Document", opt
         width: ${printWidth} !important;
         max-width: ${printWidth} !important;
         margin: 0 auto !important;
-        padding: 0 !important;
+        padding: ${options.cleanPage ? "10mm" : "0"} !important;
         background: #ffffff !important;
         color: #111827 !important;
         font-family: Arial, sans-serif !important;
@@ -93,6 +94,7 @@ export function printHtmlDocument(printableHtml: string, title = "Document", opt
       body.print-isolated-active .print-page > * {
         width: 100% !important;
         max-width: 100% !important;
+        min-width: 0 !important;
         margin-left: 0 !important;
         margin-right: 0 !important;
         box-shadow: none !important;
@@ -101,6 +103,8 @@ export function printHtmlDocument(printableHtml: string, title = "Document", opt
 
       body.print-isolated-active table {
         width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
         border-collapse: collapse !important;
         page-break-inside: auto;
       }

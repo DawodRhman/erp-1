@@ -21,6 +21,7 @@ import { useToastContext } from "../../context/ToastContext";
 import TaxRateControl from "../../components/common/TaxRateControl";
 import SearchableSelect from "../../components/common/SearchableSelect";
 import { dashboardPeriodLabel, dashboardPeriodOptions, type DashboardPeriod } from "../../utils/dashboardPeriod";
+import { clientCategoryLabel, normalizeClientCategory, serviceSummary } from "../../utils/customerProfile";
 import {
   financeService,
   DirectFinanceInvoicePayload,
@@ -31,6 +32,7 @@ import {
   FinanceInvoiceItem,
 } from "../../services/financeService";
 import { printElementById } from "../../utils/printElement";
+import { resolveApiAssetUrl } from "../../utils/assetUrl";
 import "../../styles/finance.css";
 
 const expenseTabs: Array<{ key: "all" | FinanceExpenseType; label: string }> = [
@@ -239,13 +241,14 @@ function HblSingleInvoiceDocument({ invoice, notes }: { invoice: FinanceInvoice;
   const rows = getInvoiceRows(invoice, notes);
   const invoiceDate = invoice.invoice_date || invoice.created_at || todayInput();
   const { totalIncl } = invoiceTotals(invoice, rows);
-  const paddedRows = [...rows, ...Array.from({ length: Math.max(0, 5 - rows.length) }, () => ({} as FinanceInvoiceItem))];
+  const preparedBy = String(notes.prepared_by || "Accounts department");
+  const preparedByLabel = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(preparedBy) ? "Accounts department" : preparedBy;
 
   return (
     <div className="finance-invoice-sheet hbl-single" id="finance-invoice-preview">
       <div className="hbl-sale-title">Sale Tax Invoice</div>
       <div className="hbl-sale-meta">
-        <div><strong>{hblBuyer.name}:</strong></div>
+        <div><strong>{invoice.customer_name || hblBuyer.name}:</strong></div>
         <div><strong>Invoice no.</strong></div>
         <div>{invoice.invoice_number || "Pending"}</div>
 
@@ -267,6 +270,7 @@ function HblSingleInvoiceDocument({ invoice, notes }: { invoice: FinanceInvoice;
       </div>
 
       <table className="finance-invoice-table hbl-sale-table">
+        <colgroup>{[5, 22, 20, 7, 10, 12, 11, 13].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}</colgroup>
         <thead>
           <tr>
             <th>S No</th>
@@ -280,13 +284,18 @@ function HblSingleInvoiceDocument({ invoice, notes }: { invoice: FinanceInvoice;
           </tr>
         </thead>
         <tbody>
-          {paddedRows.map((item, index) => {
+          {rows.map((item, index) => {
             const hasItem = Boolean(item.description || item.product_name || item.brand_model);
             return (
               <tr key={`${item.description || item.product_name || "blank"}-${index}`}>
                 <td>{hasItem ? index + 1 : ""}</td>
-                <td>{item.brand_model || item.product_name || item.description || ""}</td>
-                <td>{item.description || item.product_name || ""}</td>
+                <td>{item.brand_model || item.model_no || item.brand_make || item.product_name || item.description || ""}</td>
+                <td>
+                  <div className="finance-invoice-desc-cell">
+                    {item.product_image_url ? <img src={resolveApiAssetUrl(item.product_image_url)} alt="" className="finance-invoice-item-image" /> : null}
+                    <span>{item.description || item.product_name || ""}</span>
+                  </div>
+                </td>
                 <td>{hasItem ? Number(item.quantity || 1) : ""}</td>
                 <td>{hasItem ? money(item.unit_price || 0).replace("PKR ", "Rs ") : ""}</td>
                 <td>{hasItem ? money(item.total_without_tax || item.amount_excl_tax || 0).replace("PKR ", "Rs ") : ""}</td>
@@ -308,7 +317,7 @@ function HblSingleInvoiceDocument({ invoice, notes }: { invoice: FinanceInvoice;
         <p><strong>Account #:</strong> {company.compact_account_no}</p>
         <div className="finance-signature">
           <span>Prepared By</span>
-          <strong>{notes.prepared_by || "Accounts department"}</strong>
+          <strong>{preparedByLabel}</strong>
         </div>
       </div>
     </div>
@@ -318,7 +327,9 @@ function HblSingleInvoiceDocument({ invoice, notes }: { invoice: FinanceInvoice;
 function HblSummaryInvoiceDocument({ invoice, notes }: { invoice: FinanceInvoice; notes: Record<string, any> }) {
   const rows = getInvoiceRows(invoice, notes);
   const invoiceDate = invoice.invoice_date || invoice.created_at || todayInput();
-  const subtitle = `FOR HBL ${notes.work_description || invoice.work_description || invoice.expense_type_label || "SERVICES"}`;
+  const buyerName = invoice.customer_name || hblBuyer.name;
+  const isHbl = buyerName === hblBuyer.name;
+  const subtitle = `FOR ${isHbl ? "HBL" : buyerName} ${notes.work_description || invoice.work_description || invoice.expense_type_label || "SERVICES"}`;
   const { totalExcl, totalTax, totalIncl } = invoiceTotals(invoice, rows);
 
   return (
@@ -337,11 +348,11 @@ function HblSummaryInvoiceDocument({ invoice, notes }: { invoice: FinanceInvoice
         <div>
           <p><strong>Ref #:</strong> {invoice.ref_no || notes.ref_no || "-"}</p>
           <p><strong>Date:</strong> {dateText(invoiceDate)}</p>
-          <p><strong>Buyer&apos;s Name:</strong> {hblBuyer.name}</p>
-          <p><strong>Address:</strong> {hblBuyer.address}</p>
-          <p><strong>Telephone No.:</strong> {hblBuyer.phone}</p>
-          <p><strong>NTN #:</strong> {hblBuyer.ntn}</p>
-          <p><strong>ST Registration No.:</strong> {hblBuyer.gst}</p>
+          <p><strong>Buyer&apos;s Name:</strong> {buyerName}</p>
+          <p><strong>Address:</strong> {notes.buyer_address || (isHbl ? hblBuyer.address : "-")}</p>
+          <p><strong>Telephone No.:</strong> {notes.buyer_phone || (isHbl ? hblBuyer.phone : "-")}</p>
+          <p><strong>NTN #:</strong> {notes.buyer_ntn || (isHbl ? hblBuyer.ntn : "-")}</p>
+          <p><strong>ST Registration No.:</strong> {notes.buyer_gst || (isHbl ? hblBuyer.gst : "-")}</p>
         </div>
       </div>
 
@@ -351,6 +362,7 @@ function HblSummaryInvoiceDocument({ invoice, notes }: { invoice: FinanceInvoice
       </div>
 
       <table className="finance-invoice-table hbl-summary">
+        <colgroup>{[3, 6, 10, 6, 14, 9, 8, 9, 7, 10, 8, 10].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}</colgroup>
         <thead>
           <tr>
             <th>S.No</th>
@@ -399,8 +411,7 @@ function HblSummaryInvoiceDocument({ invoice, notes }: { invoice: FinanceInvoice
         <p><strong>Account #:</strong> {company.compact_account_no}</p>
         <div className="finance-signature">
           <span>Prepared By</span>
-          <strong>{notes.prepared_by || "Finance Officer"}</strong>
-          <strong>Accounts Department</strong>
+          <strong>{/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(String(notes.prepared_by || "")) ? "Accounts department" : notes.prepared_by || "Accounts department"}</strong>
         </div>
       </div>
     </div>
@@ -480,7 +491,7 @@ export function FinanceDashboard() {
   return (
     <main className="finance-page">
       <FinanceHero
-        eyebrow="Finance Service"
+        eyebrow="Finance & Receivables Workspace"
         title="Finance Dashboard"
         description="Approvals, invoices and payments."
         action={<button className="finance-btn secondary" onClick={load}><RefreshCw size={16} /> Refresh</button>}
@@ -659,7 +670,7 @@ export function BillingApprovals() {
               {!approvals.length ? (
                 <tr><td colSpan={8} className="finance-empty-cell">
                   {status === "PENDING"
-                    ? "No pending bills. A bill appears here after Inventory confirms returns and sends the adjusted bill to Finance."
+                    ? "No pending billing records. A record appears after Inventory completes material reconciliation and submits the verified amount to Finance."
                     : `No ${status.toLowerCase()} billing records found.`}
                 </td></tr>
               ) : null}
@@ -709,6 +720,7 @@ export function BillingApprovalDetail() {
       const next = await financeService.approveBillingApproval(approval.id, { expense_type: expenseType, invoice_format: invoiceFormat });
       setApproval(next);
       showToast("Invoice issued. Next: open Invoices or Monthly Summaries.", "success");
+      navigate(`/finance/invoices/view/${next.id}`);
     } catch {
       showToast("Invoice could not be issued.", "error");
     } finally {
@@ -739,7 +751,7 @@ export function BillingApprovalDetail() {
 
   const finalAmount = Number(approval.bill_breakdown?.final_amount ?? approval.breakdown?.final_amount ?? approval.final_amount ?? approval.total_amount ?? 0);
   const isNoCharge = finalAmount <= 0 || (approval.approval_status || "").toUpperCase() === "NO_CHARGE";
-  const isIssued = (approval.approval_status || approval.status || "").toUpperCase() === "ISSUED";
+  const isIssued = ["ISSUED", "PAID"].includes((approval.status || "").toUpperCase()) || ["APPROVED", "ISSUED"].includes((approval.approval_status || "").toUpperCase());
 
   return (
     <main className="finance-page">
@@ -770,6 +782,7 @@ export function BillingApprovalDetail() {
               <span>Every chargeable item was returned. This record is kept as a no-charge closure and cannot be issued as an invoice.</span>
             </div>
           ) : null}
+          {!isIssued && !isNoCharge ? <>
           <label>Expense type</label>
           <select value={expenseType} onChange={(event) => setExpenseType(event.target.value as FinanceExpenseType)}>
             {expenseOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
@@ -781,39 +794,22 @@ export function BillingApprovalDetail() {
           <button className="finance-btn primary" onClick={approve} disabled={saving || approval.status === "ISSUED" || isNoCharge}>
             <CheckCircle2 size={18} /> Approve & Generate Invoice
           </button>
+          </> : null}
           {isIssued ? (
             <div className="finance-next-actions">
-              <button className="finance-btn secondary" onClick={() => navigate("/finance/invoices")}><FileText size={17} /> View Invoice</button>
+              <button className="finance-btn secondary" onClick={() => navigate(`/finance/invoices/view/${approval.id}`)}><FileText size={17} /> View Invoice</button>
               <button className="finance-btn primary" onClick={() => navigate(financeSummaryPath(approval))}><FileSpreadsheet size={17} /> Open Monthly Summary</button>
             </div>
           ) : null}
+          {!isIssued && !isNoCharge ? <>
           <textarea value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} placeholder="Rejection note for Inventory / CRM" />
           <button className="finance-btn danger" onClick={reject} disabled={saving || approval.status === "ISSUED" || isNoCharge}>
             <XCircle size={18} /> Reject Bill
           </button>
-          <button className="finance-btn secondary" onClick={() => printElementById("finance-invoice-preview", approval.invoice_number)} disabled={isNoCharge}>
-            <Printer size={18} /> Print Preview
-          </button>
+          </> : null}
         </div>
       </section>
 
-      <section className="finance-card">
-        <div className="finance-card-head">
-          <div>
-            <p className="finance-eyebrow dark">Preview</p>
-            <h2>Invoice Format</h2>
-          </div>
-        </div>
-        {isNoCharge ? (
-          <div className="finance-no-charge-preview">
-            <CheckCircle2 size={28} />
-            <strong>No invoice generated</strong>
-            <span>The adjusted total is zero because all chargeable items were returned.</span>
-          </div>
-        ) : (
-          <InvoiceDocument invoice={{ ...approval, expense_type: expenseType, invoice_format: invoiceFormat }} />
-        )}
-      </section>
     </main>
   );
 }
@@ -1075,15 +1071,17 @@ function NewInvoiceWizard({
         <div className="finance-wizard-section">
           <h3>Step 2 - Invoice Details</h3>
           <div className="finance-form-grid">
-            <label>Client / Bank
+            <label>Client
               <SearchableSelect
                 disabled={loadingCustomers}
                 value={form.customer_id}
                 onChange={(customer_id) => updateForm({ customer_id })}
-                placeholder={loadingCustomers ? "Loading clients..." : "Search or select client / bank"}
+                placeholder={loadingCustomers ? "Loading clients..." : "Search or select client"}
                 options={customers.map((customer) => ({
                   value: customer.id,
-                  label: `${customer.customer_name}${customer.email ? ` - ${customer.email}` : ""}`,
+                  label: `${customer.customer_name} - ${clientCategoryLabel(normalizeClientCategory(customer))}${customer.email ? ` - ${customer.email}` : ""}`,
+                  searchText: [customer.customer_name, customer.company_name, customer.email, customer.customer_category,
+                    customer.organization_type, serviceSummary(customer, ""), customer.service_description].filter(Boolean).join(" "),
                 }))}
               />
             </label>
@@ -1238,6 +1236,7 @@ function EditInvoiceModal({
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(invoice.status || "ISSUED");
+  const [changeReason, setChangeReason] = useState("");
   const [form, setForm] = useState<DirectInvoiceForm>({
     expense_type: normalizeExpenseTypeFrontend(invoice.expense_type || notes.expense_type),
     invoice_format: invoice.invoice_format || notes.invoice_format || "hbl_single",
@@ -1318,6 +1317,7 @@ function EditInvoiceModal({
     if (!form.customer_id) return "Please select a client / bank.";
     if (!form.work_description.trim()) return "Work description is required.";
     if (!calculatedRows.every((row) => String(row.description || "").trim())) return "Every invoice row needs a description.";
+    if (!changeReason.trim()) return "Enter a reason for this invoice change so the audit trail remains clear.";
     return "";
   };
 
@@ -1341,6 +1341,7 @@ function EditInvoiceModal({
         po_number: form.po_number,
         work_description: form.work_description,
         fbr_invoice_no: form.fbr_invoice_no,
+        change_reason: changeReason.trim(),
         status,
         items: calculatedRows,
       });
@@ -1368,15 +1369,17 @@ function EditInvoiceModal({
         <div className="finance-wizard-section">
           <h3>Invoice Details</h3>
           <div className="finance-form-grid">
-            <label>Client / Bank
+            <label>Client
               <SearchableSelect
                 disabled={loadingCustomers}
                 value={form.customer_id}
                 onChange={(customer_id) => updateForm({ customer_id })}
-                placeholder={loadingCustomers ? "Loading clients..." : "Search or select client / bank"}
+                placeholder={loadingCustomers ? "Loading clients..." : "Search or select client"}
                 options={customers.map((customer) => ({
                   value: customer.id,
-                  label: `${customer.customer_name}${customer.email ? ` - ${customer.email}` : ""}`,
+                  label: `${customer.customer_name} - ${clientCategoryLabel(normalizeClientCategory(customer))}${customer.email ? ` - ${customer.email}` : ""}`,
+                  searchText: [customer.customer_name, customer.company_name, customer.email, customer.customer_category,
+                    customer.organization_type, serviceSummary(customer, ""), customer.service_description].filter(Boolean).join(" "),
                 }))}
               />
             </label>
@@ -1406,6 +1409,7 @@ function EditInvoiceModal({
             <label>PO Number<input value={form.po_number} onChange={(event) => updateForm({ po_number: event.target.value })} /></label>
             <label>FBR Invoice No<input value={form.fbr_invoice_no} onChange={(event) => updateForm({ fbr_invoice_no: event.target.value })} /></label>
             <label className="finance-span-2">Work Description<textarea value={form.work_description} onChange={(event) => updateForm({ work_description: event.target.value })} /></label>
+            <label className="finance-span-2">Reason for Change *<textarea value={changeReason} onChange={(event) => setChangeReason(event.target.value)} placeholder="For example: quantity corrected after client sign-off, returned item deducted, or extra site item added" /></label>
           </div>
         </div>
 
@@ -1471,40 +1475,66 @@ function EditInvoiceModal({
   );
 }
 
+function printFinanceInvoice(invoice: FinanceInvoice) {
+  const format = String(getInvoiceNotes(invoice).invoice_format || invoice.invoice_format || "");
+  printElementById("finance-invoice-preview", invoice.invoice_number, {
+    orientation: format === "hbl_summary" || format === "hbl_footage" || invoice.expense_type === "footage_expenses" ? "landscape" : "portrait",
+    cleanPage: true,
+  });
+}
+
+export function FinanceInvoiceDetail() {
+  const { id = "" } = useParams();
+  const [searchParams] = useSearchParams();
+  const [invoice, setInvoice] = useState<FinanceInvoice | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [editing, setEditing] = useState(false);
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try { setInvoice(await financeService.getInvoice(id)); }
+    catch { setError("Invoice could not be loaded."); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, [id]);
+  useEffect(() => {
+    if (!loading && invoice && searchParams.get("print") === "1") {
+      const timer = window.setTimeout(() => printFinanceInvoice(invoice), 150);
+      return () => window.clearTimeout(timer);
+    }
+  }, [loading, invoice?.id, searchParams]);
+  if (loading) return <main className="finance-page"><LoadingBlock /></main>;
+  if (error || !invoice) return <main className="finance-page"><ErrorBlock message={error || "Invoice not found."} onRetry={load} /></main>;
+  return (
+    <main className="finance-page finance-document-page">
+      <section className="finance-document-toolbar">
+        <div><h1>{invoice.invoice_number}</h1><p>{invoice.customer_name} <StatusBadge status={invoice.status} /></p></div>
+        <div className="finance-action-cell">
+          <Link className="finance-btn secondary" to="/finance/invoices">Back to invoices</Link>
+          <button className="finance-btn secondary" onClick={() => setEditing(true)}><Edit3 size={16} /> Edit</button>
+          <Link className="finance-btn secondary" to={financeSummaryPath(invoice)}><FileSpreadsheet size={16} /> Monthly Summary</Link>
+          <button className="finance-btn primary" onClick={() => printFinanceInvoice(invoice)}><Printer size={16} /> Print / Save PDF</button>
+        </div>
+      </section>
+      <section className="finance-document-canvas"><div className="finance-invoice-preview-shell"><InvoiceDocument invoice={invoice} /></div></section>
+      {editing ? <EditInvoiceModal invoice={invoice} onClose={() => setEditing(false)} onSaved={(saved) => { setInvoice(saved); setEditing(false); }} /> : null}
+    </main>
+  );
+}
+
 export function FinanceInvoices() {
+  const navigate = useNavigate();
   const { expenseType } = useParams();
   const defaultTab = (expenseTabs.find((tab) => tab.key === expenseType)?.key || "all") as "all" | FinanceExpenseType;
   const [activeTab, setActiveTab] = useState<"all" | FinanceExpenseType>(defaultTab);
   const [invoices, setInvoices] = useState<FinanceInvoice[]>([]);
-  const [selected, setSelected] = useState<FinanceInvoice | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
   const [loading, setLoading] = useState(true);
-  const [selectedLoading, setSelectedLoading] = useState(false);
   const [showNewInvoice, setShowNewInvoice] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<FinanceInvoice | null>(null);
   const { showToast } = useToastContext();
-
-  const loadInvoiceDetail = async (invoice: FinanceInvoice, printAfter = false) => {
-    setSelectedLoading(true);
-    try {
-      const detail = await financeService.getInvoice(invoice.id);
-      setSelected(detail);
-      if (printAfter) {
-        window.setTimeout(() => printElementById("finance-invoice-preview", detail.invoice_number), 80);
-      }
-      return detail;
-    } catch {
-      setSelected(invoice);
-      showToast("Full invoice detail could not be loaded.", "error");
-      if (printAfter) {
-        window.setTimeout(() => printElementById("finance-invoice-preview", invoice.invoice_number), 80);
-      }
-      return invoice;
-    } finally {
-      setSelectedLoading(false);
-    }
-  };
 
   const load = async () => {
     setLoading(true);
@@ -1515,11 +1545,6 @@ export function FinanceInvoices() {
         search,
       });
       setInvoices(data);
-      if (data[0]) {
-        await loadInvoiceDetail(data[0]);
-      } else {
-        setSelected(null);
-      }
     } catch {
       showToast("Finance invoices could not be loaded.", "error");
     } finally {
@@ -1532,8 +1557,8 @@ export function FinanceInvoices() {
   }, [activeTab, status]);
 
   const openEditInvoice = async (invoice: FinanceInvoice) => {
-    const detail = await loadInvoiceDetail(invoice);
-    setEditingInvoice(detail);
+    try { setEditingInvoice(await financeService.getInvoice(invoice.id)); }
+    catch { showToast("Full invoice detail could not be loaded.", "error"); }
   };
 
   const deleteInvoice = async (invoice: FinanceInvoice) => {
@@ -1542,7 +1567,6 @@ export function FinanceInvoices() {
     try {
       await financeService.deleteInvoice(invoice.id);
       setInvoices((current) => current.filter((item) => item.id !== invoice.id));
-      if (selected?.id === invoice.id) setSelected(null);
       showToast("Invoice deleted successfully.", "success");
     } catch {
       showToast("Invoice delete failed.", "error");
@@ -1551,7 +1575,6 @@ export function FinanceInvoices() {
 
   const saveEditedInvoice = (invoice: FinanceInvoice) => {
     setEditingInvoice(null);
-    setSelected(invoice);
     setInvoices((current) => current.map((item) => item.id === invoice.id ? { ...item, ...invoice } : item));
   };
 
@@ -1586,14 +1609,14 @@ export function FinanceInvoices() {
         <button className="finance-btn secondary" onClick={load}>Search</button>
       </section>
 
-      <section className="finance-ledger-layout finance-invoices-layout">
+      <section className="finance-invoice-ledger">
         <div className="finance-card">
           <table className="finance-table">
             <thead>
               <tr>
                 <th>Invoice No</th>
                 <th>Ref</th>
-                <th>Client / Bank</th>
+                <th>Client</th>
                 <th>Branch</th>
                 <th>Expense Type</th>
                 <th>Invoice Date</th>
@@ -1614,8 +1637,8 @@ export function FinanceInvoices() {
                   <td>{money(invoice.total_amount)}</td>
                   <td><StatusBadge status={invoice.status} /></td>
                   <td className="finance-action-cell">
-                    <button className="finance-small-btn" onClick={() => loadInvoiceDetail(invoice)}><Eye size={14} /> View</button>
-                    <button className="finance-small-btn" onClick={() => loadInvoiceDetail(invoice, true)}><Download size={14} /> PDF</button>
+                    <Link className="finance-small-btn" to={`/finance/invoices/view/${invoice.id}`}><Eye size={14} /> View</Link>
+                    <Link className="finance-small-btn" to={`/finance/invoices/view/${invoice.id}?print=1`}><Download size={14} /> PDF</Link>
                     <button className="finance-small-btn" onClick={() => showToast("Email sending will be connected after SMTP approval.", "success")}><Send size={14} /> Email</button>
                     <button className="finance-small-btn" onClick={() => openEditInvoice(invoice)}><Edit3 size={14} /> Edit</button>
                     <button className="finance-small-btn danger" onClick={() => deleteInvoice(invoice)}><Trash2 size={14} /> Delete</button>
@@ -1627,31 +1650,12 @@ export function FinanceInvoices() {
           </table>
         </div>
 
-        <div className="finance-card">
-          <div className="finance-card-head">
-            <div>
-              <p className="finance-eyebrow dark">Selected invoice</p>
-              <h2>{selected?.invoice_number || "No invoice selected"}</h2>
-            </div>
-            {selected ? (
-              <div className="finance-action-cell">
-                <Link className="finance-small-btn" to={financeSummaryPath(selected)}><FileSpreadsheet size={14} /> Summary</Link>
-                <button className="finance-small-btn" onClick={() => printElementById("finance-invoice-preview", selected.invoice_number)}><Printer size={14} /> Print</button>
-              </div>
-            ) : null}
-          </div>
-          <div className="finance-invoice-preview-shell">
-            {selectedLoading ? <p className="finance-muted">Loading full invoice detail...</p> : selected ? <InvoiceDocument invoice={selected} /> : <p className="finance-muted">Select an invoice to preview it.</p>}
-          </div>
-        </div>
       </section>
       {showNewInvoice ? (
         <NewInvoiceWizard
           onClose={() => setShowNewInvoice(false)}
           onGenerated={(invoice) => {
-            setSelected(invoice);
-            setActiveTab(invoice.expense_type || "all");
-            load();
+            navigate(`/finance/invoices/view/${invoice.id}`);
           }}
         />
       ) : null}
@@ -1809,7 +1813,7 @@ export function FinanceSummaries() {
   const summaryPreviewInvoice: FinanceInvoice | null = hasMonthlyRows ? {
     id: `summary-${month}`,
     invoice_number: `HBL-SUMMARY-${month.replace("-", "")}`,
-    customer_name: "Habib Bank Limited",
+    customer_name: rowsByClient.length === 1 ? (rowsByClient[0] as any).client : "Multiple clients",
     expense_type: expenseType === "all" ? "operational_expenses" : (expenseType as FinanceExpenseType),
     expense_type_label: "HBL Monthly Summary",
     invoice_format: "hbl_summary",
@@ -1822,11 +1826,11 @@ export function FinanceSummaries() {
     branch_name: "Multiple branches",
     branch_code: "Multiple",
     region: region || "Karachi",
-    work_description: `CCTV CAMERA REINSTALLED BILL MONTH OF ${monthText(month)}`,
+    work_description: `BILL SUMMARY FOR ${monthText(month)}`,
     notes_json: {
       invoice_format: "hbl_summary",
       ref_no: summaryItems[0]?.po_number || "-",
-      work_description: `CCTV CAMERA REINSTALLED BILL MONTH OF ${monthText(month)}`,
+      work_description: `BILL SUMMARY FOR ${monthText(month)}`,
       prepared_by: "Accounts department",
     },
     items: summaryItems,
@@ -1842,8 +1846,8 @@ export function FinanceSummaries() {
           <div className="finance-action-cell">
             <button className="finance-btn primary" onClick={exportCsv}><FileSpreadsheet size={16} /> Export CSV</button>
             {summaryPreviewInvoice ? (
-              <button className="finance-btn secondary" onClick={() => printElementById("finance-summary-preview", summaryPreviewInvoice.invoice_number, { orientation: "landscape" })}>
-                <Printer size={16} /> Print HBL Summary
+              <button className="finance-btn secondary" onClick={() => printElementById("finance-summary-preview", summaryPreviewInvoice.invoice_number, { orientation: "landscape", cleanPage: true })}>
+                <Printer size={16} /> Print Summary
               </button>
             ) : null}
           </div>
@@ -1949,9 +1953,9 @@ export function FinanceSummaries() {
           <div className="finance-card-head">
             <div>
               <p className="finance-eyebrow dark">Book1 Format</p>
-              <h2>HBL Printable Summary Preview</h2>
+              <h2>Printable Summary Preview</h2>
             </div>
-            <button className="finance-small-btn" onClick={() => printElementById("finance-summary-preview", summaryPreviewInvoice.invoice_number, { orientation: "landscape" })}>
+            <button className="finance-small-btn" onClick={() => printElementById("finance-summary-preview", summaryPreviewInvoice.invoice_number, { orientation: "landscape", cleanPage: true })}>
               <Printer size={14} /> Print
             </button>
           </div>

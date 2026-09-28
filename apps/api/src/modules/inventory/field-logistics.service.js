@@ -1,6 +1,7 @@
 import pool from '../../config/db.js';
 import { AppError } from '../../utils/errors.js';
 import { recordInventoryMovement } from './inventory.service.js';
+import { publishInventoryEvent } from './inventory-events.js';
 import { createClientInvoiceFromDispatch } from '../invoicing/invoicing.service.js';
 
 function returnRequestNumber(dispatchNumber = '') {
@@ -51,7 +52,7 @@ function buildBillAdjustment(dispatch = {}) {
 }
 
 export async function createDispatch(data, actorId = null) {
-  // data: { quotation_id, customer_id, installer_id, site_address, notes, items: [{ product_id, inventory_item_id, quantity_issued, unit_of_measure, unit_price }] }
+  // installer_id is retained in the database contract as the assigned field technician identifier.
   if (!data?.installer_id) {
     throw new AppError(400, 'VALIDATION_ERROR', 'Installer is required before dispatch can be confirmed.');
   }
@@ -234,7 +235,7 @@ export async function createDispatch(data, actorId = null) {
             quantity: 1,
             reference_type: 'FIELD_DISPATCH',
             reference_id: dispatch.id,
-            notes: `Issued to installer from dispatch ${dispatch.dispatch_number}`,
+            notes: `Issued to field team for assignment ${dispatch.dispatch_number}`,
             created_by: actorId,
           });
         }
@@ -278,7 +279,7 @@ export async function createDispatch(data, actorId = null) {
             quantity: issuedQty,
             reference_type: 'FIELD_DISPATCH',
             reference_id: dispatch.id,
-            notes: `Issued to installer from dispatch ${dispatch.dispatch_number}`,
+            notes: `Issued to field team for assignment ${dispatch.dispatch_number}`,
             created_by: actorId,
           });
         }
@@ -299,7 +300,7 @@ export async function createDispatch(data, actorId = null) {
           quantity: issuedQty,
           reference_type: 'FIELD_DISPATCH',
           reference_id: dispatch.id,
-          notes: `Issued to installer from dispatch ${dispatch.dispatch_number}`,
+          notes: `Issued to field team for assignment ${dispatch.dispatch_number}`,
           created_by: actorId,
         });
       }
@@ -327,6 +328,7 @@ export async function createDispatch(data, actorId = null) {
                   THEN 'FULLY_DISPATCHED'
                 ELSE 'PARTIALLY_DISPATCHED'
               END,
+              technical_status = 'IN_PROGRESS',
               updated_at = NOW()
           WHERE o.quotation_id = $1
             AND o.token_number IS NOT NULL
@@ -338,10 +340,18 @@ export async function createDispatch(data, actorId = null) {
 
     // Quotation remains APPROVED in CRM; dispatch progress is tracked on the dispatch/order records.
     if (data.quotation_id) {
-      await client.query(`UPDATE public.quotations SET updated_at = NOW() WHERE id = $1`, [data.quotation_id]);
+      await client.query(
+        `UPDATE public.quotations SET technical_handoff_at = COALESCE(technical_handoff_at, NOW()), updated_at = NOW() WHERE id = $1`,
+        [data.quotation_id],
+      );
     }
 
     await client.query('COMMIT');
+    publishInventoryEvent('stock.changed', {
+      reason: 'material_dispatched',
+      dispatch_id: dispatch.id,
+      dispatch_number: dispatch.dispatch_number,
+    });
     return dispatch;
   } catch (err) {
     await client.query('ROLLBACK');
@@ -370,7 +380,7 @@ export async function listDispatches(filters = {}) {
       SELECT
         d.*,
         c.customer_name,
-        COALESCE(NULLIF(ei.name, ''), u.email, 'Installer not assigned') AS installer_name,
+        COALESCE(NULLIF(ei.name, ''), u.email, 'Field technician not assigned') AS installer_name,
         u.email AS installer_email,
         q.quotation_number,
         o.order_number,
@@ -441,9 +451,186 @@ export async function getDispatchById(id) {
 
   return {
     ...dRes.rows[0],
-    items: itemsRes.rows,
+    items: itemsRes.rows.map((item) => ({
+      ...item,
+      qr_payload: JSON.stringify({
+        qr_token: item.qr_token,
+        token_number: dRes.rows[0].token_number,
+        dispatch_number: dRes.rows[0].dispatch_number,
+        item: item.product_name,
+        serial_number: item.serial_number || item.imei || null,
+        quantity: Number(item.quantity_issued || 0),
+      }),
+    })),
     on_the_go_purchases: purchasesRes.rows,
   };
+}
+
+export async function listMaterialRequests(filters = {}) {
+  const params = [];
+  const where = [];
+  if (filters.dispatch_id) {
+    params.push(filters.dispatch_id);
+    where.push(`mr.dispatch_id = $${params.length}`);
+  }
+  if (filters.status) {
+    params.push(String(filters.status).toUpperCase());
+    where.push(`mr.status = $${params.length}`);
+  }
+  const result = await pool.query(
+    `
+      SELECT mr.*, d.dispatch_number, c.customer_name, p.product_name,
+             requester.email AS requested_by_email, reviewer.email AS reviewed_by_email
+      FROM public.field_material_requests mr
+      JOIN public.installer_field_dispatches d ON d.id = mr.dispatch_id
+      LEFT JOIN public.customers c ON c.id = d.customer_id
+      LEFT JOIN public.products p ON p.id = mr.product_id
+      LEFT JOIN public.users requester ON requester.id = mr.created_by
+      LEFT JOIN public.users reviewer ON reviewer.id = mr.reviewed_by
+      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+      ORDER BY mr.created_at DESC
+    `,
+    params,
+  );
+  return result.rows;
+}
+
+export async function createMaterialRequest(dispatchId, data, actorId = null) {
+  const quantity = Number(data.requested_quantity || 0);
+  const reason = String(data.reason || '').trim();
+  if (quantity <= 0 || !reason) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Requested quantity and business reason are required.');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const dispatch = await client.query(
+      `SELECT id FROM public.installer_field_dispatches WHERE id = $1 FOR UPDATE`,
+      [dispatchId],
+    );
+    if (!dispatch.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Field assignment not found.');
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, ['field-material-request-number']);
+    const sequence = await client.query(
+      `SELECT COALESCE(MAX(NULLIF(substring(request_number FROM 'MRQ-[0-9]{4}-([0-9]+)'), '')::int), 0) + 1 AS next_number FROM public.field_material_requests`,
+    );
+    const requestNumber = `MRQ-${new Date().getUTCFullYear()}-${String(sequence.rows[0].next_number).padStart(4, '0')}`;
+    const result = await client.query(
+      `
+        INSERT INTO public.field_material_requests (
+          request_number, dispatch_id, product_id, item_description,
+          requested_quantity, reason, created_by
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+      `,
+      [
+        requestNumber,
+        dispatchId,
+        data.product_id || null,
+        String(data.item_description || '').trim() || 'Additional field material',
+        quantity,
+        reason,
+        actorId,
+      ],
+    );
+    await client.query('COMMIT');
+    publishInventoryEvent('workflow.changed', { reason: 'material_requested', material_request_id: result.rows[0].id, dispatch_id: dispatchId });
+    return result.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function reviewMaterialRequest(id, data, actorId = null) {
+  const status = String(data.status || '').toUpperCase();
+  if (!['APPROVED', 'REJECTED'].includes(status)) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Material request status must be APPROVED or REJECTED.');
+  }
+  const result = await pool.query(
+    `
+      UPDATE public.field_material_requests
+      SET status = $2, review_note = $3, reviewed_by = $4,
+          reviewed_at = NOW(), updated_at = NOW()
+      WHERE id = $1 AND status = 'PENDING'
+      RETURNING *
+    `,
+    [id, status, String(data.review_note || '').trim() || null, actorId],
+  );
+  if (!result.rows[0]) throw new AppError(409, 'INVALID_REQUEST_STATUS', 'Only pending material requests can be reviewed.');
+  publishInventoryEvent('workflow.changed', { reason: 'material_request_reviewed', material_request_id: id, status });
+  return result.rows[0];
+}
+
+export async function issueMaterialRequest(id, actorId = null) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const requestResult = await client.query(
+      `SELECT * FROM public.field_material_requests WHERE id = $1 FOR UPDATE`,
+      [id],
+    );
+    const request = requestResult.rows[0];
+    if (!request) throw new AppError(404, 'NOT_FOUND', 'Material request not found.');
+    if (request.status === 'ISSUED') {
+      await client.query('COMMIT');
+      return request;
+    }
+    if (request.status !== 'APPROVED' || !request.product_id) {
+      throw new AppError(409, 'INVALID_REQUEST_STATUS', 'Approve the request and select a catalog product before issue.');
+    }
+
+    const productResult = await client.query(
+      `SELECT id, product_name, quantity, selling_price, unit_price FROM public.products WHERE id = $1 FOR UPDATE`,
+      [request.product_id],
+    );
+    const product = productResult.rows[0];
+    const quantity = Number(request.requested_quantity || 0);
+    if (!product || Number(product.quantity || 0) < quantity) {
+      throw new AppError(400, 'INSUFFICIENT_STOCK', 'Requested additional material is not available in stock.');
+    }
+
+    await client.query(
+      `
+        INSERT INTO public.installer_dispatch_items (
+          dispatch_id, product_id, quantity_issued, quantity_used,
+          quantity_returned, unit_of_measure, unit_price, notes
+        )
+        VALUES ($1, $2, $3, 0, 0, 'UNITS', $4, $5)
+      `,
+      [request.dispatch_id, request.product_id, quantity, product.selling_price || product.unit_price || 0, `Issued against ${request.request_number}`],
+    );
+    const balance = await client.query(
+      `UPDATE public.products SET quantity = quantity - $2, updated_at = NOW() WHERE id = $1 RETURNING quantity`,
+      [request.product_id, quantity],
+    );
+    await recordInventoryMovement(client, {
+      product_id: request.product_id,
+      movement_type: 'STOCK_OUT',
+      quantity,
+      reference_type: 'FIELD_MATERIAL_REQUEST',
+      reference_id: request.id,
+      notes: `Additional material issued against ${request.request_number}`,
+      stock_balance_after: balance.rows[0]?.quantity,
+      idempotency_key: `material-request:${request.id}:issue`,
+      created_by: actorId,
+    });
+    const updated = await client.query(
+      `UPDATE public.field_material_requests SET status = 'ISSUED', updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [id],
+    );
+    await client.query('COMMIT');
+    publishInventoryEvent('stock.changed', { reason: 'additional_material_issued', material_request_id: id, product_id: request.product_id, quantity });
+    return updated.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function listReturnRequests(filters = {}) {
@@ -471,7 +658,7 @@ export async function listReturnRequests(filters = {}) {
         d.created_at,
         d.updated_at,
         c.customer_name,
-        COALESCE(NULLIF(ei.name, ''), u.email, 'Installer') AS installer_name,
+        COALESCE(NULLIF(ei.name, ''), u.email, 'Field technician') AS installer_name,
         u.email AS installer_email,
         q.quotation_number,
         o.order_number,
@@ -660,7 +847,7 @@ export async function confirmReturnRequest(id, { items = [], notes }, actorId = 
         WHERE id = $1
         RETURNING *
       `,
-      [id, notes || 'Inventory confirmed installer returns.'],
+      [id, notes || 'Inventory confirmed the material reconciliation.'],
     );
 
     if (dispatch.quotation_id) {
@@ -677,6 +864,10 @@ export async function confirmReturnRequest(id, { items = [], notes }, actorId = 
     }
 
     await client.query('COMMIT');
+    publishInventoryEvent('stock.changed', {
+      reason: 'return_confirmed',
+      dispatch_id: id,
+    });
     return getReturnRequestById(updated.rows[0].id);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -702,7 +893,7 @@ export async function sendAdjustedBillToFinance(id, actorId = null) {
     return getReturnRequestById(id);
   }
   if (!['RETURN_CONFIRMED', 'COMPLETED', 'RECONCILED'].includes(String(dispatch.status || '').toUpperCase())) {
-    throw new AppError(409, 'RETURN_NOT_CONFIRMED', 'Confirm installer returns before sending the adjusted bill to Finance.');
+    throw new AppError(409, 'RECONCILIATION_NOT_CONFIRMED', 'Confirm the material reconciliation before submitting the verified billing record to Finance.');
   }
   if (!dispatch.customer_id) {
     throw new AppError(400, 'VALIDATION_ERROR', 'Dispatch client is required before sending bill to finance.');
@@ -787,7 +978,11 @@ export async function sendAdjustedBillToFinance(id, actorId = null) {
   return { ...request, invoice };
 }
 
-export async function reconcileDispatch(id, { items = [], on_the_go_purchases = [], notes }, actorId = null) {
+export async function reconcileDispatch(
+  id,
+  { items = [], on_the_go_purchases = [], notes, client_signoff_name, client_signoff_note },
+  actorId = null,
+) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -797,10 +992,15 @@ export async function reconcileDispatch(id, { items = [], on_the_go_purchases = 
       [id],
     );
     const dispatch = dispatchRes.rows[0];
-    if (!dispatch) throw new AppError(404, 'NOT_FOUND', 'Installer dispatch not found.');
+    if (!dispatch) throw new AppError(404, 'NOT_FOUND', 'Field service assignment not found.');
     if (['RETURN_PENDING', 'RETURN_CONFIRMED', 'BILL_SENT'].includes(String(dispatch.status || '').toUpperCase())) {
       await client.query('COMMIT');
       return dispatch;
+    }
+
+    const signoffName = String(client_signoff_name || '').trim();
+    if (!signoffName) {
+      throw new AppError(400, 'CLIENT_SIGNOFF_REQUIRED', 'Client sign-off name is required before completing the job.');
     }
 
     let totalReturnedForJob = 0;
@@ -914,7 +1114,38 @@ export async function reconcileDispatch(id, { items = [], on_the_go_purchases = 
       [id, notes || null, nextStatus]
     );
 
+    if (dispatch.quotation_id) {
+      await client.query(
+        `
+          UPDATE public.crm_orders
+          SET technical_status = 'COMPLETED',
+              client_signoff_status = 'SIGNED',
+              client_signoff_at = NOW(),
+              client_signoff_name = $2,
+              client_signoff_note = $3,
+              updated_at = NOW()
+          WHERE quotation_id = $1
+        `,
+        [dispatch.quotation_id, signoffName, String(client_signoff_note || '').trim() || null],
+      );
+      await client.query(
+        `
+          UPDATE public.quotations
+          SET client_signoff_at = NOW(),
+              client_signoff_name = $2,
+              client_signoff_note = $3,
+              updated_at = NOW()
+          WHERE id = $1
+        `,
+        [dispatch.quotation_id, signoffName, String(client_signoff_note || '').trim() || null],
+      );
+    }
+
     await client.query('COMMIT');
+    publishInventoryEvent('workflow.changed', {
+      reason: nextStatus === 'RETURN_PENDING' ? 'field_return_submitted' : 'field_service_completed',
+      dispatch_id: id,
+    });
     if (nextStatus === 'RETURN_CONFIRMED') {
       return sendAdjustedBillToFinance(id, actorId);
     }

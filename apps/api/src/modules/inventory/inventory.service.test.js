@@ -2,10 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const query = vi.hoisted(() => vi.fn());
 const connect = vi.hoisted(() => vi.fn());
+const recordActivityLog = vi.hoisted(() => vi.fn());
 
 vi.mock('../../config/db.js', () => ({
   default: { query, connect },
 }));
+
+vi.mock('../audit/audit.service.js', () => ({ recordActivityLog }));
 
 async function loadService() {
   vi.resetModules();
@@ -16,6 +19,8 @@ describe('inventory service', () => {
   beforeEach(() => {
     query.mockReset();
     connect.mockReset();
+    recordActivityLog.mockReset();
+    recordActivityLog.mockResolvedValue({ id: 'audit-1' });
   });
 
   it('fetches inventory summary metrics correctly', async () => {
@@ -83,34 +88,37 @@ describe('inventory service', () => {
     expect(query.mock.calls[0][0]).toContain('ORDER BY ic.category_name ASC');
   });
 
-  it('validates product creation input and normalizes product type', async () => {
-    query.mockResolvedValueOnce({
-      rows: [
-        {
-          id: 'prod-1',
-          product_name: 'Tracker GT-300',
-          product_type: 'ASSET',
-          tracking_type: 'SERIAL',
-          quantity: 10,
-          min_stock_level: 2,
-          unit_price: 150.00,
-        },
-      ],
-    });
+  it('creates a catalog product with a controlled initial stock receipt', async () => {
+    const clientQuery = vi.fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ id: 'prod-1', product_name: 'Tracker GT-300', product_type: 'ASSET', tracking_type: 'NONE', quantity: 10, min_stock_level: 2, unit_price: 150 }] })
+      .mockResolvedValueOnce({ rows: [] });
+    connect.mockResolvedValue({ query: clientQuery, release: vi.fn() });
+    query.mockResolvedValue({ rows: [] });
 
     const service = await loadService();
     const product = await service.createProduct({
       product_name: 'Tracker GT-300',
       product_type: 'asset',
-      tracking_type: 'serial',
-      quantity: 10,
+      tracking_type: 'none',
+      initial_quantity: 10,
       min_stock_level: 2,
       unit_price: 150.00,
+      cost_price: 100,
     });
 
     expect(product.product_name).toBe('Tracker GT-300');
-    expect(query.mock.calls[0][1][2]).toBe('ASSET');
-    expect(query.mock.calls[0][1][3]).toBe('SERIAL');
+    const insertCall = clientQuery.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO public.products'));
+    expect(insertCall[1][2]).toBe('ASSET');
+    expect(insertCall[1][3]).toBe('NONE');
+    expect(insertCall[1]).toContain(10);
+  });
+
+  it('builds a readable SKU from brand and model', async () => {
+    const service = await loadService();
+    expect(service.buildProductSku({ brand_make: 'Hikvision', model_no: 'DS-2CD2143G2-I' })).toBe('HIKVISION-DS-2CD2143G2-I');
+    expect(service.buildProductSku({ product_name: 'Access Control Panel' })).toBe('PRD-ACCESS-CONTROL-PANEL');
   });
 
   it('throws validation error when creating product without product_name', async () => {
@@ -118,6 +126,54 @@ describe('inventory service', () => {
     await expect(service.createProduct({})).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
       statusCode: 400,
+    });
+  });
+
+  it('stores validated Inventory workspace colors with operational settings', async () => {
+    query.mockImplementationOnce(async (_sql, params) => ({ rows: [{ setting_value: params[1] }] }));
+
+    const service = await loadService();
+    const settings = await service.updateInventorySettings({
+      default_min_stock_threshold: 8,
+      low_stock_alert_email: 'warehouse@esspl.com.pk',
+      theme_preset: 'ocean',
+      primary_color: '#164e63',
+      accent_color: '#0284c7',
+      page_color: '#f0f9ff',
+      surface_color: '#ffffff',
+    }, 'user-1');
+
+    expect(settings).toMatchObject({
+      default_min_stock_threshold: 8,
+      low_stock_alert_email: 'warehouse@esspl.com.pk',
+      theme_preset: 'ocean',
+      primary_color: '#164E63',
+      accent_color: '#0284C7',
+      page_color: '#F0F9FF',
+      surface_color: '#FFFFFF',
+    });
+    expect(JSON.parse(query.mock.calls[0][1][1])).toMatchObject({ theme_preset: 'ocean', primary_color: '#164E63' });
+  });
+
+  it('falls back to the approved Inventory theme when custom colors are invalid', async () => {
+    query.mockImplementationOnce(async (_sql, params) => ({ rows: [{ setting_value: params[1] }] }));
+
+    const service = await loadService();
+    const settings = await service.updateInventorySettings({
+      default_min_stock_threshold: 5,
+      theme_preset: 'unsupported',
+      primary_color: 'navy',
+      accent_color: '#12345',
+      page_color: '',
+      surface_color: '#GGGGGG',
+    });
+
+    expect(settings).toMatchObject({
+      theme_preset: 'executive',
+      primary_color: '#10234D',
+      accent_color: '#0F766E',
+      page_color: '#EEF5FF',
+      surface_color: '#FFFFFF',
     });
   });
 
@@ -343,5 +399,76 @@ describe('inventory service', () => {
     expect(token.already_generated).toBe(true);
     expect(client.query.mock.calls.some((call) => String(call[0]).includes("nextval('public.inventory_token_number_seq')"))).toBe(false);
     expect(client.query).toHaveBeenCalledWith('COMMIT');
+  });
+
+  it('creates an individual client profile without duplicating a company name', async () => {
+    query
+      .mockResolvedValueOnce({
+        rows: [
+          'customer_name', 'company_name', 'customer_category', 'organization_type', 'customer_type',
+          'service_categories', 'service_description', 'contact_person', 'email', 'phone', 'address',
+        ].map((column_name) => ({ column_name })),
+      })
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 'customer-1', customer_name: 'Ali Khan', company_name: null, customer_category: 'INDIVIDUAL',
+          organization_type: null, service_categories: ['SECURITY_SYSTEMS'],
+        }],
+      });
+
+    const service = await loadService();
+    const customer = await service.createCustomer({
+      customer_name: ' Ali Khan ',
+      company_name: 'Must be ignored',
+      customer_category: 'individual',
+      organization_type: 'Corporate',
+      service_categories: ['security_systems', 'SECURITY_SYSTEMS'],
+      service_description: 'Home CCTV installation',
+      email: ' Ali@example.com ',
+      phone: '0300-1112233',
+      address: 'Karachi',
+    }, 'user-1');
+
+    expect(customer.customer_category).toBe('INDIVIDUAL');
+    const [sql, params] = query.mock.calls[1];
+    expect(sql).toContain('INSERT INTO public.customers');
+    expect(params).toEqual([
+      'Ali Khan', null, 'INDIVIDUAL', null, 'Individual', ['SECURITY_SYSTEMS'],
+      'Home CCTV installation', null, 'ali@example.com', '0300-1112233', 'Karachi',
+    ]);
+    expect(recordActivityLog).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1', action: 'CRM_CLIENT_CREATED', entityId: 'customer-1',
+    }));
+  });
+
+  it('rejects an unsupported client category before querying the database', async () => {
+    const service = await loadService();
+    await expect(service.createCustomer({ customer_name: 'Invalid Client', customer_category: 'UNKNOWN' }))
+      .rejects.toMatchObject({ code: 'VALIDATION_ERROR', statusCode: 400 });
+    expect(query).not.toHaveBeenCalled();
+    expect(recordActivityLog).not.toHaveBeenCalled();
+  });
+
+  it('does not store a legal company name when it duplicates the client display name', async () => {
+    query
+      .mockResolvedValueOnce({
+        rows: [
+          'customer_name', 'company_name', 'customer_category', 'organization_type', 'customer_type',
+          'service_categories', 'service_description', 'contact_person', 'email', 'phone', 'address',
+        ].map((column_name) => ({ column_name })),
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 'customer-2', customer_name: 'Habib Bank Limited', company_name: null }] });
+
+    const service = await loadService();
+    await service.createCustomer({
+      customer_name: 'Habib Bank Limited',
+      company_name: 'habib bank limited',
+      customer_category: 'ORGANIZATION',
+      organization_type: 'BANK',
+      service_categories: ['HR_STAFFING'],
+    }, 'user-1');
+
+    expect(query.mock.calls[1][1][1]).toBeNull();
+    expect(query.mock.calls[1][1][3]).toBe('BANK');
   });
 });

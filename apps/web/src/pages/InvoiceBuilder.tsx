@@ -497,7 +497,7 @@ export default function InvoiceBuilder() {
       }
 
       setRows(nextRows.length ? nextRows : [createRow()]);
-      showToast(`${dispatch.customer_name || "Client"} invoice auto-filled from installer dispatch ${dispatch.dispatch_number}`, "success");
+      showToast(`${dispatch.customer_name || "Client"} invoice auto-filled from field service assignment ${dispatch.dispatch_number}`, "success");
     } catch {
       try {
         const dispatches = await inventoryApi.getDispatches();
@@ -527,7 +527,7 @@ export default function InvoiceBuilder() {
       setBillingDispatch(null);
       setLoadedBillingDispatchId("");
       setRows([createRow()]);
-      showToast("Unable to load installer dispatch for billing. Refresh data or open billing from an approved quotation.", "error");
+      showToast("Unable to load the field service assignment for billing. Refresh data or open billing from an approved quotation.", "error");
     }
   };
 
@@ -676,7 +676,7 @@ export default function InvoiceBuilder() {
         customer_id: selectedCustomerId,
         dispatch_id: billingDispatch?.id || null,
         quotation_id: billingQuotation?.id || null,
-        template_name: selectedTemplate?.template_name || billingQuotation?.template_style || (billingDispatch ? "Installer Dispatch Billing" : "Custom Invoice Builder"),
+        template_name: selectedTemplate?.template_name || billingQuotation?.template_style || (billingDispatch ? "Field Service Billing" : "Custom Invoice Builder"),
         tax_type: "GST",
         tax_rate: 18,
         number_of_copies: 1,

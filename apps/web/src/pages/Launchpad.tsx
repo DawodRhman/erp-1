@@ -49,7 +49,7 @@ const modules: ModuleCard[] = [
     roles: ["super_admin", "hr"],
   },
   {
-    title: "CSR / CRM",
+    title: "Client & Commercial",
     description: "Customers, leads, quotations and client approval handoff",
     to: "/crm",
     icon: Users,
@@ -57,7 +57,7 @@ const modules: ModuleCard[] = [
   },
   {
     title: "Inventory Logistics",
-    description: "Stock, serials, dispatches, installers and returns",
+    description: "Catalog, stock, procurement, field fulfilment and reconciliation",
     to: "/inventory",
     icon: Package,
     roles: ["super_admin", "inventory_officer", "inv_fin_admin"],
@@ -78,7 +78,7 @@ const modules: ModuleCard[] = [
   },
   {
     title: "Matrix Operations",
-    description: "End-to-end CSR, inventory, installer and finance workflow",
+    description: "End-to-end commercial, inventory, field service and finance workflow",
     to: "/matrix-operations",
     icon: GitBranch,
     roles: ["super_admin", "csr_officer", "inventory_officer", "finance_officer", "inv_fin_admin"],

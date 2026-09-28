@@ -86,9 +86,9 @@ describe("Sidebar", () => {
     renderSidebar();
 
     expect(screen.getByText("Inventory Dashboard").closest("a")?.getAttribute("href")).toBe("/inventory-dashboard");
-    expect(screen.getByText("Product Catalog").closest("a")?.getAttribute("href")).toBe("/inventory/products");
+    expect(screen.getByText("Product & Service Catalog").closest("a")?.getAttribute("href")).toBe("/inventory/products");
     expect(screen.queryByText("Finance Dashboard")).toBeNull();
-    expect(screen.queryByText("CSR / CRM")).toBeNull();
+    expect(screen.queryByText("Client & Commercial")).toBeNull();
   });
 
   it("shows inventory and finance links for combined admins without the HR dashboard route", () => {

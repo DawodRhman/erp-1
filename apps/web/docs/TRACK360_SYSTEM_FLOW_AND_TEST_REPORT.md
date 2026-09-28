@@ -24,7 +24,7 @@ TRACK360 has four main work areas. Installer field work is handled inside the In
 
 The intended end-to-end business flow is:
 
-`Client request -> CRM client -> Quotation -> Client approval -> CRM order -> Inventory token -> Stock check -> PO if short -> Receive stock -> Dispatch -> Installer reconciliation -> Inventory return confirmation -> Send bill to Finance -> Finance approval -> Issued invoice -> CRM invoice visibility -> Finance summary/accounts`
+`Client requirement -> CRM client -> Quotation -> Management approval -> Client approval -> CRM order -> Inventory token -> Stock check -> PO if short -> Receive stock -> Dispatch -> Technical completion -> Client sign-off -> Inventory reconciliation -> Send bill to Finance -> Finance approval -> Issued invoice -> CRM invoice visibility -> Finance summary/accounts`
 
 Every handoff must use the same linked records:
 
@@ -118,8 +118,8 @@ After conversion, the linked order continues independently through:
 5. Product Catalog
 6. Serial / Barcode Scan
 7. Purchase Orders
-8. Installer Dispatch
-9. Installer Returns
+8. Field Service Dispatch
+9. Field Reconciliation
 10. Stock Movement Ledger
 11. Master Setup
 12. Operations Matrix
@@ -134,7 +134,7 @@ After conversion, the linked order continues independently through:
 6. Stock check runs against every linked quotation item.
 7. If all items are available:
    - Order stock status becomes `STOCK_OK`.
-   - Order appears in Installer Dispatch ready queue.
+   - Order appears in Field Service Dispatch ready queue.
 8. If any item is short:
    - Order stock status becomes `AWAITING_STOCK`.
    - Inventory clicks `Create PO`.
@@ -176,11 +176,11 @@ After conversion, the linked order continues independently through:
 4. Used serialized item becomes `INSTALLED`.
 5. Not-used serialized item becomes `RETURNED` until Inventory confirms condition.
 6. Installer completes the job only after all items are marked.
-7. The return request becomes visible in `Installer Returns`.
+7. The return request becomes visible in `Field Reconciliation`.
 
 ### Inventory Return Journey
 
-1. Inventory opens `Installer Returns`.
+1. Inventory opens `Field Reconciliation`.
 2. Inventory reviews each returned item.
 3. Inventory selects condition:
    - Good -> return quantity to stock
@@ -188,7 +188,7 @@ After conversion, the linked order continues independently through:
    - Consumable Used -> log as used; do not add stock
 4. Inventory confirms returns once.
 5. System updates stock, serial lifecycle and movement ledger once.
-6. Inventory clicks `Send Adjusted Bill to Finance`.
+6. Inventory clicks `Submit Verified Billing Record`.
 7. System creates one Draft customer invoice linked to dispatch, quotation and client.
 8. CRM order becomes `BILL_SENT`.
 
@@ -393,7 +393,7 @@ These checks used a temporary direct product quantity update because the normal 
    - Expected behavior is to add Good stock only after Inventory confirmation.
    - This can cause a double stock increase if confirmation also succeeds.
 
-3. Confirm Returns: FAIL
+3. Confirm Reconciliation: FAIL
    - API returns HTTP 500.
    - Database error: `FOR UPDATE cannot be applied to the nullable side of an outer join`.
    - Result: Inventory cannot complete the official return-confirmation step.
@@ -436,6 +436,7 @@ The highest-priority fix order is:
 2. Fix Receive Stock status update query.
 3. Fix Installer Return list status mapping.
 4. Stop stock from being added during installer reconciliation.
-5. Fix Confirm Returns locking query.
+5. Fix Confirm Reconciliation locking query.
 6. Rerun the same QA journey without any manual stock workaround.
 7. Run browser-level click testing for every page and print/PDF layout after the API chain is fully green.
+

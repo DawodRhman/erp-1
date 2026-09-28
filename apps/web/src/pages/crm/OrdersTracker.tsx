@@ -39,8 +39,8 @@ export default function OrdersTracker() {
     const status = String(order.status || "").toUpperCase();
     if (status === "INVOICED") return <CrmButton to="/crm/invoices" tone="success">View Invoice</CrmButton>;
     if (["BILL_SENT", "BILL_REJECTED"].includes(status)) return <CrmButton to="/crm/invoices" tone="light">Finance Status</CrmButton>;
-    if (["COMPLETED", "RETURN_PENDING", "RETURN_CONFIRMED"].includes(status)) return <CrmButton to="/inventory/returns" tone="light">Return Status</CrmButton>;
-    if (status === "DISPATCHED") return <CrmButton to="/inventory/dispatches" tone="light">Track Dispatch</CrmButton>;
+    if (["COMPLETED", "RETURN_PENDING", "RETURN_CONFIRMED"].includes(status)) return <CrmButton to="/inventory/reconciliation" tone="light">Reconciliation Status</CrmButton>;
+    if (status === "DISPATCHED") return <CrmButton to="/inventory/field-service" tone="light">Track Field Service</CrmButton>;
     return <CrmButton to={`/inventory/queue?quotationId=${order.quotation_id}`} tone="light">Inventory Action</CrmButton>;
   };
 

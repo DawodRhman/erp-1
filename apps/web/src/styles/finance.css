@@ -590,9 +590,26 @@
 }
 
 .finance-invoice-preview-shell .finance-invoice-sheet.hbl-single {
-  min-width: 980px;
-  max-width: none;
+  min-width: 700px;
+  max-width: 980px;
 }
+
+.finance-document-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.finance-document-toolbar > div { min-width: 0; max-width: 100%; }
+.finance-document-toolbar h1 { margin: 0; font-size: 24px; overflow-wrap: anywhere; }
+.finance-document-toolbar p { margin: 6px 0 0; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.finance-document-canvas { padding: 24px; background: #e8eef5; border: 1px solid #d2dce9; }
+.finance-invoice-ledger { min-width: 0; }
+.finance-invoice-ledger .finance-card { overflow-x: auto; }
+.finance-document-page .finance-invoice-preview-shell { max-width: 100%; }
 
 .finance-invoice-sheet.hbl-summary-layout {
   min-width: 1120px;
@@ -631,6 +648,16 @@
   font-size: 16px;
 }
 
+.finance-invoice-table.hbl-sale-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.hbl-sale-table th,
+.hbl-sale-table td { overflow-wrap: anywhere; white-space: normal; }
+
+.hbl-sale-meta > div { min-width: 0; overflow-wrap: anywhere; }
+
 .hbl-sale-table td {
   min-height: 30px;
   text-align: center;
@@ -639,6 +666,21 @@
 .hbl-sale-table td:nth-child(2),
 .hbl-sale-table td:nth-child(3) {
   text-align: left;
+}
+
+.finance-invoice-desc-cell {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 6px;
+}
+
+.finance-invoice-item-image {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
 }
 
 .hbl-sale-footer {
@@ -1015,4 +1057,18 @@
   .finance-invoice-table td {
     padding: 5px 6px !important;
   }
+
+  .finance-invoice-sheet.hbl-single { min-width: 0 !important; max-width: 100% !important; }
+  .hbl-sale-table th { font-size: 10px !important; letter-spacing: 0 !important; }
+  .hbl-sale-table td { font-size: 10px !important; padding: 5px 3px !important; }
+  .hbl-sale-title { font-size: 20px !important; }
+  .hbl-sale-footer { font-size: 12px !important; min-height: 160px; }
+  .hbl-sale-meta { grid-template-columns: 2fr 0.55fr 1.25fr !important; }
+  .finance-invoice-footer { break-inside: avoid; }
+  .finance-invoice-header { grid-template-columns: 1fr 1fr !important; }
+  .finance-invoice-sheet.hbl-summary-layout { width: 100% !important; min-width: 0 !important; max-width: 100% !important; }
+  .finance-invoice-table.hbl-summary { table-layout: fixed; font-size: 9px !important; }
+  .finance-invoice-table.hbl-summary th,
+  .finance-invoice-table.hbl-summary td { overflow-wrap: anywhere; white-space: normal; padding: 4px !important; }
+  .finance-invoice-table.hbl-summary th { letter-spacing: 0 !important; }
 }

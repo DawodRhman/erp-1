@@ -1,5 +1,5 @@
 {
-  "name": "erp-management-system",
+  "name": "@track360/web",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -9,6 +9,8 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.node.json --pretty false",
+    "typecheck:legacy": "tsc -b --pretty false",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -52,6 +54,7 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
