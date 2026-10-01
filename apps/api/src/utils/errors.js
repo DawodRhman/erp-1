@@ -22,7 +22,7 @@ export function errorHandler(err, req, res, next) {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
     res.setHeader(
       'Access-Control-Allow-Headers',
-      'Content-Type, Authorization, x-client-local-ip, x-client-private-ip, x-client-hostname, x-request-id, x-correlation-id'
+      'Content-Type, Authorization, Idempotency-Key, x-client-local-ip, x-client-private-ip, x-client-hostname, x-request-id, x-correlation-id'
     );
   }
 

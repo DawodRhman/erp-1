@@ -1,11 +1,13 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Sidebar from "./Sidebar";
 
 let activeRole = "hr_manager";
 const logout = vi.fn();
+
+afterEach(cleanup);
 
 vi.mock("../../context/AuthContext", () => ({
   useAuth: () => ({

@@ -9,7 +9,10 @@ export function getApiBaseUrl(): string {
   }
 
   if (isLocal) {
-    return 'http://localhost:3001/api';
+    // Keep local requests on the current origin so Vite can route them to the
+    // backend selected by VITE_DEV_API_PROXY. This prevents a stale service on
+    // port 3001 from silently serving a different API build.
+    return '/api';
   }
 
   // When deployed on Vercel / Cloud Host: Fallback to deployed production API

@@ -138,7 +138,11 @@ export default function InventoryDashboard() {
   );
 
   const stockReady = useMemo(
-    () => workQueue.filter((job) => String(job.stock_status || job.status || "").toUpperCase() === "STOCK_OK"),
+    () => workQueue.filter((job) => (
+      String(job.stock_status || job.status || "").toUpperCase() === "STOCK_OK"
+      && String(job.order_status || "").toUpperCase() === "STOCK_OK"
+      && Boolean(job.token_number)
+    )),
     [workQueue],
   );
   const shortages = useMemo(
@@ -182,8 +186,12 @@ export default function InventoryDashboard() {
   const metrics = [
     { label: "Available Stock", value: availableUnits, detail: `${fmt(stockProducts.length)} stock-managed products`, icon: Warehouse, color: "#0f766e", to: "/inventory/products" },
     { label: "Replenishment Required", value: lowStock.length, detail: "Stock-managed products at or below minimum level", icon: AlertTriangle, color: "#d97706", to: "/inventory/products" },
-    { label: "Pending Orders", value: pendingIncoming, detail: "Awaiting inventory intake and token control", icon: ClipboardCheck, color: "#2563eb", to: "/inventory/queue" },
+    { label: "Released Orders", value: pendingIncoming, detail: "Awaiting stock check or material planning", icon: ClipboardCheck, color: "#2563eb", to: "/inventory/queue" },
     { label: "Open Purchase Orders", value: openPurchaseOrders.length, detail: `${openPurchaseOrders.filter((po) => po.expected_delivery_date).length} expected receipts scheduled`, icon: ShoppingCart, color: "#7c3aed", to: "/inventory/purchasing" },
+    { label: "Ready for Material Issue", value: stockReady.length, detail: "Reserved stock checks ready for field assignment", icon: ClipboardCheck, color: "#0d9488", to: "/inventory/field-service" },
+    { label: "Active Field Jobs", value: activeDispatchCount, detail: "Assignments currently issued or in progress", icon: Warehouse, color: "#0369a1", to: "/inventory/field-service" },
+    { label: "Pending Closeouts", value: pendingReturnCount, detail: "Material results awaiting Inventory verification", icon: RefreshCw, color: "#be123c", to: "/inventory/returns" },
+    { label: `${periodLabel} Movements`, value: Number(summary?.period_movement_count || 0), detail: "Receipts, issues and returns posted to the ledger", icon: CalendarDays, color: "#475569", to: "/inventory/movements" },
   ];
 
   const movementChart = [

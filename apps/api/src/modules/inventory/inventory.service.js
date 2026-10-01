@@ -60,9 +60,9 @@ const DEFAULT_INVENTORY_SETTINGS = {
   default_min_stock_threshold: 5,
   low_stock_alert_email: '',
   theme_preset: 'executive',
-  primary_color: '#10234D',
-  accent_color: '#0F766E',
-  page_color: '#EEF5FF',
+  primary_color: '#0B2447',
+  accent_color: '#0D9488',
+  page_color: '#F4F6FA',
   surface_color: '#FFFFFF',
 };
 
@@ -174,6 +174,9 @@ async function ensureEnterpriseInventoryColumns(db = pool) {
   await db.query(`ALTER TABLE public.products ADD COLUMN IF NOT EXISTS room_number TEXT`);
   await db.query(`ALTER TABLE public.products ADD COLUMN IF NOT EXISTS rack_number TEXT`);
   await db.query(`ALTER TABLE public.products ADD COLUMN IF NOT EXISTS custom_attributes JSONB NOT NULL DEFAULT '{}'::jsonb`);
+  await db.query(`ALTER TABLE public.products ADD COLUMN IF NOT EXISTS preferred_vendor_id UUID`);
+  await db.query(`ALTER TABLE public.products ADD COLUMN IF NOT EXISTS reorder_quantity NUMERIC NOT NULL DEFAULT 0`);
+  await db.query(`ALTER TABLE public.products ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 1`);
   await db.query(`UPDATE public.products SET selling_price = COALESCE(selling_price, unit_price, 0) WHERE selling_price IS NULL`);
   await db.query(`ALTER TABLE public.inventory_items ADD COLUMN IF NOT EXISTS sku VARCHAR(100)`);
   await db.query(`ALTER TABLE public.inventory_items ADD COLUMN IF NOT EXISTS batch_lot_number TEXT`);
@@ -272,14 +275,16 @@ function productValuesFromPayload(data = {}, existing = {}) {
     condition: normalizeProductCondition(data.condition ?? existing.condition),
     sku: String(data.sku ?? existing.sku ?? '').trim() || null,
     model_no: String(data.model_no ?? existing.model_no ?? '').trim() || null,
-    product_type: ['ASSET', 'CONSUMABLE', 'SERVICE'].includes(String(data.product_type ?? existing.product_type ?? 'ASSET').toUpperCase())
+    product_type: ['ASSET', 'CONSUMABLE', 'SERVICE', 'RENTAL', 'LICENSE'].includes(String(data.product_type ?? existing.product_type ?? 'ASSET').toUpperCase())
       ? String(data.product_type ?? existing.product_type ?? 'ASSET').toUpperCase()
       : 'ASSET',
-    tracking_type: ['SERIAL', 'IMEI', 'NONE'].includes(String(data.tracking_type ?? existing.tracking_type ?? 'NONE').toUpperCase())
+    tracking_type: ['SERIAL', 'IMEI', 'BATCH', 'NONE'].includes(String(data.tracking_type ?? existing.tracking_type ?? 'NONE').toUpperCase())
       ? String(data.tracking_type ?? existing.tracking_type ?? 'NONE').toUpperCase()
       : 'NONE',
     quantity: Math.max(0, parseInt(data.quantity ?? existing.quantity ?? 0, 10) || 0),
     min_stock_level: Math.max(0, parseInt(data.min_stock_level ?? existing.min_stock_level ?? 5, 10) || 5),
+    reorder_quantity: Math.max(0, parseInt(data.reorder_quantity ?? existing.reorder_quantity ?? 0, 10) || 0),
+    preferred_vendor_id: data.preferred_vendor_id ?? existing.preferred_vendor_id ?? null,
     unit_price: Math.max(0, parseFloat(sellingPrice) || 0),
     selling_price: Math.max(0, parseFloat(sellingPrice) || 0),
     cost_price: Math.max(0, parseFloat(purchasePrice) || 0),
@@ -303,7 +308,18 @@ async function resolveOrderStockStatus(client, quotationId) {
         COUNT(qi.id)::int AS total_items,
         COUNT(qi.id) FILTER (
           WHERE qi.product_id IS NULL
-             OR COALESCE(p.quantity, 0) < COALESCE(qi.quantity, 1)
+             OR (
+               COALESCE(p.product_type, 'ASSET') <> 'SERVICE'
+               AND CASE
+                 WHEN p.tracking_type IN ('SERIAL', 'IMEI') THEN (
+                   SELECT COUNT(*)
+                   FROM public.inventory_items stock_item
+                   WHERE stock_item.product_id = p.id
+                     AND stock_item.current_status = 'AVAILABLE'
+                 )
+                 ELSE COALESCE(p.quantity, 0)
+               END < COALESCE(qi.quantity, 1)
+             )
         )::int AS shortage_items
       FROM public.quotation_items qi
       LEFT JOIN public.products p ON p.id = qi.product_id
@@ -316,6 +332,97 @@ async function resolveOrderStockStatus(client, quotationId) {
     return 'TOKEN_GENERATED';
   }
   return Number(stats.shortage_items || 0) > 0 ? 'AWAITING_STOCK' : 'STOCK_OK';
+}
+
+async function refreshOrderReservations(client, { orderId, quotationId, actorId = null }) {
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+    return resolveOrderStockStatus(client, quotationId);
+  }
+
+  const lines = await client.query(
+    `
+      SELECT qi.id AS quotation_item_id, qi.product_id,
+             COALESCE(qi.quantity, 1)::numeric AS requested_quantity,
+             CASE
+               WHEN p.tracking_type IN ('SERIAL', 'IMEI') THEN (
+                 SELECT COUNT(*)
+                 FROM public.inventory_items stock_item
+                 WHERE stock_item.product_id = p.id
+                   AND stock_item.current_status = 'AVAILABLE'
+               )
+               ELSE COALESCE(p.quantity, 0)
+             END::numeric AS on_hand,
+             COALESCE(p.product_type, 'ASSET') AS product_type
+      FROM public.quotation_items qi
+      LEFT JOIN public.products p ON p.id = qi.product_id
+      WHERE qi.quotation_id = $1
+      ORDER BY qi.product_id NULLS LAST, qi.id
+    `,
+    [quotationId],
+  );
+
+  let shortageLines = 0;
+  for (const line of lines.rows) {
+    const requested = Number(line.requested_quantity || 0);
+    let reserved = requested;
+    let status = 'RESERVED';
+
+    if (!line.product_id) {
+      reserved = 0;
+      status = 'SHORTAGE';
+    } else if (line.product_type !== 'SERVICE') {
+      const lockedProduct = await client.query(
+        `SELECT CASE
+                  WHEN tracking_type IN ('SERIAL', 'IMEI') THEN (
+                    SELECT COUNT(*)
+                    FROM public.inventory_items stock_item
+                    WHERE stock_item.product_id = products.id
+                      AND stock_item.current_status = 'AVAILABLE'
+                  )
+                  ELSE COALESCE(quantity, 0)
+                END::numeric AS on_hand
+         FROM public.products
+         WHERE id = $1
+         FOR UPDATE`,
+        [line.product_id],
+      );
+      const otherReservations = await client.query(
+        `SELECT COALESCE(SUM(reserved_quantity), 0)::numeric AS reserved
+         FROM public.inventory_stock_reservations
+         WHERE product_id = $1
+           AND order_id <> $2
+           AND status IN ('RESERVED', 'PARTIALLY_RESERVED')`,
+        [line.product_id, orderId],
+      );
+      const available = Math.max(0, Number(lockedProduct.rows[0]?.on_hand || 0) - Number(otherReservations.rows[0]?.reserved || 0));
+      reserved = Math.min(requested, available);
+      status = reserved >= requested ? 'RESERVED' : reserved > 0 ? 'PARTIALLY_RESERVED' : 'SHORTAGE';
+    }
+
+    if (status !== 'RESERVED') shortageLines += 1;
+    await client.query(
+      `
+        INSERT INTO public.inventory_stock_reservations
+          (order_id, quotation_item_id, product_id, requested_quantity, reserved_quantity, status, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (order_id, quotation_item_id)
+        DO UPDATE SET product_id = EXCLUDED.product_id,
+                      requested_quantity = EXCLUDED.requested_quantity,
+                      reserved_quantity = EXCLUDED.reserved_quantity,
+                      status = EXCLUDED.status,
+                      updated_at = NOW()
+      `,
+      [orderId, line.quotation_item_id, line.product_id, requested, reserved, status, actorId],
+    );
+  }
+
+  const stockStatus = lines.rows.length === 0 ? 'TOKEN_GENERATED' : shortageLines > 0 ? 'AWAITING_STOCK' : 'STOCK_OK';
+  await client.query(
+    `INSERT INTO public.inventory_outbox (aggregate_type, aggregate_id, event_type, payload)
+     VALUES ('STOCK_CHECK', $1, $2, $3::jsonb)`,
+    [orderId, shortageLines > 0 ? 'stock.shortage-detected' : 'stock-check.completed', JSON.stringify({ order_id: orderId, quotation_id: quotationId, stock_status: stockStatus, shortage_lines: shortageLines })],
+  );
+  return stockStatus;
 }
 
 export async function getInventorySummary(filters = {}) {
@@ -335,19 +442,41 @@ export async function getInventorySummary(filters = {}) {
 
   const [productStats, serialStats, workflowStats, csrStats] = await Promise.all([
     pool.query(`
+      WITH product_stock AS (
+        SELECT
+          p.id,
+          p.product_type,
+          p.min_stock_level,
+          p.unit_price,
+          CASE
+            WHEN p.product_type = 'SERVICE' THEN 0
+            WHEN p.tracking_type IN ('SERIAL', 'IMEI') THEN COALESCE(serials.available_quantity, 0)
+            ELSE COALESCE(p.quantity, 0)
+          END::numeric AS on_hand_quantity,
+          COALESCE(reservations.reserved_quantity, 0)::numeric AS reserved_quantity
+        FROM public.products p
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*) FILTER (WHERE current_status = 'AVAILABLE')::numeric AS available_quantity
+          FROM public.inventory_items
+          WHERE product_id = p.id
+        ) serials ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(SUM(reserved_quantity), 0)::numeric AS reserved_quantity
+          FROM public.inventory_stock_reservations
+          WHERE product_id = p.id
+            AND status IN ('RESERVED', 'PARTIALLY_RESERVED')
+        ) reservations ON TRUE
+      )
       SELECT
         COUNT(*)::int AS total_products,
-        (
-          COALESCE(SUM(CASE WHEN COALESCE(tracking_type, 'NONE') = 'NONE' THEN quantity ELSE 0 END), 0)
-          + (SELECT COUNT(*) FROM public.inventory_items)
-        )::numeric AS total_stock_qty,
-        (
-          COALESCE(SUM(CASE WHEN COALESCE(tracking_type, 'NONE') = 'NONE' THEN quantity ELSE 0 END), 0)
-          + (SELECT COUNT(*) FROM public.inventory_items WHERE current_status = 'AVAILABLE')
-        )::numeric AS available_stock_qty,
-        COUNT(*) FILTER (WHERE quantity <= min_stock_level)::int AS low_stock_count,
-        COALESCE(SUM(quantity * unit_price), 0)::numeric AS total_inventory_value
-      FROM public.products
+        COALESCE(SUM(on_hand_quantity), 0)::numeric AS total_stock_qty,
+        COALESCE(SUM(GREATEST(on_hand_quantity - reserved_quantity, 0)), 0)::numeric AS available_stock_qty,
+        COUNT(*) FILTER (
+          WHERE product_type <> 'SERVICE'
+            AND GREATEST(on_hand_quantity - reserved_quantity, 0) <= min_stock_level
+        )::int AS low_stock_count,
+        COALESCE(SUM(on_hand_quantity * unit_price), 0)::numeric AS total_inventory_value
+      FROM product_stock
     `),
     pool.query(`
       SELECT
@@ -477,8 +606,31 @@ export async function getInventoryWorkQueue(filters = {}) {
           COUNT(qi.id)::int AS item_count,
           COALESCE(SUM(qi.quantity), 0)::int AS total_requested_qty,
           COUNT(qi.id) FILTER (
-            WHERE qi.product_id IS NULL
-               OR COALESCE(p.quantity, 0) < COALESCE(qi.quantity, 1)
+             WHERE qi.product_id IS NULL
+                OR (
+                  COALESCE(p.product_type, 'ASSET') <> 'SERVICE'
+                  AND COALESCE(
+                    r.reserved_quantity,
+                    GREATEST(
+                      (CASE
+                        WHEN p.tracking_type IN ('SERIAL', 'IMEI') THEN (
+                          SELECT COUNT(*)
+                          FROM public.inventory_items stock_item
+                          WHERE stock_item.product_id = p.id
+                            AND stock_item.current_status = 'AVAILABLE'
+                        )
+                        ELSE COALESCE(p.quantity, 0)
+                      END) - COALESCE((
+                        SELECT SUM(other_reservation.reserved_quantity)
+                        FROM public.inventory_stock_reservations other_reservation
+                        WHERE other_reservation.product_id = p.id
+                          AND other_reservation.order_id <> o.id
+                          AND other_reservation.status IN ('RESERVED', 'PARTIALLY_RESERVED')
+                      ), 0),
+                      0
+                    )
+                  ) < COALESCE(qi.quantity, 1)
+                )
           )::int AS shortage_items,
           COALESCE(
             jsonb_agg(
@@ -489,9 +641,56 @@ export async function getInventoryWorkQueue(filters = {}) {
                 'description', COALESCE(qi.description, qi.item_description, p.product_name),
                 'required_qty', COALESCE(qi.quantity, 1),
                 'unit_price', COALESCE(qi.unit_price, 0),
-                'available_stock', COALESCE(p.quantity, 0),
+                'available_stock', CASE
+                  WHEN p.product_type = 'SERVICE' THEN COALESCE(qi.quantity, 1)
+                  ELSE COALESCE(
+                    r.reserved_quantity,
+                    GREATEST(
+                      (CASE
+                        WHEN p.tracking_type IN ('SERIAL', 'IMEI') THEN (
+                          SELECT COUNT(*)
+                          FROM public.inventory_items stock_item
+                          WHERE stock_item.product_id = p.id
+                            AND stock_item.current_status = 'AVAILABLE'
+                        )
+                        ELSE COALESCE(p.quantity, 0)
+                      END) - COALESCE((
+                        SELECT SUM(other_reservation.reserved_quantity)
+                        FROM public.inventory_stock_reservations other_reservation
+                        WHERE other_reservation.product_id = p.id
+                          AND other_reservation.order_id <> o.id
+                          AND other_reservation.status IN ('RESERVED', 'PARTIALLY_RESERVED')
+                      ), 0),
+                      0
+                    )
+                  )
+                END,
                 'serial_tracking', CASE WHEN p.tracking_type IN ('SERIAL', 'IMEI') THEN TRUE ELSE FALSE END,
-                'stock_ok', CASE WHEN qi.product_id IS NULL THEN FALSE ELSE COALESCE(p.quantity, 0) >= COALESCE(qi.quantity, 1) END
+                'stock_ok', CASE
+                  WHEN qi.product_id IS NULL THEN FALSE
+                  WHEN p.product_type = 'SERVICE' THEN TRUE
+                  ELSE COALESCE(
+                    r.reserved_quantity,
+                    GREATEST(
+                      (CASE
+                        WHEN p.tracking_type IN ('SERIAL', 'IMEI') THEN (
+                          SELECT COUNT(*)
+                          FROM public.inventory_items stock_item
+                          WHERE stock_item.product_id = p.id
+                            AND stock_item.current_status = 'AVAILABLE'
+                        )
+                        ELSE COALESCE(p.quantity, 0)
+                      END) - COALESCE((
+                        SELECT SUM(other_reservation.reserved_quantity)
+                        FROM public.inventory_stock_reservations other_reservation
+                        WHERE other_reservation.product_id = p.id
+                          AND other_reservation.order_id <> o.id
+                          AND other_reservation.status IN ('RESERVED', 'PARTIALLY_RESERVED')
+                      ), 0),
+                      0
+                    )
+                  ) >= COALESCE(qi.quantity, 1)
+                END
               )
               ORDER BY qi.id
             ) FILTER (WHERE qi.id IS NOT NULL),
@@ -499,6 +698,10 @@ export async function getInventoryWorkQueue(filters = {}) {
           ) AS items
         FROM public.quotation_items qi
         LEFT JOIN public.products p ON p.id = qi.product_id
+        LEFT JOIN public.inventory_stock_reservations r
+          ON r.order_id = o.id
+         AND r.quotation_item_id = qi.id
+         AND r.status NOT IN ('RELEASED', 'CANCELLED')
         WHERE qi.quotation_id = q.id
       ) item_stats ON TRUE
       WHERE q.status = 'APPROVED'
@@ -555,7 +758,7 @@ export async function generateOrderToken(orderId, actorId = null) {
     }
 
     if (order.token_number) {
-      const stockStatus = await resolveOrderStockStatus(client, order.quotation_id);
+      const stockStatus = await refreshOrderReservations(client, { orderId, quotationId: order.quotation_id, actorId });
       const updated = await client.query(
         `
           UPDATE public.crm_orders
@@ -578,7 +781,7 @@ export async function generateOrderToken(orderId, actorId = null) {
     }
 
     const tokenNumber = await nextInventoryTokenNumber(client);
-    const stockStatus = await resolveOrderStockStatus(client, order.quotation_id);
+    const stockStatus = await refreshOrderReservations(client, { orderId, quotationId: order.quotation_id, actorId });
     const updated = await client.query(
       `
         UPDATE public.crm_orders
@@ -925,6 +1128,12 @@ export async function getProducts(options = {}) {
         WHEN p.tracking_type IN ('SERIAL', 'IMEI')
           THEN COUNT(ii.id) FILTER (WHERE ii.current_status = 'AVAILABLE')
         ELSE COALESCE(p.quantity, 0)
+      END::int AS on_hand_count,
+      COALESCE(reservation_stats.reserved_quantity, 0)::int AS reserved_count,
+      CASE
+        WHEN p.tracking_type IN ('SERIAL', 'IMEI')
+          THEN GREATEST(COUNT(ii.id) FILTER (WHERE ii.current_status = 'AVAILABLE') - COALESCE(reservation_stats.reserved_quantity, 0), 0)
+        ELSE GREATEST(COALESCE(p.quantity, 0) - COALESCE(reservation_stats.reserved_quantity, 0), 0)
       END::int AS available_count,
       COUNT(ii.id) FILTER (WHERE ii.current_status = 'ALLOCATED')::int AS allocated_count,
       COUNT(ii.id) FILTER (WHERE ii.current_status = 'INSTALLED')::int AS installed_count,
@@ -934,6 +1143,12 @@ export async function getProducts(options = {}) {
     LEFT JOIN public.item_categories ic ON ic.id = p.category_id
     ${hasVendorId ? `LEFT JOIN public.vendors v ON v.id = ${productVendorExpr}` : ''}
     LEFT JOIN public.inventory_items ii ON ii.product_id = p.id
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(SUM(reserved_quantity), 0) AS reserved_quantity
+      FROM public.inventory_stock_reservations reservation
+      WHERE reservation.product_id = p.id
+        AND reservation.status IN ('RESERVED', 'PARTIALLY_RESERVED')
+    ) reservation_stats ON TRUE
     LEFT JOIN LATERAL (
       SELECT jsonb_object_agg(tier_name, price) AS price_tiers
       FROM public.product_price_tiers
@@ -989,22 +1204,25 @@ export async function getProducts(options = {}) {
   }
 
   if (stock_status === 'low_stock') {
-    query += ` AND p.quantity <= p.min_stock_level`;
+    query += ` AND (CASE WHEN p.tracking_type IN ('SERIAL', 'IMEI') THEN (SELECT COUNT(*) FROM public.inventory_items stock_item WHERE stock_item.product_id = p.id AND stock_item.current_status = 'AVAILABLE') ELSE COALESCE(p.quantity, 0) END) <= p.min_stock_level`;
   } else if (stock_status === 'out_of_stock') {
-    query += ` AND p.quantity = 0`;
+    query += ` AND (CASE WHEN p.tracking_type IN ('SERIAL', 'IMEI') THEN (SELECT COUNT(*) FROM public.inventory_items stock_item WHERE stock_item.product_id = p.id AND stock_item.current_status = 'AVAILABLE') ELSE COALESCE(p.quantity, 0) END) = 0`;
   } else if (stock_status === 'in_stock') {
-    query += ` AND p.quantity > 0`;
+    query += ` AND (CASE WHEN p.tracking_type IN ('SERIAL', 'IMEI') THEN (SELECT COUNT(*) FROM public.inventory_items stock_item WHERE stock_item.product_id = p.id AND stock_item.current_status = 'AVAILABLE') ELSE COALESCE(p.quantity, 0) END) > 0`;
   }
 
   query += `
-    GROUP BY p.id, ic.category_name, price_tiers.price_tiers ${hasVendorId ? ', v.id' : ''}
+    GROUP BY p.id, ic.category_name, price_tiers.price_tiers, reservation_stats.reserved_quantity ${hasVendorId ? ', v.id' : ''}
     ORDER BY p.product_name ASC
     LIMIT $${params.length + 1} OFFSET $${params.length + 2}
   `;
   params.push(limit, offset);
 
   const result = await pool.query(query, params);
-  return result.rows;
+  if (options.include_cost === true || String(options.include_cost || '').toLowerCase() === 'true') {
+    return result.rows;
+  }
+  return result.rows.map(({ cost_price: _costPrice, ...product }) => product);
 }
 
 export async function createProduct(data, actorId = null) {
@@ -1109,7 +1327,7 @@ export async function createProduct(data, actorId = null) {
   }
 }
 
-export async function updateProduct(id, data) {
+export async function updateProduct(id, data, actorId = null) {
   await ensureEnterpriseInventoryColumns();
   const existingResult = await pool.query(`SELECT * FROM public.products WHERE id = $1`, [id]);
   const existing = existingResult.rows[0];
@@ -1128,6 +1346,11 @@ export async function updateProduct(id, data) {
     throw new AppError('VALIDATION_ERROR', 'Product name is required.', 400);
   }
 
+  const expectedVersion = data.version === undefined ? null : Number(data.version);
+  if (expectedVersion !== null && Number(existing.version || 1) !== expectedVersion) {
+    throw new AppError(409, 'VERSION_CONFLICT', 'This product was updated by another user. Refresh and try again.');
+  }
+
   if (productValues.tracking_type !== existing.tracking_type) {
     const itemCountResult = await pool.query(
       `SELECT COUNT(*)::int AS item_count FROM public.inventory_items WHERE product_id = $1`,
@@ -1143,6 +1366,7 @@ export async function updateProduct(id, data) {
     }
   }
 
+  if (columns.has('version')) productValues.version = Number(existing.version || 1) + 1;
   const updateColumns = Object.keys(productValues).filter((column) => columns.has(column));
   const updateValues = updateColumns.map((column) => column === 'custom_attributes' ? JSON.stringify(productValues[column]) : productValues[column]);
   if (columns.has('updated_at')) updateColumns.push('updated_at');
@@ -1157,6 +1381,13 @@ export async function updateProduct(id, data) {
   );
 
   const updated = result.rows[0];
+  await recordActivityLog({
+    userId: actorId,
+    action: 'INVENTORY_PRODUCT_UPDATED',
+    entityType: 'products',
+    entityId: updated.id,
+    meta: { before: existing, after: updated },
+  });
   publishInventoryEvent('product.changed', { product_id: updated.id, reason: 'product_updated' });
   return updated;
 }
@@ -1766,7 +1997,7 @@ function toInt(value, fallback = 0) {
 
 function normalizeMovementType(value, fallback = 'TRANSFER') {
   const type = String(value || fallback).toUpperCase();
-  return ['STOCK_IN', 'STOCK_OUT', 'TRANSFER', 'RETURN'].includes(type) ? type : fallback;
+  return ['STOCK_IN', 'STOCK_OUT', 'TRANSFER', 'RETURN', 'ADJUSTMENT'].includes(type) ? type : fallback;
 }
 
 function movementTypeFromStatus(status) {
@@ -1903,9 +2134,9 @@ export async function getInventoryMovements(options = {}) {
   return result.rows;
 }
 
-export async function getProductById(id) {
+export async function getProductById(id, options = {}) {
   const [products, serials, movements] = await Promise.all([
-    getProducts({ id, limit: 1 }),
+    getProducts({ id, limit: 1, include_cost: options.include_cost }),
     getInventoryItems({ product_id: id, limit: 250 }),
     getInventoryMovements({ product_id: id, limit: 250 }),
   ]);
@@ -1918,6 +2149,192 @@ export async function getProductById(id) {
     serials,
     movements,
   };
+}
+
+export async function getInventoryLocations(options = {}) {
+  const params = [];
+  let query = `
+    SELECT id, location_code, warehouse_name, room_number, rack_number, active, created_at, updated_at
+    FROM public.inventory_locations
+    WHERE 1=1
+  `;
+  if (String(options.active_only || '').toLowerCase() === 'true') query += ` AND active = TRUE`;
+  if (options.search) {
+    params.push(`%${String(options.search).trim()}%`);
+    query += ` AND (location_code ILIKE $1 OR warehouse_name ILIKE $1 OR room_number ILIKE $1 OR rack_number ILIKE $1)`;
+  }
+  query += ` ORDER BY active DESC, warehouse_name, room_number, rack_number`;
+  return (await pool.query(query, params)).rows;
+}
+
+export async function createInventoryLocation(data = {}, actorId = null) {
+  const code = String(data.location_code || '').trim().toUpperCase();
+  const warehouse = String(data.warehouse_name || '').trim();
+  if (!code || !warehouse) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Location code and warehouse name are required.');
+  }
+  const result = await pool.query(
+    `INSERT INTO public.inventory_locations (location_code, warehouse_name, room_number, rack_number, active)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [code, warehouse, String(data.room_number || '').trim() || null, String(data.rack_number || '').trim() || null, data.active !== false],
+  );
+  await recordActivityLog({
+    userId: actorId,
+    action: 'INVENTORY_LOCATION_CREATED',
+    entityType: 'inventory_locations',
+    entityId: result.rows[0].id,
+    meta: result.rows[0],
+  });
+  return result.rows[0];
+}
+
+export async function updateInventoryLocation(id, data = {}, actorId = null) {
+  const existing = (await pool.query(`SELECT * FROM public.inventory_locations WHERE id = $1`, [id])).rows[0];
+  if (!existing) throw new AppError(404, 'NOT_FOUND', 'Inventory location not found.');
+  const code = String(data.location_code ?? existing.location_code).trim().toUpperCase();
+  const warehouse = String(data.warehouse_name ?? existing.warehouse_name).trim();
+  if (!code || !warehouse) throw new AppError(400, 'VALIDATION_ERROR', 'Location code and warehouse name are required.');
+  const result = await pool.query(
+    `UPDATE public.inventory_locations
+     SET location_code = $2,
+         warehouse_name = $3,
+         room_number = $4,
+         rack_number = $5,
+         active = $6,
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [id, code, warehouse, String(data.room_number ?? existing.room_number ?? '').trim() || null, String(data.rack_number ?? existing.rack_number ?? '').trim() || null, data.active ?? existing.active],
+  );
+  await recordActivityLog({
+    userId: actorId,
+    action: 'INVENTORY_LOCATION_UPDATED',
+    entityType: 'inventory_locations',
+    entityId: id,
+    meta: { before: existing, after: result.rows[0] },
+  });
+  return result.rows[0];
+}
+
+export async function getInventoryAdjustments(options = {}) {
+  const params = [];
+  let where = 'WHERE 1=1';
+  if (options.status) {
+    params.push(String(options.status).toUpperCase());
+    where += ` AND a.status = $${params.length}`;
+  }
+  const result = await pool.query(
+    `SELECT a.*, p.product_name, p.sku,
+            requester.email AS requested_by_email,
+            approver.email AS approved_by_email
+     FROM public.inventory_adjustments a
+     JOIN public.products p ON p.id = a.product_id
+     LEFT JOIN public.users requester ON requester.id = a.requested_by
+     LEFT JOIN public.users approver ON approver.id = a.approved_by
+     ${where}
+     ORDER BY a.created_at DESC
+     LIMIT 250`,
+    params,
+  );
+  return result.rows;
+}
+
+export async function createInventoryAdjustment(data = {}, actorId = null) {
+  const productId = String(data.product_id || '').trim();
+  const quantityDelta = Number(data.quantity_delta || 0);
+  const reason = String(data.reason || '').trim();
+  if (!productId || !Number.isFinite(quantityDelta) || quantityDelta === 0 || !reason) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Product, non-zero quantity change and reason are required.');
+  }
+  const result = await pool.query(
+    `INSERT INTO public.inventory_adjustments
+       (adjustment_number, product_id, quantity_delta, reason, requested_by)
+     SELECT
+       'ADJ-' || EXTRACT(YEAR FROM NOW())::int || '-' || LPAD(nextval('public.inventory_adjustment_number_seq')::text, 4, '0'),
+       p.id, $2, $3, $4
+     FROM public.products p
+     WHERE p.id = $1
+     RETURNING *`,
+    [productId, quantityDelta, reason, actorId],
+  );
+  if (!result.rows[0]) throw new AppError(404, 'NOT_FOUND', 'Product not found.');
+  await recordActivityLog({
+    userId: actorId,
+    action: 'INVENTORY_ADJUSTMENT_REQUESTED',
+    entityType: 'inventory_adjustments',
+    entityId: result.rows[0].id,
+    meta: result.rows[0],
+  });
+  return result.rows[0];
+}
+
+export async function decideInventoryAdjustment(id, data = {}, actor = {}) {
+  const decision = String(data.decision || '').toUpperCase();
+  if (!['APPROVE', 'REJECT'].includes(decision)) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Decision must be APPROVE or REJECT.');
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const adjustment = (await client.query(
+      `SELECT * FROM public.inventory_adjustments WHERE id = $1 FOR UPDATE`,
+      [id],
+    )).rows[0];
+    if (!adjustment) throw new AppError(404, 'NOT_FOUND', 'Inventory adjustment not found.');
+    if (adjustment.status !== 'PENDING') throw new AppError(409, 'INVALID_STATE', 'Only pending adjustments can be reviewed.');
+    if (String(adjustment.requested_by || '') === String(actor.user_id || '') && actor.role_name !== 'super_admin') {
+      throw new AppError(409, 'MAKER_CHECKER_REQUIRED', 'A different authorized user must review this stock adjustment.');
+    }
+
+    if (decision === 'REJECT') {
+      const rejected = (await client.query(
+        `UPDATE public.inventory_adjustments
+         SET status = 'REJECTED', approved_by = $2, approved_at = NOW()
+         WHERE id = $1 RETURNING *`,
+        [id, actor.user_id],
+      )).rows[0];
+      await client.query('COMMIT');
+      await recordActivityLog({ userId: actor.user_id, action: 'INVENTORY_ADJUSTMENT_REJECTED', entityType: 'inventory_adjustments', entityId: id, meta: rejected });
+      return rejected;
+    }
+
+    const product = (await client.query(`SELECT * FROM public.products WHERE id = $1 FOR UPDATE`, [adjustment.product_id])).rows[0];
+    const nextQuantity = Number(product?.quantity || 0) + Number(adjustment.quantity_delta || 0);
+    if (!product) throw new AppError(404, 'NOT_FOUND', 'Product not found.');
+    if (nextQuantity < 0) throw new AppError(409, 'NEGATIVE_STOCK_BLOCKED', 'This adjustment would make stock negative.');
+    await client.query(`UPDATE public.products SET quantity = $2, updated_at = NOW() WHERE id = $1`, [product.id, nextQuantity]);
+    const posted = (await client.query(
+      `UPDATE public.inventory_adjustments
+       SET status = 'POSTED', approved_by = $2, approved_at = NOW(), posted_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [id, actor.user_id],
+    )).rows[0];
+    await recordInventoryMovement(client, {
+      product_id: product.id,
+      movement_type: 'ADJUSTMENT',
+      quantity: Math.abs(Number(adjustment.quantity_delta)),
+      reference_type: 'STOCK_ADJUSTMENT',
+      reference_id: adjustment.id,
+      notes: adjustment.reason,
+      stock_balance_after: nextQuantity,
+      idempotency_key: `adjustment:${adjustment.id}`,
+      created_by: actor.user_id,
+    });
+    await client.query(
+      `INSERT INTO public.inventory_outbox (aggregate_type, aggregate_id, event_type, payload)
+       VALUES ('product', $1, 'inventory.stock-adjusted', $2::jsonb)`,
+      [product.id, JSON.stringify({ adjustment_id: adjustment.id, quantity_delta: adjustment.quantity_delta, stock_balance_after: nextQuantity })],
+    );
+    await client.query('COMMIT');
+    await recordActivityLog({ userId: actor.user_id, action: 'INVENTORY_ADJUSTMENT_POSTED', entityType: 'inventory_adjustments', entityId: id, meta: posted });
+    publishInventoryEvent('stock.changed', { product_id: product.id, reason: 'stock_adjustment', quantity: nextQuantity });
+    return { ...posted, stock_balance_after: nextQuantity };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function getCustomers() {
@@ -2091,6 +2508,7 @@ export async function getPurchaseOrders() {
             'product_id', poi.product_id,
             'quotation_item_id', ${itemQuotationItemExpr},
             'product_name', COALESCE(p.product_name, ${itemProductNameExpr}, ${itemRemarksExpr}, 'Stock item'),
+            'tracking_type', COALESCE(p.tracking_type, 'NONE'),
             'quantity', COALESCE(poi.quantity, 1),
             'received_quantity', ${itemReceivedExpr},
             'unit_price', COALESCE(poi.unit_price, 0),
@@ -2128,6 +2546,9 @@ export async function createPurchaseOrder({
   order_id,
   crm_order_id,
   quotation_id,
+  currency_code = 'PKR',
+  exchange_rate = 1,
+  payment_terms,
 }, actorId = null) {
   if (!vendor_id) {
     throw new AppError('VALIDATION_ERROR', 'Supplier is required before creating a purchase order.', 400);
@@ -2203,7 +2624,7 @@ export async function createPurchaseOrder({
           SELECT id, ${duplicatePoNumberExpr} AS po_number
           FROM public.purchase_orders
           WHERE (${duplicateConditions.join(' OR ')})
-            AND status IN ('ORDERED', 'PARTIALLY_RECEIVED')
+            AND status IN ('DRAFT', 'APPROVED', 'ISSUED', 'ORDERED', 'PARTIALLY_RECEIVED')
           ORDER BY created_at ASC
           LIMIT 1
           FOR UPDATE
@@ -2317,7 +2738,19 @@ export async function createPurchaseOrder({
     }
     if (poColumns.has('status')) {
       columns.push('status');
-      values.push('ORDERED');
+      values.push('DRAFT');
+    }
+    if (poColumns.has('currency_code')) {
+      columns.push('currency_code');
+      values.push(String(currency_code || 'PKR').trim().toUpperCase().slice(0, 3));
+    }
+    if (poColumns.has('exchange_rate')) {
+      columns.push('exchange_rate');
+      values.push(Math.max(0.000001, Number(exchange_rate || 1)));
+    }
+    if (poColumns.has('payment_terms')) {
+      columns.push('payment_terms');
+      values.push(String(payment_terms || '').trim() || null);
     }
     if (poColumns.has('subtotal_amount')) {
       columns.push('subtotal_amount');
@@ -2447,9 +2880,65 @@ export async function createPurchaseOrder({
   }
 }
 
-export async function receivePurchaseOrder(id, { items = [] } = {}, actorId = null) {
+export async function transitionPurchaseOrder(id, data = {}, actorId = null) {
+  const action = String(data.action || '').trim().toUpperCase();
+  const transitions = {
+    APPROVE: { from: ['DRAFT'], to: 'APPROVED' },
+    ISSUE: { from: ['APPROVED'], to: 'ISSUED' },
+    CLOSE: { from: ['RECEIVED'], to: 'CLOSED' },
+    CANCEL: { from: ['DRAFT', 'APPROVED', 'ISSUED', 'ORDERED'], to: 'CANCELLED' },
+  };
+  const transition = transitions[action];
+  if (!transition) throw new AppError(400, 'VALIDATION_ERROR', 'Unsupported purchase order action.');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const current = (await client.query(`SELECT * FROM public.purchase_orders WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+    if (!current) throw new AppError(404, 'NOT_FOUND', 'Purchase order not found.');
+    const currentStatus = String(current.status || '').toUpperCase();
+    if (!transition.from.includes(currentStatus)) {
+      throw new AppError(409, 'INVALID_STATE', `${action} is not allowed while the purchase order is ${currentStatus.replace(/_/g, ' ')}.`);
+    }
+    if (action === 'CANCEL') {
+      const receiptCount = Number((await client.query(`SELECT COUNT(*)::int AS count FROM public.inventory_receipts WHERE purchase_order_id = $1`, [id])).rows[0]?.count || 0);
+      if (receiptCount > 0) throw new AppError(409, 'INVALID_STATE', 'A purchase order with receipts cannot be cancelled.');
+    }
+    const updated = (await client.query(
+      `UPDATE public.purchase_orders
+       SET status = $2, version = COALESCE(version, 1) + 1, updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [id, transition.to],
+    )).rows[0];
+    await client.query(
+      `INSERT INTO public.inventory_outbox (aggregate_type, aggregate_id, event_type, payload)
+       VALUES ('purchase_order', $1, $2, $3::jsonb)`,
+      [id, `purchase-order.${transition.to.toLowerCase()}`, JSON.stringify({ purchase_order_id: id, from: currentStatus, to: transition.to, actor_id: actorId })],
+    );
+    await client.query('COMMIT');
+    await recordActivityLog({
+      userId: actorId,
+      action: `PURCHASE_ORDER_${transition.to}`,
+      entityType: 'purchase_orders',
+      entityId: id,
+      meta: { from: currentStatus, to: transition.to },
+    });
+    publishInventoryEvent('purchase-order.changed', { purchase_order_id: id, status: transition.to });
+    return updated;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function receivePurchaseOrder(id, { items = [], idempotency_key, evidence_url } = {}, actorId = null) {
   if (!Array.isArray(items) || items.length === 0) {
     throw new AppError('VALIDATION_ERROR', 'Enter received quantity for at least one purchase order item.', 400);
+  }
+  const idempotencyKey = String(idempotency_key || '').trim();
+  if (!idempotencyKey) {
+    throw new AppError(400, 'IDEMPOTENCY_KEY_REQUIRED', 'A receipt idempotency key is required. Refresh the page and try again.');
   }
 
   await ensurePurchaseOrderWorkflowColumns();
@@ -2470,6 +2959,24 @@ export async function receivePurchaseOrder(id, { items = [] } = {}, actorId = nu
     if (!po) {
       throw new AppError('NOT_FOUND', 'Purchase order not found.', 404);
     }
+    if (!['ISSUED', 'ORDERED', 'PARTIALLY_RECEIVED'].includes(String(po.status || '').toUpperCase())) {
+      throw new AppError(409, 'PO_NOT_ISSUED', 'Approve and issue the purchase order before recording a receipt.');
+    }
+
+    const replay = await client.query(`SELECT id, receipt_number FROM public.inventory_receipts WHERE idempotency_key = $1`, [idempotencyKey]);
+    if (replay.rows[0]) {
+      await client.query('ROLLBACK');
+      return { ...po, receipt_id: replay.rows[0].id, receipt_number: replay.rows[0].receipt_number, idempotent_replay: true };
+    }
+
+    const receiptNumberResult = await client.query(`SELECT nextval('public.inventory_receipt_number_seq')::int AS seq`);
+    const receiptNumber = `RCV-${new Date().getUTCFullYear()}-${String(receiptNumberResult.rows[0].seq).padStart(4, '0')}`;
+    const receiptResult = await client.query(
+      `INSERT INTO public.inventory_receipts (receipt_number, purchase_order_id, idempotency_key, evidence_url, received_by)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [receiptNumber, id, idempotencyKey, String(evidence_url || '').trim() || null, actorId],
+    );
+    const receipt = receiptResult.rows[0];
 
     const poNumber = po.po_number || po.po_id || po.id;
     const dbItems = await client.query(
@@ -2482,11 +2989,12 @@ export async function receivePurchaseOrder(id, { items = [] } = {}, actorId = nu
       [id],
     );
 
-    const receiveById = new Map(items.map((item) => [String(item.id), Math.max(0, parseInt(item.received_qty ?? item.received_quantity ?? item.quantity, 10) || 0)]));
+    const receiveById = new Map(items.map((item) => [String(item.id), item]));
     let totalReceivedThisRun = 0;
 
     for (const item of dbItems.rows) {
-      const receivedQty = receiveById.get(String(item.id)) || 0;
+      const receiptLine = receiveById.get(String(item.id)) || {};
+      const receivedQty = Math.max(0, parseInt(receiptLine.received_qty ?? receiptLine.received_quantity ?? receiptLine.quantity, 10) || 0);
       if (receivedQty <= 0) continue;
       if (!item.product_id) {
         const productName = String(item.product_name || item.remarks || 'Purchased stock item').trim();
@@ -2534,37 +3042,44 @@ export async function receivePurchaseOrder(id, { items = [] } = {}, actorId = nu
         [item.product_id],
       );
       const receivedProduct = productResult.rows[0];
-      if (['SERIAL', 'IMEI'].includes(String(receivedProduct?.tracking_type || '').toUpperCase())) {
-        const year = new Date().getUTCFullYear();
-        await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`inventory-serial-${year}`]);
-        const serialResult = await client.query(
-          `
-            SELECT COALESCE(MAX(NULLIF(substring(serial_number FROM $1), '')::int), 0)::int AS last_number
-            FROM public.inventory_items
-            WHERE serial_number LIKE $2
-          `,
-          [`^SN-${year}-([0-9]+)$`, `SN-${year}-%`],
-        );
-        const firstNumber = Number(serialResult.rows[0]?.last_number || 0) + 1;
+      const normalizedTrackingType = String(receivedProduct?.tracking_type || '').toUpperCase();
+      const identifiers = Array.isArray(receiptLine.serial_numbers)
+        ? receiptLine.serial_numbers.map((value) => String(value || '').trim()).filter(Boolean)
+        : String(receiptLine.serial_numbers || '').split(/\r?\n|,/).map((value) => value.trim()).filter(Boolean);
+      if (normalizedTrackingType === 'BATCH' && !String(receiptLine.batch_lot_number || '').trim()) {
+        throw new AppError(400, 'BATCH_REQUIRED', `Enter a batch / lot number for ${receivedProduct?.product_name || 'the received product'}.`);
+      }
+      if (['SERIAL', 'IMEI'].includes(normalizedTrackingType)) {
+        if (identifiers.length !== receivedQty || new Set(identifiers.map((value) => value.toLowerCase())).size !== identifiers.length) {
+          throw new AppError(400, 'SERIALS_REQUIRED', `Enter exactly ${receivedQty} unique ${receivedProduct.tracking_type === 'IMEI' ? 'IMEI' : 'serial'} number(s).`);
+        }
         for (let index = 0; index < receivedQty; index += 1) {
-          const serialNumber = `SN-${year}-${String(firstNumber + index).padStart(5, '0')}`;
+          const identifier = identifiers[index];
           await client.query(
             `
               INSERT INTO public.inventory_items
-                (product_id, serial_number, current_status, location, warehouse_location, room_number, rack_number, notes)
-              VALUES ($1, $2, 'AVAILABLE', $3, $3, $4, $5, $6)
+                (product_id, serial_number, imei, current_status, location, warehouse_location, room_number, rack_number, batch_lot_number, notes)
+              VALUES ($1, $2, $3, 'AVAILABLE', $4, $4, $5, $6, $7, $8)
             `,
             [
               item.product_id,
-              serialNumber,
+              receivedProduct.tracking_type === 'SERIAL' ? identifier : null,
+              receivedProduct.tracking_type === 'IMEI' ? identifier : null,
               po.warehouse_location || 'Warehouse',
               po.room_number || null,
               po.rack_number || null,
+              String(receiptLine.batch_lot_number || '').trim() || null,
               `Auto-created while receiving ${poNumber}`,
             ],
           );
         }
       }
+      await client.query(
+        `INSERT INTO public.inventory_receipt_items
+          (receipt_id, purchase_order_item_id, product_id, received_quantity, condition, batch_lot_number, serial_numbers, warehouse_location, room_number, rack_number)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)`,
+        [receipt.id, item.id, item.product_id, receivedQty, String(receiptLine.condition || 'NEW').toUpperCase(), String(receiptLine.batch_lot_number || '').trim() || null, JSON.stringify(identifiers), po.warehouse_location || null, po.room_number || null, po.rack_number || null],
+      );
       await client.query(
         `UPDATE public.purchase_order_items SET received_quantity = COALESCE(received_quantity, 0) + $1 WHERE id = $2`,
         [receivedQty, item.id],
@@ -2630,7 +3145,10 @@ export async function receivePurchaseOrder(id, { items = [] } = {}, actorId = nu
         quotationIdForStatus = orderResult.rows[0]?.quotation_id || null;
       }
       if (quotationIdForStatus) {
-        const stockStatus = await resolveOrderStockStatus(client, quotationIdForStatus);
+        const targetOrderId = linkedOrderId || (await client.query(`SELECT id FROM public.crm_orders WHERE quotation_id = $1 LIMIT 1`, [quotationIdForStatus])).rows[0]?.id;
+        const stockStatus = targetOrderId
+          ? await refreshOrderReservations(client, { orderId: targetOrderId, quotationId: quotationIdForStatus, actorId })
+          : await resolveOrderStockStatus(client, quotationIdForStatus);
         await client.query(
           `
             UPDATE public.crm_orders
@@ -2655,6 +3173,8 @@ export async function receivePurchaseOrder(id, { items = [] } = {}, actorId = nu
     });
     return {
       ...updateResult.rows[0],
+      receipt_id: receipt.id,
+      receipt_number: receipt.receipt_number,
       po_number: updateResult.rows[0].po_number || updateResult.rows[0].po_id || updateResult.rows[0].id,
       received_quantity: receivedQty,
       ordered_quantity: orderedQty,

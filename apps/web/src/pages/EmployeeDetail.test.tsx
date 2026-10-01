@@ -282,7 +282,7 @@ describe("EmployeeDetail", () => {
     renderEmployeeDetail();
 
     const image = screen.getByAltText("Adeel Rahman profile") as HTMLImageElement;
-    expect(image.src).toBe("http://localhost:3001/uploads/employees/EMP001/profile/profile.png");
+    expect(image.src).toBe("http://localhost:3000/uploads/employees/EMP001/profile/profile.png");
     expect(screen.queryByText("AR")).toBeNull();
     fireEvent.click(image);
     expect(screen.getAllByAltText("Adeel Rahman profile").length).toBeGreaterThan(1);

@@ -1,0 +1,38 @@
+:root {
+  --navy-950: #081a33;
+  --navy-900: #0b2447;
+  --navy-800: #12315f;
+  --blue-700: #1d4ed8;
+  --blue-600: #2563eb;
+  --blue-100: #dbeafe;
+  --blue-50: #eff6ff;
+  --page: #f4f6fa;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text: #0f172a;
+  --text-2: #334155;
+  --text-3: #64748b;
+  --on-dark: #e6eefa;
+  --on-dark-2: #9fb3d1;
+  --success: #166534;
+  --success-bg: #dcfce7;
+  --warning: #92400e;
+  --warning-bg: #fef3c7;
+  --danger: #991b1b;
+  --danger-bg: #fee2e2;
+  --info: #1d4ed8;
+  --info-bg: #dbeafe;
+  --accent-sales: #2563eb;
+  --accent-inventory: #0d9488;
+  --accent-finance: #d97706;
+  --accent-management: #4f46e5;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-2: 0 6px 20px rgba(15, 23, 42, 0.1);
+  --shadow-3: 0 16px 40px rgba(15, 23, 42, 0.18);
+  --focus: 0 0 0 3px rgba(37, 99, 235, 0.35);
+}

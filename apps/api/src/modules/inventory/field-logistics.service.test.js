@@ -152,6 +152,65 @@ describe('field logistics service', () => {
     expect(client.release).toHaveBeenCalled();
   });
 
+  it('allocates each serialized unit when approved additional material is issued', async () => {
+    const request = {
+      id: 'request-1',
+      request_number: 'MR-2026-0001',
+      dispatch_id: 'dispatch-1',
+      product_id: 'product-1',
+      requested_quantity: 2,
+      status: 'APPROVED',
+    };
+    const client = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [request] })
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'product-1',
+            product_name: 'Tracked Camera',
+            quantity: 2,
+            tracking_type: 'SERIAL',
+            selling_price: 50000,
+            available_quantity: 2,
+          }],
+        })
+        .mockResolvedValueOnce({ rows: [{ id: 'serial-1' }, { id: 'serial-2' }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ ...request, status: 'ISSUED' }] })
+        .mockResolvedValueOnce({ rows: [] }),
+      release: vi.fn(),
+    };
+    connect.mockResolvedValueOnce(client);
+
+    const service = await loadService();
+    const result = await service.issueMaterialRequest('request-1', 'inventory-user-1');
+
+    const sql = client.query.mock.calls.map(([statement]) => String(statement)).join('\n');
+    expect(result.status).toBe('ISSUED');
+    expect(sql.match(/INSERT INTO public\.installer_dispatch_items/g)).toHaveLength(2);
+    expect(sql.match(/SET current_status = 'ALLOCATED'/g)).toHaveLength(2);
+    expect(sql).toContain('SET quantity = GREATEST(0, quantity - $2)');
+    expect(recordInventoryMovement).toHaveBeenCalledTimes(2);
+    expect(recordInventoryMovement).toHaveBeenNthCalledWith(1, client, expect.objectContaining({
+      inventory_item_id: 'serial-1',
+      reference_type: 'FIELD_MATERIAL_REQUEST',
+      idempotency_key: 'material-request:request-1:issue:1',
+    }));
+    expect(recordInventoryMovement).toHaveBeenNthCalledWith(2, client, expect.objectContaining({
+      inventory_item_id: 'serial-2',
+      reference_type: 'FIELD_MATERIAL_REQUEST',
+      idempotency_key: 'material-request:request-1:issue:2',
+    }));
+    expect(client.query).toHaveBeenCalledWith('COMMIT');
+    expect(client.release).toHaveBeenCalled();
+  });
+
   it('keeps returned non-serial stock pending until Inventory confirms it', async () => {
     const client = {
       query: vi

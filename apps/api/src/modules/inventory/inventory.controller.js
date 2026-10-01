@@ -187,7 +187,11 @@ export async function deleteCategory(req, res, next) {
 // Products
 export async function getProducts(req, res, next) {
   try {
-    const products = await inventoryService.getProducts(req.query);
+    const canViewCost = ['inventory_officer', 'inv_fin_admin', 'super_admin', 'procurement_manager'].includes(req.user?.role_name);
+    const products = await inventoryService.getProducts({
+      ...req.query,
+      include_cost: canViewCost && req.query.view === 'purchasing',
+    });
     sendSuccess(res, products);
   } catch (error) {
     next(error);
@@ -196,7 +200,10 @@ export async function getProducts(req, res, next) {
 
 export async function getProduct(req, res, next) {
   try {
-    const product = await inventoryService.getProductById(req.params.id);
+    const canViewCost = ['inventory_officer', 'inv_fin_admin', 'super_admin', 'procurement_manager'].includes(req.user?.role_name);
+    const product = await inventoryService.getProductById(req.params.id, {
+      include_cost: canViewCost && req.query.view === 'purchasing',
+    });
     sendSuccess(res, product);
   } catch (error) {
     next(error);
@@ -214,7 +221,7 @@ export async function createProduct(req, res, next) {
 
 export async function updateProduct(req, res, next) {
   try {
-    const product = await inventoryService.updateProduct(req.params.id, req.body);
+    const product = await inventoryService.updateProduct(req.params.id, req.body, req.user?.user_id);
     sendSuccess(res, product);
   } catch (error) {
     next(error);
@@ -253,6 +260,54 @@ export async function updateInventoryItem(req, res, next) {
   try {
     const item = await inventoryService.updateInventoryItem(req.params.id, req.body, req.user?.user_id);
     sendSuccess(res, item);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getLocations(req, res, next) {
+  try {
+    sendSuccess(res, await inventoryService.getInventoryLocations(req.query));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createLocation(req, res, next) {
+  try {
+    sendSuccess(res, await inventoryService.createInventoryLocation(req.body, req.user?.user_id), 201);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateLocation(req, res, next) {
+  try {
+    sendSuccess(res, await inventoryService.updateInventoryLocation(req.params.id, req.body, req.user?.user_id));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getAdjustments(req, res, next) {
+  try {
+    sendSuccess(res, await inventoryService.getInventoryAdjustments(req.query));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createAdjustment(req, res, next) {
+  try {
+    sendSuccess(res, await inventoryService.createInventoryAdjustment(req.body, req.user?.user_id), 201);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function decideAdjustment(req, res, next) {
+  try {
+    sendSuccess(res, await inventoryService.decideInventoryAdjustment(req.params.id, req.body, req.user));
   } catch (error) {
     next(error);
   }
@@ -368,9 +423,21 @@ export async function createPurchaseOrder(req, res, next) {
   }
 }
 
+export async function transitionPurchaseOrder(req, res, next) {
+  try {
+    const po = await inventoryService.transitionPurchaseOrder(req.params.id, req.body, req.user?.user_id);
+    sendSuccess(res, po);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function receivePurchaseOrder(req, res, next) {
   try {
-    const po = await inventoryService.receivePurchaseOrder(req.params.id, req.body, req.user?.user_id);
+    const po = await inventoryService.receivePurchaseOrder(req.params.id, {
+      ...req.body,
+      idempotency_key: req.get('Idempotency-Key') || req.body.idempotency_key,
+    }, req.user?.user_id);
     sendSuccess(res, po);
   } catch (error) {
     next(error);

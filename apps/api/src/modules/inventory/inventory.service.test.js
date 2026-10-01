@@ -170,9 +170,9 @@ describe('inventory service', () => {
 
     expect(settings).toMatchObject({
       theme_preset: 'executive',
-      primary_color: '#10234D',
-      accent_color: '#0F766E',
-      page_color: '#EEF5FF',
+      primary_color: '#0B2447',
+      accent_color: '#0D9488',
+      page_color: '#F4F6FA',
       surface_color: '#FFFFFF',
     });
   });
@@ -214,7 +214,8 @@ describe('inventory service', () => {
     const [sql, params] = query.mock.calls[0];
     expect(sql).toContain('p.product_name ILIKE');
     expect(sql).toContain('p.product_type =');
-    expect(sql).toContain('p.quantity <= p.min_stock_level');
+    expect(sql).toContain("p.tracking_type IN ('SERIAL', 'IMEI')");
+    expect(sql).toContain("stock_item.current_status = 'AVAILABLE'");
     expect(params).toContain('%tracker%');
     expect(params).toContain('ASSET');
   });

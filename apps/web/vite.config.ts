@@ -47,7 +47,7 @@ export default defineConfig(async ({ mode }) => {
   test: {
     environment: "jsdom",
     globals: true,
-    setupFiles: [],
+    setupFiles: ["./src/test/setup.ts"],
     testTimeout: 30000,
     hookTimeout: 30000,
     fileParallelism: false,

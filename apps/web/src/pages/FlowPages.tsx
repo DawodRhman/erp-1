@@ -27,6 +27,8 @@ import {
   FieldDispatch,
   FieldMaterialRequest,
   InventoryItem,
+  InventoryLocation,
+  InventoryAdjustment,
   InventoryCompanySettings,
   InventoryInstallerUser,
   InventoryPreferenceSettings,
@@ -126,6 +128,14 @@ const input: React.CSSProperties = {
   outline: "none",
 };
 
+const formLabel: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+  color: "#475569",
+  fontSize: 12,
+  fontWeight: 850,
+};
+
 const th: React.CSSProperties = {
   textAlign: "left",
   padding: "12px 14px",
@@ -177,11 +187,11 @@ function tokenReceiptHtml(token: InventoryToken) {
       <header style="display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 18px;">
         <div>
           <div style="font-size: 13px; font-weight: 800; letter-spacing: .12em; color: #2563eb;">TRACK360 ERP</div>
-          <h1 style="margin: 6px 0 0; font-size: 26px; line-height: 1.1;">Inventory Token Receipt</h1>
+          <h1 style="margin: 6px 0 0; font-size: 26px; line-height: 1.1;">Stock Check Record</h1>
           <p style="margin: 8px 0 0; color: #475569; font-size: 13px;">One token links the approved order to stock allocation, field fulfilment, reconciliation and billing.</p>
         </div>
         <div style="text-align: right;">
-          <div style="font-size: 12px; color: #64748b; font-weight: 700;">Token No</div>
+          <div style="font-size: 12px; color: #64748b; font-weight: 700;">Stock Check Reference</div>
           <div style="font-size: 22px; font-weight: 900; color: #047857;">${printSafe(token.token_number)}</div>
           <div style="margin-top: 8px; display: inline-block; padding: 6px 10px; border-radius: 999px; background: #dbeafe; color: #1d4ed8; font-size: 12px; font-weight: 800;">${printSafe(status)}</div>
         </div>
@@ -309,8 +319,8 @@ function orderStatusLabel(status?: string) {
 function orderStatusHelp(status?: string) {
   const value = orderStatusLabel(status);
   const copy: Record<string, string> = {
-    AWAITING_TOKEN: "Order arrived from CRM. Generate token to start stock action.",
-    TOKEN_GENERATED: "Token is ready. Check stock and prepare field service or a purchase order.",
+    AWAITING_TOKEN: "Released order is ready. Run its stock check to begin fulfilment.",
+    TOKEN_GENERATED: "Stock check is ready. Reserve available stock or create a purchase order for shortages.",
     STOCK_OK: "All items are available. Dispatch can be created.",
     AWAITING_STOCK: "Some items are short. Purchase order is required.",
     PARTIALLY_DISPATCHED: "Some stock has already been dispatched.",
@@ -332,12 +342,12 @@ function queueActionStatus(job: InventoryWorkQueueJob, token: string, hasGaps: b
 function tokenStatusHelp(status?: string) {
   const value = String(status || "ACTIVE").toUpperCase();
   const copy: Record<string, string> = {
-    ACTIVE: "Token generated. Stock action is not dispatched yet.",
+    ACTIVE: "Stock check completed. Material has not been issued yet.",
     PARTIALLY_DISPATCHED: "Some required material has been issued to the field team.",
     FULLY_DISPATCHED: "All required material has been issued to the field team.",
     COMPLETED: "Field service is complete and the verified billing record has moved forward.",
   };
-  return copy[value] || "Token is active.";
+  return copy[value] || "Stock check is active.";
 }
 
 function dispatchStatusLabel(status?: string) {
@@ -413,6 +423,7 @@ function Button({
   tone = "primary",
   disabled = false,
   prominent = false,
+  type = "button",
 }: {
   children: React.ReactNode;
   onClick?: () => void;
@@ -420,6 +431,7 @@ function Button({
   tone?: "primary" | "dark" | "light" | "success" | "warning";
   disabled?: boolean;
   prominent?: boolean;
+  type?: "button" | "submit" | "reset";
 }) {
   const colors = {
     primary: ["#2563eb", "#fff", "none"],
@@ -447,7 +459,7 @@ function Button({
     boxShadow: prominent && !disabled ? "0 12px 22px rgba(16,185,129,.22)" : undefined,
   };
   if (to) return <Link className="flow-button" to={to} style={style}>{children}</Link>;
-  return <button className="flow-button" type="button" onClick={onClick} disabled={disabled} style={style}>{children}</button>;
+  return <button className="flow-button" type={type} onClick={onClick} disabled={disabled} style={style}>{children}</button>;
 }
 
 type DataTableRow = React.ReactNode[] | { key?: React.Key; cells: React.ReactNode[]; detail?: React.ReactNode };
@@ -595,7 +607,7 @@ function useCrmData() {
   return { customers, leads, quotations, products, loading, reload: load };
 }
 
-function useInventoryFlowData() {
+function useInventoryFlowData(options: { includeCosts?: boolean } = {}) {
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [workQueue, setWorkQueue] = useState<InventoryWorkQueueJob[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -612,7 +624,7 @@ function useInventoryFlowData() {
       const [summaryData, queueData, productData, itemData, vendorData, poData, dispatchData, tokenData] = await Promise.all([
         inventoryApi.getSummary().catch(() => null),
         inventoryApi.getWorkQueue().catch(() => []),
-        inventoryApi.getProducts({ limit: 500 }).catch(() => []),
+        inventoryApi.getProducts({ limit: 500, ...(options.includeCosts ? { view: "purchasing" } : {}) }).catch(() => []),
         inventoryApi.getItems({ limit: 500 }).catch(() => []),
         inventoryApi.getVendors().catch(() => []),
         inventoryApi.getPurchaseOrders().catch(() => []),
@@ -888,7 +900,7 @@ export function CrmQuotationsPage() {
         </div>
       )}
       <DataTable
-        columns={["Quotation", "Client", "Client Approval", "Token / Receipt", "Amount", "Status", "Actions"]}
+        columns={["Quotation", "Client", "Client Approval", "Stock Check", "Amount", "Status", "Actions"]}
         rows={filtered.map((quote) => [
           <div style={quote.id === highlightedId ? { padding: 8, borderRadius: 8, background: "#eff6ff", border: "1px solid #bfdbfe" } : undefined}>
             <strong>{quote.quotation_number || "Draft quotation"}</strong>
@@ -898,7 +910,7 @@ export function CrmQuotationsPage() {
           quote.status === "DRAFT"
             ? <span style={{ color: "#94a3b8" }}>Click Send to generate/share client link</span>
             : <Button onClick={() => copyClientLink(quote)} tone="light"><FileText size={14} /> Copy Approval Link</Button>,
-          quote.status === "APPROVED" ? <span style={{ color: "#64748b" }}>Inventory will generate token</span> : <span style={{ color: "#94a3b8" }}>After client approval</span>,
+          quote.status === "APPROVED" ? <span style={{ color: "#64748b" }}>Inventory will run the stock check</span> : <span style={{ color: "#94a3b8" }}>After client approval</span>,
           money(quote.total_amount),
           statusChip(quote.status),
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1194,17 +1206,17 @@ export function InventoryFlowDashboardPage() {
   const { summary, workQueue, products, items, purchaseOrders, dispatches, tokens, loading } = useInventoryFlowData();
   const cards = [
     ["Dashboard", summary?.total_products || products.length, "/inventory-dashboard", "Live stock, dispatch, return and low-stock health"],
-    ["Incoming Orders", summary?.pending_incoming_orders || workQueue.length, "/inventory/queue", "CRM converted orders waiting for inventory action"],
-    ["Fulfilment Tokens", summary?.active_tokens || tokens.length, "/inventory/tokens", "Traceable control records linked one-to-one with approved orders"],
+    ["Released Orders", summary?.pending_incoming_orders || workQueue.length, "/inventory/queue", "Approved sales orders waiting for Inventory action"],
+    ["Stock Checks", summary?.active_tokens || tokens.length, "/inventory/tokens", "Availability and reservation records linked one-to-one with released orders"],
     ["Product Catalog", products.length, "/inventory/products", "Stock master used by CRM quotation pricing"],
-    ["Serialized Stock", items.filter((item) => item.current_status === "AVAILABLE").length, "/inventory/serials", "Serial and IMEI items available for controlled issue"],
-    ["Procurement & Receipt", purchaseOrders.length, "/inventory/purchasing", "Procure shortages and record supplier receipts"],
+    ["Serial & Batch Register", items.filter((item) => item.current_status === "AVAILABLE").length, "/inventory/serials", "Tracked units available for controlled material issue"],
+    ["Procurement & Receipts", purchaseOrders.length, "/inventory/purchasing", "Procure shortages and record vendor receipts"],
     ["Field Service", summary?.active_dispatches || dispatches.length, "/inventory/field-service", "Issue material and track field fulfilment"],
     ["Reconciliation", summary?.pending_returns || 0, "/inventory/reconciliation", "Reconcile used, installed and returned material"],
   ];
   return (
     <div className="flow-page-shell" style={pageShell}>
-      <Header eyebrow="Inventory & Fulfilment" title="Inventory Workflow" text="Approved orders, procurement, stock allocation, field fulfilment and reconciliation." actions={<Button to="/inventory/queue" tone="success"><ClipboardCheck size={16} /> Review Incoming Orders</Button>} />
+      <Header eyebrow="Inventory & Fulfilment" title="Inventory Workflow" text="Released orders, stock checks, procurement, material issue and closeout." actions={<Button to="/inventory/queue" tone="primary"><ClipboardCheck size={16} /> Review Released Orders</Button>} />
       <FlowSteps />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 14 }}>
         {cards.map(([label, value, href, help]) => (
@@ -1248,7 +1260,7 @@ export function InventoryQueuePage() {
       );
       await reload();
     } catch (error) {
-      showToast("Token could not be generated. Please check backend/API connection.", "error");
+      showToast("Stock check could not be completed. Please retry or check the API connection.", "error");
     } finally {
       setGeneratingOrderId("");
     }
@@ -1259,15 +1271,15 @@ export function InventoryQueuePage() {
       <Header
         eyebrow="Order Intake"
         title="Approved Order Intake"
-        text="Register approved demand, issue its fulfilment token and review stock readiness."
+        text="Review released demand, run the stock check and resolve any shortage."
         actions={<Button onClick={reload} tone="light"><RefreshCw size={15} /> Refresh</Button>}
       />
       <div style={{ ...card, padding: 14, marginBottom: 14, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <SearchBox value={q} onChange={setQ} placeholder="Search order, token, quotation or client" />
-        <Button to="/inventory/tokens" tone="light"><ReceiptText size={15} /> Fulfilment Tokens</Button>
+        <SearchBox value={q} onChange={setQ} placeholder="Search order, stock check, quotation or client" />
+        <Button to="/inventory/tokens" tone="light"><ReceiptText size={15} /> Stock Checks</Button>
       </div>
       <DataTable
-        columns={["Order / Token", "Client", "Quotation", "Stock Check", "Amount", "Status", "Next Actions"]}
+        columns={["Order / Stock Check", "Client", "Quotation", "Availability", "Amount", "Status", "Next Actions"]}
         rows={filtered.map((job) => {
           const token = tokenForQuote(job);
           const gaps = hasStockGaps(job);
@@ -1314,7 +1326,7 @@ export function InventoryQueuePage() {
             <div>
               <strong>{job.order_number || "Order pending"}</strong>
               <div style={{ marginTop: 5, color: token ? "#047857" : "#b45309", fontWeight: 850 }}>
-                {token || "Token not generated"}
+                {token || "Stock check not run"}
               </div>
               {token && (
                 <Link to="/inventory/tokens" style={{ display: "inline-block", marginTop: 5, color: "#2563eb", fontSize: 12, fontWeight: 850, textDecoration: "none" }}>
@@ -1353,7 +1365,7 @@ export function InventoryQueuePage() {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {!token && (
                 <Button onClick={() => generateToken(job)} disabled={generatingOrderId === job.order_id} tone="success" prominent>
-                  <ReceiptText size={14} /> {generatingOrderId === job.order_id ? "Generating..." : "Generate Token"}
+                  <ReceiptText size={14} /> {generatingOrderId === job.order_id ? "Checking..." : "Run Stock Check"}
                 </Button>
               )}
               {token && gaps && <Button to={`/inventory/purchasing?orderId=${job.order_id}&quotationId=${job.id}`} tone="warning"><ShoppingCart size={14} /> Create PO</Button>}
@@ -1376,17 +1388,17 @@ export function InventoryTokensPage() {
   return (
     <div className="flow-page-shell" style={pageShell}>
       <Header
-        eyebrow="Fulfilment Control"
-        title="Order Tokens and Stock Readiness"
-        text="Maintain one traceable fulfilment token for each approved order."
+        eyebrow="Inventory Control"
+        title="Stock Checks and Readiness"
+        text="Maintain one traceable availability and reservation record for each released order."
         actions={<Button onClick={reload} tone="light"><RefreshCw size={15} /> Refresh</Button>}
       />
       <div style={{ ...card, padding: 14, marginBottom: 14, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <SearchBox value={q} onChange={setQ} placeholder="Search token, order, quotation or client" />
-        <Button to="/inventory/queue" tone="success"><ClipboardCheck size={15} /> Incoming Orders</Button>
+        <SearchBox value={q} onChange={setQ} placeholder="Search stock check, order, quotation or client" />
+        <Button to="/inventory/queue" tone="primary"><ClipboardCheck size={15} /> Released Orders</Button>
       </div>
       <DataTable
-        columns={["Token No", "Order", "Client", "Items", "Total Value", "Status", "Actions"]}
+        columns={["Stock Check", "Order", "Client", "Items", "Total Value", "Status", "Actions"]}
         rows={filtered.map((token) => [
           <strong>{token.token_number}</strong>,
           <div>{token.order_number}<br /><span style={{ color: "#64748b" }}>{token.quotation_number || "-"}</span></div>,
@@ -1399,10 +1411,10 @@ export function InventoryTokensPage() {
           </div>,
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Button to={`/inventory/field-service?orderId=${token.id}`} tone="success"><Wrench size={14} /> View Field Service</Button>
-            <Button onClick={() => printHtmlDocument(tokenReceiptHtml(token), token.token_number || "Token Receipt")} tone="light"><ReceiptText size={14} /> Print Receipt</Button>
+            <Button onClick={() => printHtmlDocument(tokenReceiptHtml(token), token.token_number || "Stock Check")} tone="light"><ReceiptText size={14} /> Print Record</Button>
           </div>,
         ])}
-        empty={loading ? "Loading tokens..." : "No tokens generated yet. Open Incoming Orders and click Generate Token."}
+        empty={loading ? "Loading stock checks..." : "No stock check exists yet. Open Released Orders and run the stock check."}
       />
     </div>
   );
@@ -1708,7 +1720,7 @@ export function InventorySerialsPage() {
 
   return (
     <div className="flow-page-shell" style={pageShell}>
-      <Header eyebrow="Asset Traceability" title="Serialized Stock Register" text="Review serial, IMEI and item availability before controlled material issue." />
+      <Header eyebrow="Asset Traceability" title="Serial and Batch Register" text="Review serial, IMEI, batch and item availability before controlled material issue." />
       <div style={{ ...card, padding: 14, marginBottom: 14, display: "flex", gap: 12 }}>
         <SearchBox value={q} onChange={setQ} placeholder="Scan or search serial / IMEI / product" />
         <Button to="/inventory/field-service" tone="success"><Wrench size={15} /> Issue Serialized Item</Button>
@@ -1730,7 +1742,7 @@ export function InventorySerialsPage() {
 }
 
 export function InventoryPurchasingPage() {
-  const { products, vendors, purchaseOrders, workQueue, reload } = useInventoryFlowData();
+  const { products, vendors, purchaseOrders, workQueue, loading, reload } = useInventoryFlowData({ includeCosts: true });
   const { showToast } = useToastContext();
   const navigate = useNavigate();
   const location = useLocation();
@@ -1760,6 +1772,9 @@ export function InventoryPurchasingPage() {
     order_date: new Date().toISOString().slice(0, 10),
     expected_delivery_date: "",
     tax_rate: 18,
+    currency_code: "PKR",
+    exchange_rate: 1,
+    payment_terms: "",
     warehouse_location: "Main Warehouse",
     room_number: "",
     rack_number: "",
@@ -1771,7 +1786,22 @@ export function InventoryPurchasingPage() {
   const [poItems, setPoItems] = useState<PurchaseDraftLine[]>([newLine()]);
   const [receivePo, setReceivePo] = useState<PurchaseOrder | null>(null);
   const [receiveQty, setReceiveQty] = useState<Record<string, number>>({});
+  const [receiveSerials, setReceiveSerials] = useState<Record<string, string>>({});
+  const [receiveBatches, setReceiveBatches] = useState<Record<string, string>>({});
+  const [receiptKey, setReceiptKey] = useState("");
+  const [receiptEvidence, setReceiptEvidence] = useState<File | null>(null);
+  const [poSearch, setPoSearch] = useState("");
+  const [poStatus, setPoStatus] = useState("ALL");
+  const [poPage, setPoPage] = useState(1);
   const prefillKeyRef = useRef("");
+  const poPageSize = 10;
+  const filteredPurchaseOrders = useMemo(() => purchaseOrders.filter((po) => {
+    const status = String(po.status || "").toUpperCase();
+    const haystack = [po.po_number, po.vendor_name, po.customer_name, po.order_number, po.quotation_number].join(" ").toLowerCase();
+    return (poStatus === "ALL" || status === poStatus) && haystack.includes(poSearch.trim().toLowerCase());
+  }), [purchaseOrders, poSearch, poStatus]);
+  const pagedPurchaseOrders = filteredPurchaseOrders.slice((poPage - 1) * poPageSize, poPage * poPageSize);
+  useEffect(() => { setPoPage(1); }, [poSearch, poStatus]);
 
   useEffect(() => {
     inventoryApi.getProductCustomFields()
@@ -1868,6 +1898,9 @@ export function InventoryPurchasingPage() {
       order_date: new Date().toISOString().slice(0, 10),
       expected_delivery_date: "",
       tax_rate: 18,
+      currency_code: "PKR",
+      exchange_rate: 1,
+      payment_terms: "",
       warehouse_location: "Main Warehouse",
       room_number: "",
       rack_number: "",
@@ -1930,6 +1963,9 @@ export function InventoryPurchasingPage() {
         order_date: form.order_date,
         expected_delivery_date: form.expected_delivery_date,
         tax_rate: form.tax_rate,
+        currency_code: form.currency_code,
+        exchange_rate: form.exchange_rate,
+        payment_terms: form.payment_terms,
         warehouse_location: form.warehouse_location,
         room_number: form.room_number,
         rack_number: form.rack_number,
@@ -1946,7 +1982,7 @@ export function InventoryPurchasingPage() {
           unit_price: Math.max(0, Number(item.unit_price || 0)),
         })),
       });
-      showToast("Purchase order saved. Next: receive stock.", "success");
+      showToast("Purchase order saved as Draft. Next: approve and issue it before receipt.", "success");
       setShowForm(false);
       resetForm();
       reload();
@@ -1961,23 +1997,56 @@ export function InventoryPurchasingPage() {
       quantities[item.id] = Math.max(0, Number(item.quantity || 0) - Number(item.received_quantity || 0));
     });
     setReceiveQty(quantities);
+    setReceiveSerials({});
+    setReceiveBatches({});
+    setReceiptKey(
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `receipt-${po.id}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    );
+    setReceiptEvidence(null);
     setReceivePo(po);
+  };
+
+  const transitionPo = async (po: PurchaseOrder, action: "APPROVE" | "ISSUE" | "CLOSE" | "CANCEL") => {
+    try {
+      await inventoryApi.transitionPurchaseOrder(po.id, action);
+      const actionLabels = { APPROVE: "approved", ISSUE: "issued", CLOSE: "closed", CANCEL: "cancelled" } as const;
+      showToast(`Purchase order ${actionLabels[action]} successfully.`, "success");
+      await reload();
+    } catch (error: any) {
+      showToast(error?.response?.data?.message || "Purchase order status could not be changed.", "error");
+    }
   };
 
   const submitReceive = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!receivePo) return;
     const items = Object.entries(receiveQty)
-      .map(([id, received_qty]) => ({ id, received_qty: Number(received_qty || 0) }))
+      .map(([id, received_qty]) => ({
+        id,
+        received_qty: Number(received_qty || 0),
+        condition: "NEW" as const,
+        batch_lot_number: receiveBatches[id]?.trim() || undefined,
+        serial_numbers: String(receiveSerials[id] || "")
+          .split(/\r?\n|,/)
+          .map((value) => value.trim())
+          .filter(Boolean),
+      }))
       .filter((item) => item.received_qty > 0);
     if (!items.length) {
       showToast("Enter received quantity for at least one item.", "error");
       return;
     }
     const receivingPo = receivePo;
-    await inventoryApi.receivePurchaseOrder(receivingPo.id, { items });
+    const uploadedEvidence = receiptEvidence ? await inventoryApi.uploadProductImage(receiptEvidence) : null;
+    await inventoryApi.receivePurchaseOrder(receivingPo.id, { idempotency_key: receiptKey, evidence_url: uploadedEvidence?.url, items });
     setReceivePo(null);
     setReceiveQty({});
+    setReceiveSerials({});
+    setReceiveBatches({});
+    setReceiptKey("");
+    setReceiptEvidence(null);
     await reload();
 
     const refreshedQueue = await inventoryApi.getWorkQueue({ stock_status: "STOCK_OK" }).catch(() => []);
@@ -2037,6 +2106,13 @@ export function InventoryPurchasingPage() {
             {fieldLabel("PO Date", <input type="date" value={form.order_date} onChange={(e) => setForm({ ...form, order_date: e.target.value })} style={input} />)}
             {fieldLabel("Expected Delivery *", <input required type="date" min={form.order_date || new Date().toISOString().slice(0, 10)} value={form.expected_delivery_date} onChange={(e) => setForm({ ...form, expected_delivery_date: e.target.value })} style={input} />)}
             <TaxRateControl value={form.tax_rate} onChange={(tax_rate) => setForm({ ...form, tax_rate })} />
+            {fieldLabel("Currency", (
+              <select value={form.currency_code} onChange={(event) => setForm({ ...form, currency_code: event.target.value })} style={input}>
+                <option value="PKR">PKR</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option>
+              </select>
+            ))}
+            {fieldLabel("Exchange Rate to PKR", <input type="number" min="0.000001" step="0.000001" value={form.exchange_rate} onChange={(event) => setForm({ ...form, exchange_rate: Math.max(0.000001, Number(event.target.value) || 1) })} style={input} />)}
+            {fieldLabel("Payment Terms", <input value={form.payment_terms} onChange={(event) => setForm({ ...form, payment_terms: event.target.value })} style={input} placeholder="Net 15, COD, advance" />)}
             {fieldLabel("Warehouse / Location", <input value={form.warehouse_location} onChange={(e) => setForm({ ...form, warehouse_location: e.target.value })} style={input} placeholder="Main Warehouse" />)}
             {fieldLabel("Room Number", <input value={form.room_number} onChange={(e) => setForm({ ...form, room_number: e.target.value })} style={input} placeholder="Room A" />)}
             {fieldLabel("Rack Number", <input value={form.rack_number} onChange={(e) => setForm({ ...form, rack_number: e.target.value })} style={input} placeholder="Rack 01" />)}
@@ -2144,18 +2220,34 @@ export function InventoryPurchasingPage() {
           {!vendors.length && <div style={{ color: "#b45309", fontWeight: 850 }}>No supplier found. Add a supplier in Configuration before creating a PO.</div>}
         </form>
       )}
+      <div style={{ ...card, padding: 12, marginBottom: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
+        <SearchBox value={poSearch} onChange={setPoSearch} placeholder="Search PO, vendor, client, order or quotation" />
+        <select aria-label="Purchase order status" value={poStatus} onChange={(event) => setPoStatus(event.target.value)} style={input}>
+          <option value="ALL">All statuses</option>
+          <option value="DRAFT">Draft</option><option value="APPROVED">Approved</option><option value="ISSUED">Issued</option><option value="ORDERED">Legacy ordered</option><option value="PARTIALLY_RECEIVED">Partially received</option><option value="RECEIVED">Received</option><option value="CLOSED">Closed</option><option value="CANCELLED">Cancelled</option>
+        </select>
+      </div>
       <DataTable
         columns={["PO Number", "Vendor", "Created Date", "Expected Delivery", "Items", "Status", "Amount", "Action"]}
-        rows={purchaseOrders.map((po) => {
+        rows={pagedPurchaseOrders.map((po) => {
           const poStatus = String(po.status || "").toUpperCase();
           const receiveAction = poStatus === "RECEIVED"
             ? (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minHeight: 36, padding: "0 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "#f8fafc", color: "#64748b", fontSize: 12, fontWeight: 900 }}>
-                <CheckCircle2 size={15} /> Stock Received
-              </span>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minHeight: 36, padding: "0 12px", border: "1px solid #bbf7d0", borderRadius: 8, background: "#f0fdf4", color: "#047857", fontSize: 12, fontWeight: 900 }}>
+                  <CheckCircle2 size={15} /> Stock Received
+                </span>
+                <Button onClick={() => transitionPo(po, "CLOSE")} tone="light">Close PO</Button>
+              </div>
             )
             : poStatus === "CANCELLED"
               ? <span style={{ color: "#94a3b8", fontWeight: 850 }}>Cancelled</span>
+              : poStatus === "DRAFT"
+                ? <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Button onClick={() => transitionPo(po, "APPROVE")} tone="success">Approve</Button><Button onClick={() => transitionPo(po, "CANCEL")} tone="light">Cancel</Button></div>
+              : poStatus === "APPROVED"
+                ? <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Button onClick={() => transitionPo(po, "ISSUE")} tone="success">Issue to Supplier</Button><Button onClick={() => transitionPo(po, "CANCEL")} tone="light">Cancel</Button></div>
+              : poStatus === "CLOSED"
+                ? <span style={{ color: "#64748b", fontWeight: 850 }}>Closed</span>
               : (
                 <Button onClick={() => openReceive(po)} tone="success">
                   <Package size={14} /> {poStatus === "PARTIALLY_RECEIVED" ? "Receive Remaining" : "Receive Stock"}
@@ -2179,8 +2271,9 @@ export function InventoryPurchasingPage() {
             receiveAction,
           ];
         })}
-        empty="No purchase orders yet."
+        empty={loading ? "Loading purchase orders..." : "No purchase orders match the selected filters."}
       />
+      {!loading && <TablePager page={poPage} pageSize={poPageSize} total={filteredPurchaseOrders.length} onPageChange={setPoPage} />}
       {receivePo && (
         <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15, 23, 42, .48)", display: "grid", placeItems: "center", padding: 18 }}>
           <form onSubmit={submitReceive} style={{ ...card, width: "min(920px, 100%)", maxHeight: "calc(100vh - 36px)", overflowY: "auto", padding: 18, display: "grid", gap: 14, boxShadow: "0 24px 70px rgba(15, 23, 42, .24)" }}>
@@ -2195,10 +2288,14 @@ export function InventoryPurchasingPage() {
               <Button onClick={() => setReceivePo(null)} tone="light">Close</Button>
             </div>
             <div style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#eff6ff", color: "#1e3a8a", padding: 11, fontSize: 13, fontWeight: 750 }}>
-              Enter the quantity physically received. When all shortages are covered, the linked assignment will become available in Field Operations.
+              Enter the quantity physically received. When all shortages are cleared, the linked order becomes ready for material issue.
             </div>
+            <label style={{ display: "grid", gap: 6, color: "#475569", fontSize: 12, fontWeight: 850 }}>
+              Receipt evidence (optional JPG, PNG or WebP)
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setReceiptEvidence(event.target.files?.[0] || null)} style={input} />
+            </label>
             <DataTable
-              columns={["Product", "Ordered", "Already Received", "Receive Now", "Unit Cost"]}
+              columns={["Product", "Ordered", "Already Received", "Receive Now", "Traceability", "Unit Cost"]}
               rows={(receivePo.items || []).map((item: PurchaseOrderItem) => {
                 const remaining = Math.max(0, Number(item.quantity || 0) - Number(item.received_quantity || 0));
                 return [
@@ -2213,6 +2310,22 @@ export function InventoryPurchasingPage() {
                     onChange={(event) => setReceiveQty({ ...receiveQty, [item.id]: Math.max(0, Number(event.target.value) || 0) })}
                     style={{ ...input, maxWidth: 140 }}
                   />,
+                  ["SERIAL", "IMEI"].includes(String(item.tracking_type || "").toUpperCase()) ? (
+                    <textarea
+                      value={receiveSerials[item.id] || ""}
+                      onChange={(event) => setReceiveSerials({ ...receiveSerials, [item.id]: event.target.value })}
+                      placeholder={`Enter one ${item.tracking_type === "IMEI" ? "IMEI" : "serial number"} per line`}
+                      rows={3}
+                      style={{ ...input, minWidth: 230, resize: "vertical" }}
+                    />
+                  ) : String(item.tracking_type || "").toUpperCase() === "BATCH" ? (
+                    <input
+                      value={receiveBatches[item.id] || ""}
+                      onChange={(event) => setReceiveBatches({ ...receiveBatches, [item.id]: event.target.value })}
+                      placeholder="Batch / lot number"
+                      style={{ ...input, minWidth: 180 }}
+                    />
+                  ) : "Not required",
                   money(item.unit_price),
                 ];
               })}
@@ -2251,7 +2364,7 @@ export function InventoryDispatchesPage() {
   });
 
   const activeDispatchQuoteIds = useMemo(
-    () => new Set(dispatches.filter((dispatch) => !["CANCELLED", "COMPLETED", "BILL_SENT"].includes(String(dispatch.status || "").toUpperCase())).map((dispatch) => dispatch.quotation_id).filter(Boolean)),
+    () => new Set(dispatches.filter((dispatch) => ["PENDING", "ASSIGNED", "DISPATCHED", "IN_PROGRESS"].includes(String(dispatch.status || "").toUpperCase())).map((dispatch) => dispatch.quotation_id).filter(Boolean)),
     [dispatches],
   );
   const readyJobs = readyQueue.filter((job) => {
@@ -2388,11 +2501,11 @@ export function InventoryDispatchesPage() {
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Button onClick={loadReadyQueue} tone="light"><RefreshCw size={15} /> Refresh</Button>
-            <Button to="/inventory/queue" tone="light"><ClipboardCheck size={15} /> Incoming Orders</Button>
+            <Button to="/inventory/queue" tone="light"><ClipboardCheck size={15} /> Released Orders</Button>
           </div>
         </div>
         <DataTable
-          columns={["Order / Token", "Client", "Stock Readiness", "Amount", "Action"]}
+          columns={["Order / Stock Check", "Client", "Stock Readiness", "Amount", "Action"]}
           rows={readyJobs.map((job) => {
             const details = stockCheckDetails(job);
             const readyLines = details.filter((item) => item.ok).length;
@@ -2411,17 +2524,17 @@ export function InventoryDispatchesPage() {
               <Button onClick={() => prepareJob(job)} tone="success" prominent><Wrench size={14} /> Prepare Assignment</Button>,
             ];
           })}
-          empty={readyLoading ? "Loading stock-ready assignments..." : "No assignment is ready. Generate a token from Incoming Orders, then receive any missing stock against its purchase order."}
+          empty={readyLoading ? "Loading ready orders..." : "No order is ready. Run its stock check, then receive any shortage against the linked purchase order."}
         />
         {!readyLoading && readyJobs.length === 0 && (
           <div style={{ marginTop: 12, border: "1px solid #bfdbfe", background: "#eff6ff", borderRadius: 10, padding: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div>
               <strong style={{ color: "#1e3a8a" }}>There is currently no field-service assignment ready for material issue.</strong>
-              <div style={{ marginTop: 4, color: "#475569", fontSize: 13 }}>Generate a token from Incoming Orders. If stock is pending, receive the linked purchase order first; the assignment will then appear here.</div>
+              <div style={{ marginTop: 4, color: "#475569", fontSize: 13 }}>Run a stock check from Released Orders. If stock is short, receive the linked purchase order first; the order will then appear here.</div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Button to="/inventory/queue" tone="primary"><ClipboardCheck size={15} /> Incoming Orders</Button>
-              <Button to="/inventory/purchasing" tone="light"><ShoppingCart size={15} /> Procurement & Receipt</Button>
+              <Button to="/inventory/queue" tone="primary"><ClipboardCheck size={15} /> Released Orders</Button>
+              <Button to="/inventory/purchasing" tone="light"><ShoppingCart size={15} /> Procurement & Receipts</Button>
             </div>
           </div>
         )}
@@ -2475,9 +2588,9 @@ export function InventoryDispatchesPage() {
       )}
       <h3 style={{ margin: "8px 0 10px", color: "#0f172a" }}>Active Field Service Assignments</h3>
       <DataTable
-        columns={["Assignment No", "Client", "Token No", "Field Technician", "Items Issued", "Status", "Issued Date", "Actions"]}
+        columns={["Field Job", "Client", "Stock Check", "Field Technician", "Items Issued", "Status", "Issued Date", "Actions"]}
         rows={dispatches
-          .filter((dispatch) => !["CANCELLED", "COMPLETED", "RETURN_PENDING", "RETURN_CONFIRMED", "RECONCILED", "BILL_SENT"].includes(String(dispatch.status || "").toUpperCase()))
+          .filter((dispatch) => ["PENDING", "ASSIGNED", "DISPATCHED", "IN_PROGRESS"].includes(String(dispatch.status || "").toUpperCase()))
           .map((dispatch) => [
           <strong>{dispatch.dispatch_number}</strong>,
           dispatch.customer_name || "-",
@@ -2528,7 +2641,7 @@ export function InventoryDispatchesPage() {
         <div style={{ position: "fixed", inset: 0, zIndex: 1100, background: "rgba(15,23,42,.52)", display: "grid", placeItems: "center", padding: 18 }}>
           <div style={{ ...card, width: "min(960px,100%)", maxHeight: "calc(100vh - 36px)", overflowY: "auto", padding: 18 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 16 }}>
-              <div><div style={{ color: "#2563eb", fontSize: 11, fontWeight: 950, textTransform: "uppercase" }}>Material Traceability</div><h3 style={{ margin: "4px 0" }}>{qrDispatch.dispatch_number} QR Codes</h3><p style={{ margin: 0, color: "#64748b" }}>{qrDispatch.token_number || "Token pending"} | {qrDispatch.customer_name || "Client"}</p></div>
+              <div><div style={{ color: "#2563eb", fontSize: 11, fontWeight: 950, textTransform: "uppercase" }}>Material Traceability</div><h3 style={{ margin: "4px 0" }}>{qrDispatch.dispatch_number} QR Codes</h3><p style={{ margin: 0, color: "#64748b" }}>{qrDispatch.token_number || "Stock check pending"} | {qrDispatch.customer_name || "Client"}</p></div>
               <Button onClick={() => setQrDispatch(null)} tone="light">Close</Button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12 }}>
@@ -2760,7 +2873,7 @@ export function InstallerReturnsPage() {
     return (
       <div className="flow-page-shell" style={pageShell}>
         <Header
-          eyebrow={fieldJobPending ? "Field Service Completion" : "Material Reconciliation Detail"}
+          eyebrow={fieldJobPending ? "Field Job Completion" : "Material Closeout Detail"}
           title={selectedReturn ? `${fieldJobPending ? "Complete Field Service" : selectedReturn.return_request_no} - ${selectedReturn.customer_name || "Client"}` : "Field Service Review"}
           text={fieldJobPending ? "Record each issued item's site result and obtain client sign-off." : "Verify returned material and submit the adjusted billing record."}
           actions={<Button onClick={() => navigate("/inventory/reconciliation")} tone="light"><ArrowRight size={15} /> Back to Reconciliation</Button>}
@@ -2771,7 +2884,7 @@ export function InstallerReturnsPage() {
             <div style={{ ...card, padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 14 }}>
               {[
                 ["Dispatch", selectedReturn.dispatch_number || "-"],
-                ["Token / Order", `${selectedReturn.token_number || "-"} / ${selectedReturn.order_number || "-"}`],
+                ["Stock Check / Order", `${selectedReturn.token_number || "-"} / ${selectedReturn.order_number || "-"}`],
                 ["Client", selectedReturn.customer_name || "-"],
                 ["Field Technician", selectedReturn.installer_name || selectedReturn.installer_email || "-"],
               ].map(([label, value]) => (
@@ -2840,9 +2953,9 @@ export function InstallerReturnsPage() {
                 <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
                   {fieldPurchases.map((purchase, index) => (
                     <div key={index} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10, alignItems: "end" }}>
-                      <label style={label}>Item description<input style={input} value={purchase.item_description} onChange={(event) => setFieldPurchases((current) => current.map((item, i) => i === index ? { ...item, item_description: event.target.value } : item))} /></label>
-                      <label style={label}>Vendor<input style={input} value={purchase.vendor_name} onChange={(event) => setFieldPurchases((current) => current.map((item, i) => i === index ? { ...item, vendor_name: event.target.value } : item))} /></label>
-                      <label style={label}>Amount (PKR)<input style={input} type="number" min="0" value={purchase.amount || ""} onChange={(event) => setFieldPurchases((current) => current.map((item, i) => i === index ? { ...item, amount: Number(event.target.value) } : item))} /></label>
+                      <label style={formLabel}>Item description<input style={input} value={purchase.item_description} onChange={(event) => setFieldPurchases((current) => current.map((item, i) => i === index ? { ...item, item_description: event.target.value } : item))} /></label>
+                      <label style={formLabel}>Vendor<input style={input} value={purchase.vendor_name} onChange={(event) => setFieldPurchases((current) => current.map((item, i) => i === index ? { ...item, vendor_name: event.target.value } : item))} /></label>
+                      <label style={formLabel}>Amount (PKR)<input style={input} type="number" min="0" value={purchase.amount || ""} onChange={(event) => setFieldPurchases((current) => current.map((item, i) => i === index ? { ...item, amount: Number(event.target.value) } : item))} /></label>
                       <Button type="button" tone="light" onClick={() => setFieldPurchases((current) => current.filter((_, i) => i !== index))}><XCircle size={15} /> Remove</Button>
                     </div>
                   ))}
@@ -2854,8 +2967,8 @@ export function InstallerReturnsPage() {
               <h3 style={{ margin: "0 0 5px" }}>Client Sign-off</h3>
               <p style={{ margin: "0 0 14px", color: "#64748b" }}>Required after on-site work. This confirms the client received the installed items or completed service.</p>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 12 }}>
-                <label style={label}>Authorized client name *<input style={input} value={clientSignoffName} onChange={(event) => setClientSignoffName(event.target.value)} placeholder="Name of person accepting the work" /></label>
-                <label style={label}>Sign-off note<input style={input} value={clientSignoffNote} onChange={(event) => setClientSignoffNote(event.target.value)} placeholder="Completion note, designation or reference" /></label>
+                <label style={formLabel}>Authorized client name *<input style={input} value={clientSignoffName} onChange={(event) => setClientSignoffName(event.target.value)} placeholder="Name of person accepting the work" /></label>
+                <label style={formLabel}>Sign-off note<input style={input} value={clientSignoffNote} onChange={(event) => setClientSignoffNote(event.target.value)} placeholder="Completion note, designation or reference" /></label>
               </div>
             </div>
 
@@ -2871,7 +2984,7 @@ export function InstallerReturnsPage() {
           <div style={{ display: "grid", gap: 14 }}>
             <div style={{ ...card, padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 14 }}>
               {[
-                ["Token / Order", `${selectedReturn.token_number || "-"} / ${selectedReturn.order_number || "-"}`],
+                ["Stock Check / Order", `${selectedReturn.token_number || "-"} / ${selectedReturn.order_number || "-"}`],
                 ["Client", selectedReturn.customer_name || "-"],
                 ["Field Technician", selectedReturn.installer_name || selectedReturn.installer_email || "-"],
                 ["Status", statusChip(status)],
@@ -2971,15 +3084,15 @@ export function InstallerReturnsPage() {
     <div className="flow-page-shell" style={pageShell}>
       <Header
         eyebrow="Material Control"
-        title="Field Completion & Material Reconciliation"
+        title="Field Completion & Material Closeout"
         text="Verify field results, reconcile returned material and submit an auditable billing record to Finance."
         actions={<Button onClick={loadReturns} tone="light"><RefreshCw size={15} /> Refresh</Button>}
       />
       <div style={{ ...card, padding: 14, marginBottom: 14 }}>
-        <SearchBox value={q} onChange={setQ} placeholder="Search reconciliation no, token, order, client or technician" />
+        <SearchBox value={q} onChange={setQ} placeholder="Search closeout, stock check, order, client or technician" />
       </div>
       <DataTable
-        columns={["Reconciliation No", "Token / Order", "Client", "Field Technician", "Returned Items", "Status", "Submitted", "Action"]}
+        columns={["Closeout No", "Stock Check / Order", "Client", "Field Technician", "Returned Items", "Status", "Submitted", "Action"]}
         rows={filteredReturns.map((request) => [
           <strong>{request.return_request_no}</strong>,
           <div>
@@ -3014,14 +3127,14 @@ const defaultInventorySettings: InventoryPreferenceSettings = {
   default_min_stock_threshold: 5,
   low_stock_alert_email: "",
   theme_preset: "executive",
-  primary_color: "#10234D",
-  accent_color: "#0F766E",
-  page_color: "#EEF5FF",
+  primary_color: "#0B2447",
+  accent_color: "#0D9488",
+  page_color: "#F4F6FA",
   surface_color: "#FFFFFF",
 };
 
 const inventoryThemePresets = [
-  { id: "executive", label: "Executive", primary: "#10234D", accent: "#0F766E", page: "#EEF5FF", surface: "#FFFFFF" },
+  { id: "executive", label: "Harbor Navy", primary: "#0B2447", accent: "#0D9488", page: "#F4F6FA", surface: "#FFFFFF" },
   { id: "ocean", label: "Ocean", primary: "#164E63", accent: "#0284C7", page: "#F0F9FF", surface: "#FFFFFF" },
   { id: "emerald", label: "Emerald", primary: "#134E4A", accent: "#059669", page: "#ECFDF5", surface: "#FFFFFF" },
   { id: "graphite", label: "Graphite", primary: "#1E293B", accent: "#475569", page: "#F1F5F9", surface: "#FFFFFF" },
@@ -3062,22 +3175,26 @@ export function InventoryMasterSetupPage() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [installers, setInstallers] = useState<InventoryInstallerUser[]>([]);
   const [customFields, setCustomFields] = useState<ProductCustomFieldDefinition[]>([]);
+  const [locations, setLocations] = useState<InventoryLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [categoryForm, setCategoryForm] = useState({ id: "", category_name: "" });
   const emptyVendorForm = { id: "", name: "", vendor_code: "", contact_person: "", email: "", phone: "", address: "", ntn_number: "", gst_number: "", payment_terms: "", status: "ACTIVE", notes: "" };
   const [vendorForm, setVendorForm] = useState(emptyVendorForm);
   const emptyCustomFieldForm = { id: "", label: "", field_key: "", field_type: "TEXT", applies_to: "PRODUCT", required: false, optionsText: "", sort_order: 0 };
   const [customFieldForm, setCustomFieldForm] = useState(emptyCustomFieldForm);
+  const emptyLocationForm = { id: "", location_code: "", warehouse_name: "", room_number: "", rack_number: "", active: true };
+  const [locationForm, setLocationForm] = useState(emptyLocationForm);
 
   const loadSetup = async () => {
     setLoading(true);
     try {
-      const [settings, categoryRows, vendorRows, installerRows, customFieldRows] = await Promise.all([
+      const [settings, categoryRows, vendorRows, installerRows, customFieldRows, locationRows] = await Promise.all([
         inventoryApi.getMasterSettings().catch(() => ({ company: defaultCompanySettings, inventory: defaultInventorySettings })),
         inventoryApi.getCategories().catch(() => []),
         inventoryApi.getVendors().catch(() => []),
         inventoryApi.getInstallers({ includeInactive: true }).catch(() => []),
         inventoryApi.getProductCustomFields().catch(() => []),
+        inventoryApi.getLocations().catch(() => []),
       ]);
       setCompany(settings.company || defaultCompanySettings);
       setInventory({ ...defaultInventorySettings, ...(settings.inventory || {}) });
@@ -3085,10 +3202,38 @@ export function InventoryMasterSetupPage() {
       setVendors(vendorRows);
       setInstallers(installerRows);
       setCustomFields(customFieldRows);
+      setLocations(locationRows);
     } catch {
       showToast("Master setup data could not be loaded. Please check backend connection.", "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveLocation = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!locationForm.location_code.trim() || !locationForm.warehouse_name.trim()) {
+      showToast("Location code and warehouse name are required.", "error");
+      return;
+    }
+    try {
+      if (locationForm.id) await inventoryApi.updateLocation(locationForm.id, locationForm);
+      else await inventoryApi.createLocation(locationForm);
+      showToast(locationForm.id ? "Storage location updated." : "Storage location added.", "success");
+      setLocationForm(emptyLocationForm);
+      await loadSetup();
+    } catch {
+      showToast("Storage location could not be saved. Check that the code and room/rack combination are unique.", "error");
+    }
+  };
+
+  const toggleLocation = async (locationRow: InventoryLocation) => {
+    try {
+      await inventoryApi.updateLocation(locationRow.id, { ...locationRow, active: !locationRow.active });
+      showToast(locationRow.active ? "Storage location archived." : "Storage location activated.", "success");
+      await loadSetup();
+    } catch {
+      showToast("Storage location status could not be changed.", "error");
     }
   };
 
@@ -3397,6 +3542,43 @@ export function InventoryMasterSetupPage() {
         </SettingsSection>
 
         <SettingsSection
+          title="Storage Locations"
+          description="Maintain selectable warehouse, room and rack combinations used by products, purchase receipts and stock filters."
+          action={<Button onClick={() => setLocationForm(emptyLocationForm)} tone="success"><Plus size={15} /> New Location</Button>}
+        >
+          <form onSubmit={saveLocation} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr)) auto", gap: 10, marginBottom: 12, alignItems: "end" }}>
+            {field("Location Code", <input required style={input} value={locationForm.location_code} onChange={(event) => setLocationForm({ ...locationForm, location_code: event.target.value.toUpperCase() })} placeholder="MAIN-R1-A" />)}
+            {field("Warehouse", <input required style={input} value={locationForm.warehouse_name} onChange={(event) => setLocationForm({ ...locationForm, warehouse_name: event.target.value })} placeholder="Main Warehouse" />)}
+            {field("Room Number", <input style={input} value={locationForm.room_number} onChange={(event) => setLocationForm({ ...locationForm, room_number: event.target.value })} />)}
+            {field("Rack Number", <input style={input} value={locationForm.rack_number} onChange={(event) => setLocationForm({ ...locationForm, rack_number: event.target.value })} />)}
+            <button type="submit" className="btn btn-primary">{locationForm.id ? "Update Location" : "Save Location"}</button>
+            {locationForm.id && <Button onClick={() => setLocationForm(emptyLocationForm)} tone="light">Cancel</Button>}
+          </form>
+          <DataTable
+            columns={["Code", "Warehouse", "Room", "Rack", "Status", "Actions"]}
+            rows={locations.map((locationRow) => [
+              <strong>{locationRow.location_code}</strong>,
+              locationRow.warehouse_name,
+              locationRow.room_number || "-",
+              locationRow.rack_number || "-",
+              statusChip(locationRow.active ? "ACTIVE" : "INACTIVE"),
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Button onClick={() => setLocationForm({
+                  id: locationRow.id,
+                  location_code: locationRow.location_code,
+                  warehouse_name: locationRow.warehouse_name,
+                  room_number: locationRow.room_number || "",
+                  rack_number: locationRow.rack_number || "",
+                  active: locationRow.active,
+                })} tone="light">Edit</Button>
+                <Button onClick={() => toggleLocation(locationRow)} tone="light">{locationRow.active ? "Archive" : "Activate"}</Button>
+              </div>,
+            ])}
+            empty={loading ? "Loading storage locations..." : "No storage locations configured."}
+          />
+        </SettingsSection>
+
+        <SettingsSection
           title="Suppliers List"
           description="Suppliers are used by purchase orders and stock receipts."
           action={<Button onClick={() => setVendorForm(emptyVendorForm)} tone="success"><Plus size={15} /> Add New Supplier</Button>}
@@ -3479,12 +3661,53 @@ export function InventoryMasterSetupPage() {
 }
 
 export function InventoryMovementsPage() {
+  const { showToast } = useToastContext();
   const [movements, setMovements] = useState<any[]>([]);
+  const [adjustments, setAdjustments] = useState<InventoryAdjustment[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [showAdjustment, setShowAdjustment] = useState(false);
+  const [adjustment, setAdjustment] = useState({ product_id: "", quantity_delta: 0, reason: "" });
   const [q, setQ] = useState("");
   const [movementType, setMovementType] = useState("ALL");
   const [page, setPage] = useState(1);
   const pageSize = 50;
-  const load = () => inventoryApi.getMovements({ limit: 500 }).then(setMovements).catch(() => setMovements([]));
+  const load = () => Promise.all([
+    inventoryApi.getMovements({ limit: 500 }).catch(() => []),
+    inventoryApi.getAdjustments().catch(() => []),
+    inventoryApi.getProducts({ limit: 500 }).catch(() => []),
+  ]).then(([movementRows, adjustmentRows, productRows]) => {
+    setMovements(movementRows);
+    setAdjustments(adjustmentRows);
+    setProducts(productRows.filter((product) => product.product_type !== "SERVICE"));
+  });
+
+  const submitAdjustment = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!adjustment.product_id || Number(adjustment.quantity_delta) === 0 || !adjustment.reason.trim()) {
+      showToast("Select a product, enter a non-zero quantity change and provide a reason.", "error");
+      return;
+    }
+    try {
+      await inventoryApi.createAdjustment({ ...adjustment, reason: adjustment.reason.trim() });
+      setAdjustment({ product_id: "", quantity_delta: 0, reason: "" });
+      setShowAdjustment(false);
+      showToast("Stock adjustment submitted for independent review.", "success");
+      await load();
+    } catch {
+      showToast("Stock adjustment could not be submitted.", "error");
+    }
+  };
+
+  const decideAdjustment = async (row: InventoryAdjustment, decision: "APPROVE" | "REJECT") => {
+    try {
+      await inventoryApi.decideAdjustment(row.id, decision);
+      showToast(decision === "APPROVE" ? "Adjustment approved and stock updated." : "Adjustment rejected.", "success");
+      await load();
+    } catch (error: any) {
+      const message = error?.response?.data?.message || "Adjustment decision could not be saved.";
+      showToast(message, "error");
+    }
+  };
 
   useEffect(() => {
     load();
@@ -3503,7 +3726,53 @@ export function InventoryMovementsPage() {
   useEffect(() => setPage(1), [q, movementType]);
   return (
     <div className="flow-page-shell" style={pageShell}>
-      <Header eyebrow="Inventory Audit" title="Stock Movement Ledger" text="Trace every receipt, issue, return and adjustment against its source record." />
+      <Header
+        eyebrow="Inventory Audit"
+        title="Stock Movement Ledger"
+        text="Trace every receipt, issue, return and approved adjustment against its source record."
+        actions={<Button onClick={() => setShowAdjustment((value) => !value)} tone="success"><Plus size={15} /> Request Adjustment</Button>}
+      />
+      {showAdjustment && (
+        <form onSubmit={submitAdjustment} style={{ ...card, padding: 16, marginBottom: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, alignItems: "end" }}>
+          <label style={formLabel}>Product
+            <select required style={input} value={adjustment.product_id} onChange={(event) => setAdjustment({ ...adjustment, product_id: event.target.value })}>
+              <option value="">Select stock-managed product</option>
+              {products.map((product) => <option key={product.id} value={product.id}>{product.product_name} ({product.sku || "No SKU"}) - on hand {product.quantity}</option>)}
+            </select>
+          </label>
+          <label style={formLabel}>Quantity Change
+            <input type="number" step="1" style={input} value={adjustment.quantity_delta} onChange={(event) => setAdjustment({ ...adjustment, quantity_delta: Number(event.target.value) || 0 })} placeholder="e.g. -1 or 5" />
+          </label>
+          <label style={formLabel}>Reason
+            <input required style={input} value={adjustment.reason} onChange={(event) => setAdjustment({ ...adjustment, reason: event.target.value })} placeholder="Physical count variance, damage, correction..." />
+          </label>
+          <button type="submit" className="btn btn-primary">Submit for Review</button>
+        </form>
+      )}
+      <div style={{ ...card, padding: 16, marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <div><strong>Controlled Stock Adjustments</strong><div style={{ color: "#64748b", fontSize: 12, marginTop: 3 }}>A requester cannot approve their own adjustment; approved changes post to this ledger.</div></div>
+          {statusChip(`${adjustments.filter((row) => row.status === "PENDING").length} PENDING`)}
+        </div>
+        <DataTable
+          columns={["Adjustment", "Product", "Change", "Reason", "Requested By", "Status", "Actions"]}
+          rows={adjustments.slice(0, 12).map((row) => [
+            <strong>{row.adjustment_number}</strong>,
+            <div>{row.product_name || "-"}<br /><span style={{ color: "#64748b" }}>{row.sku || "No SKU"}</span></div>,
+            <strong style={{ color: Number(row.quantity_delta) > 0 ? "#047857" : "#b91c1c" }}>{Number(row.quantity_delta) > 0 ? "+" : ""}{row.quantity_delta}</strong>,
+            row.reason,
+            row.requested_by_email || "System user",
+            statusChip(row.status),
+            row.status === "PENDING" ? (
+              <div style={{ display: "flex", gap: 8 }}>
+                <Button onClick={() => decideAdjustment(row, "APPROVE")} tone="success">Approve</Button>
+                <Button onClick={() => decideAdjustment(row, "REJECT")} tone="light">Reject</Button>
+              </div>
+            ) : row.approved_by_email || "-",
+          ])}
+          empty="No stock adjustment requests."
+        />
+      </div>
       <div style={{ ...card, padding: 14, marginBottom: 14, display: "flex", gap: 12, flexWrap: "wrap" }}>
         <SearchBox value={q} onChange={setQ} placeholder="Search product, serial, reference or notes" />
         <select aria-label="Filter movement type" value={movementType} onChange={(event) => setMovementType(event.target.value)} style={{ ...input, width: 190 }}>

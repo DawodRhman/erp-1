@@ -116,13 +116,16 @@ export interface Product {
   supplier_id?: string;
   vendor_name?: string;
   supplier_name?: string;
-  product_type: 'ASSET' | 'CONSUMABLE' | 'SERVICE';
-  tracking_type: 'SERIAL' | 'IMEI' | 'NONE';
+  product_type: 'ASSET' | 'CONSUMABLE' | 'SERVICE' | 'RENTAL' | 'LICENSE';
+  tracking_type: 'SERIAL' | 'IMEI' | 'BATCH' | 'NONE';
   quantity: number;
   min_stock_level: number;
+  reorder_quantity?: number;
+  preferred_vendor_id?: string;
+  version?: number;
   unit_price: number;
   selling_price?: number;
-  cost_price: number;
+  cost_price?: number;
   country_of_origin?: string;
   batch_lot_number?: string;
   expiry_date?: string;
@@ -135,6 +138,8 @@ export interface Product {
   price_tiers?: Record<string, number | string>;
   description?: string;
   available_count?: number;
+  on_hand_count?: number;
+  reserved_count?: number;
   allocated_count?: number;
   installed_count?: number;
   damaged_count?: number;
@@ -175,7 +180,7 @@ export interface InventoryMovement {
   inventory_item_id?: string;
   serial_number?: string;
   imei?: string;
-  movement_type: 'STOCK_IN' | 'STOCK_OUT' | 'TRANSFER' | 'RETURN';
+  movement_type: 'STOCK_IN' | 'STOCK_OUT' | 'TRANSFER' | 'RETURN' | 'ADJUSTMENT';
   quantity: number;
   reference_type?: string;
   reference_id?: string;
@@ -198,6 +203,33 @@ export interface Vendor {
   payment_terms?: string;
   status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | string;
   notes?: string;
+}
+
+export interface InventoryLocation {
+  id: string;
+  location_code: string;
+  warehouse_name: string;
+  room_number?: string;
+  rack_number?: string;
+  active: boolean;
+}
+
+export interface InventoryAdjustment {
+  id: string;
+  adjustment_number: string;
+  product_id: string;
+  product_name?: string;
+  sku?: string;
+  quantity_delta: number;
+  reason: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'POSTED';
+  requested_by?: string;
+  requested_by_email?: string;
+  approved_by?: string;
+  approved_by_email?: string;
+  created_at: string;
+  approved_at?: string;
+  posted_at?: string;
 }
 
 export interface ProductCustomFieldDefinition {
@@ -259,6 +291,10 @@ export interface PurchaseOrder {
   room_number?: string;
   rack_number?: string;
   notes?: string;
+  currency_code?: string;
+  exchange_rate?: number;
+  payment_terms?: string;
+  version?: number;
   item_count?: number;
   items?: PurchaseOrderItem[];
 }
@@ -273,6 +309,15 @@ export interface PurchaseOrderItem {
   unit_price: number;
   total_price?: number;
   remarks?: string;
+  tracking_type?: 'SERIAL' | 'IMEI' | 'BATCH' | 'NONE';
+}
+
+export interface PurchaseOrderReceiptLine {
+  id: string;
+  received_qty: number;
+  condition?: 'NEW' | 'USED' | 'REFURBISHED';
+  batch_lot_number?: string;
+  serial_numbers?: string[];
 }
 
 export interface Invoice {
@@ -497,8 +542,8 @@ export const inventoryApi = {
     return res.data.data;
   },
 
-  getProduct: async (id: string): Promise<Product> => {
-    const res = await api.get(`/inventory/products/${id}`);
+  getProduct: async (id: string, params?: Record<string, any>): Promise<Product> => {
+    const res = await api.get(`/inventory/products/${id}`, { params });
     return res.data.data;
   },
 
@@ -574,6 +619,36 @@ export const inventoryApi = {
     return res.data.data;
   },
 
+  getLocations: async (params?: Record<string, any>): Promise<InventoryLocation[]> => {
+    const res = await api.get('/inventory/locations', { params });
+    return res.data.data;
+  },
+
+  createLocation: async (data: Partial<InventoryLocation>): Promise<InventoryLocation> => {
+    const res = await api.post('/inventory/locations', data);
+    return res.data.data;
+  },
+
+  updateLocation: async (id: string, data: Partial<InventoryLocation>): Promise<InventoryLocation> => {
+    const res = await api.patch(`/inventory/locations/${id}`, data);
+    return res.data.data;
+  },
+
+  getAdjustments: async (params?: Record<string, any>): Promise<InventoryAdjustment[]> => {
+    const res = await api.get('/inventory/adjustments', { params });
+    return res.data.data;
+  },
+
+  createAdjustment: async (data: { product_id: string; quantity_delta: number; reason: string }): Promise<InventoryAdjustment> => {
+    const res = await api.post('/inventory/adjustments', data);
+    return res.data.data;
+  },
+
+  decideAdjustment: async (id: string, decision: 'APPROVE' | 'REJECT'): Promise<InventoryAdjustment> => {
+    const res = await api.post(`/inventory/adjustments/${id}/decision`, { decision });
+    return res.data.data;
+  },
+
   updateVendor: async (id: string, data: Partial<Vendor>): Promise<Vendor> => {
     const res = await api.patch(`/inventory/vendors/${id}`, data);
     return res.data.data;
@@ -613,8 +688,15 @@ export const inventoryApi = {
     return res.data.data;
   },
 
-  receivePurchaseOrder: async (id: string, data: { items: Array<{ id: string; received_qty: number }> }): Promise<PurchaseOrder> => {
-    const res = await api.post(`/inventory/purchase-orders/${id}/receive`, data);
+  transitionPurchaseOrder: async (id: string, action: 'APPROVE' | 'ISSUE' | 'CLOSE' | 'CANCEL'): Promise<PurchaseOrder> => {
+    const res = await api.post(`/inventory/purchase-orders/${id}/transition`, { action });
+    return res.data.data;
+  },
+
+  receivePurchaseOrder: async (id: string, data: { idempotency_key: string; evidence_url?: string; items: PurchaseOrderReceiptLine[] }): Promise<PurchaseOrder> => {
+    const res = await api.post(`/inventory/purchase-orders/${id}/receive`, data, {
+      headers: { 'Idempotency-Key': data.idempotency_key },
+    });
     return res.data.data;
   },
 

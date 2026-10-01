@@ -8,9 +8,9 @@ import { AlertTriangle, X } from 'lucide-react';
 import { inventoryApi, InventoryPreferenceSettings } from '../services/inventoryService';
 
 const defaultInventoryTheme: Pick<InventoryPreferenceSettings, 'primary_color' | 'accent_color' | 'page_color' | 'surface_color'> = {
-  primary_color: '#10234D',
-  accent_color: '#0F766E',
-  page_color: '#EEF5FF',
+  primary_color: '#0B2447',
+  accent_color: '#0D9488',
+  page_color: '#F4F6FA',
   surface_color: '#FFFFFF',
 };
 

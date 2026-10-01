@@ -1,7 +1,7 @@
 .workspace-inventory {
-  --inventory-primary: #10234d;
-  --inventory-accent: #0f766e;
-  --inventory-page: #eef5ff;
+  --inventory-primary: var(--navy-900);
+  --inventory-accent: var(--accent-inventory);
+  --inventory-page: var(--page);
   --inventory-surface: #ffffff;
   --inventory-ink: #10213f;
   --inventory-muted: #64748b;
@@ -14,15 +14,41 @@
 }
 
 .workspace-inventory .sidebar {
-  border-right-color: var(--inventory-border);
-  background: color-mix(in srgb, var(--inventory-surface) 96%, var(--inventory-page));
+  border-right-color: var(--navy-800);
+  background: var(--navy-950);
+  box-shadow: 10px 0 30px rgba(8, 26, 51, 0.14);
+}
+
+.workspace-inventory .sb-logo,
+.workspace-inventory .sb-footer {
+  border-color: var(--navy-800);
+  background: var(--navy-950);
+}
+
+.workspace-inventory .sb-title,
+.workspace-inventory .nav-a,
+.workspace-inventory .sb-footer {
+  color: var(--on-dark);
+}
+
+.workspace-inventory .sb-subtitle,
+.workspace-inventory .sb-lbl,
+.workspace-inventory .sb-footer-sub,
+.workspace-inventory .sb-footer-title {
+  color: var(--on-dark-2);
+}
+
+.workspace-inventory .nav-a:hover {
+  color: #fff;
+  background: var(--navy-900);
+  border-color: var(--navy-800);
 }
 
 .workspace-inventory .nav-item.active,
 .workspace-inventory .sidebar a.active {
-  color: var(--inventory-primary) !important;
-  background: color-mix(in srgb, var(--inventory-accent) 11%, var(--inventory-surface)) !important;
-  border-color: color-mix(in srgb, var(--inventory-accent) 28%, transparent) !important;
+  color: #fff !important;
+  background: var(--navy-800) !important;
+  border-color: color-mix(in srgb, var(--inventory-accent) 44%, var(--navy-800)) !important;
 }
 
 .workspace-inventory .nav-item.active::before,
