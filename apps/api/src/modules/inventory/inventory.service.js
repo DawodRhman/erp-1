@@ -1279,12 +1279,13 @@ export async function createProduct(data, actorId = null) {
                 warehouse_location, room_number, rack_number, batch_lot_number,
                 expiry_date, warranty_date, product_image_url, notes
               )
-              VALUES ($1, $2, $3, 'AVAILABLE', $4, $4, $5, $6, $7, $8, $9, $10, $11)
+              VALUES ($1, $2, $3, 'AVAILABLE', $4, $5, $6, $7, $8, $9, $10, $11, $12)
             `,
             [
               product.id,
               productValues.tracking_type === 'SERIAL' ? identifier : null,
               productValues.tracking_type === 'IMEI' ? identifier : null,
+              productValues.warehouse_location || 'Main Warehouse',
               productValues.warehouse_location || 'Main Warehouse',
               productValues.room_number,
               productValues.rack_number,
@@ -1321,6 +1322,15 @@ export async function createProduct(data, actorId = null) {
     return product;
   } catch (error) {
     await client.query('ROLLBACK');
+    if (error?.code === '23505' && ['inventory_items_serial_number_key', 'inventory_items_serial_unique'].includes(error.constraint)) {
+      throw new AppError(409, 'SERIAL_ALREADY_EXISTS', 'One or more serial numbers already exist. Enter a unique serial number for every physical unit.');
+    }
+    if (error?.code === '23505' && error.constraint === 'inventory_items_imei_unique') {
+      throw new AppError(409, 'IMEI_ALREADY_EXISTS', 'One or more IMEI numbers already exist. Enter a unique IMEI for every physical unit.');
+    }
+    if (error?.code === '23505' && error.constraint === 'products_sku_unique') {
+      throw new AppError(409, 'SKU_ALREADY_EXISTS', 'This SKU is already assigned to another catalog product.');
+    }
     throw error;
   } finally {
     client.release();
@@ -3637,4 +3647,3 @@ export async function generateDraftInvoiceFromCustomerTemplate(customerId) {
     client.release();
   }
 }
-

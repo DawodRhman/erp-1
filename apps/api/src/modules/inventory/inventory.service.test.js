@@ -121,6 +121,36 @@ describe('inventory service', () => {
     expect(service.buildProductSku({ product_name: 'Access Control Panel' })).toBe('PRD-ACCESS-CONTROL-PANEL');
   });
 
+  it('uses independent SQL parameters for serial item location columns', async () => {
+    const clientQuery = vi.fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ id: 'prod-serial', product_name: 'Camera', product_type: 'ASSET', tracking_type: 'SERIAL', quantity: 1 }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+    connect.mockResolvedValue({ query: clientQuery, release: vi.fn() });
+    query.mockResolvedValue({ rows: [] });
+
+    const service = await loadService();
+    await service.createProduct({
+      product_name: 'Camera',
+      brand_make: 'Hikvision',
+      model_no: 'DS-2CD2143G2-I',
+      product_type: 'ASSET',
+      tracking_type: 'SERIAL',
+      initial_quantity: 1,
+      serial_numbers: ['CAM-0001'],
+      warehouse_location: 'Main Warehouse',
+      room_number: '200',
+      rack_number: '2',
+    });
+
+    const serialInsert = clientQuery.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO public.inventory_items'));
+    expect(serialInsert[0]).toContain("VALUES ($1, $2, $3, 'AVAILABLE', $4, $5, $6, $7, $8, $9, $10, $11, $12)");
+    expect(serialInsert[1][3]).toBe('Main Warehouse');
+    expect(serialInsert[1][4]).toBe('Main Warehouse');
+  });
+
   it('throws validation error when creating product without product_name', async () => {
     const service = await loadService();
     await expect(service.createProduct({})).rejects.toMatchObject({
